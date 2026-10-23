@@ -39,9 +39,9 @@ duplicating it.
 
 ## Step 3 — Install skills globally
 
-Sync each `index-*` skill directory separately so any `rsync --delete` is scoped to one
-pack-owned folder. On first migration, compare and back up same-named legacy Codex skills,
-then move those old folders aside so they do not remain active:
+Link each `index-*` skill directory directly to its source in this repository. On first
+migration, compare and back up same-named legacy Codex skills, then move differing old
+folders aside so duplicate copies do not remain active:
 
 - Claude Code → `~/.claude/skills/`
 - Codex → `~/.agents/skills/`
@@ -50,30 +50,49 @@ then move those old folders aside so they do not remain active:
 On macOS/Linux, sync the managed skills with:
 
 ```bash
-backup=""
-for destination in ~/.claude/skills ~/.agents/skills; do
-  for source in "<index-wise>/skills"/index-*; do
-    [ -d "$source" ] || continue
-    name=${source##*/}
-    if [ -d "$HOME/.codex/skills/$name" ]; then
-      [ -n "$backup" ] || backup=$(mktemp -d "$HOME/.codex/skills-backup.XXXXXX")
-      diff -qr "$HOME/.codex/skills/$name" "$source" || \
-        echo "Legacy $name differed; its full copy will be preserved in $backup."
+backup_root="$HOME/.agents/skill-backups/$(date +%Y%m%d-%H%M%S)"
+resolve_path() { python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
+for source in "<index-wise>/skills"/index-*; do
+  [ -d "$source" ] || continue
+  name=${source##*/}
+  source_path=$(resolve_path "$source")
+  legacy="$HOME/.codex/skills/$name"
+  legacy_backup=0
+  if [ -L "$legacy" ] && [ "$(resolve_path "$legacy")" = "$source_path" ]; then
+    legacy_backup=1 # Retire the duplicate link after the canonical link is verified.
+  elif [ -e "$legacy" ] || [ -L "$legacy" ]; then
+    diff -qr "$legacy" "$source" || echo "Legacy $name differs; preserve it in $backup_root."
+    legacy_backup=1
+  fi
+  for destination in "$HOME/.claude/skills" "$HOME/.agents/skills"; do
+    target="$destination/$name"
+    if [ -L "$target" ] && [ "$(resolve_path "$target")" = "$source_path" ]; then
+      continue
     fi
-    mkdir -p "$destination/$name"
-    rsync -a --delete "$source/" "$destination/$name/"
-    if [ "$destination" = "$HOME/.agents/skills" ] && [ -d "$HOME/.codex/skills/$name" ]; then
-      mv "$HOME/.codex/skills/$name" "$backup/"
+    if [ -e "$target" ] || [ -L "$target" ]; then
+      mkdir -p "$backup_root"
+      mv "$target" "$backup_root/$(basename "$(dirname "$destination")")-$name"
     fi
+    mkdir -p "$destination"
+    ln -s "$source_path" "$target"
   done
+  if [ "$legacy_backup" = 1 ]; then
+    mkdir -p "$backup_root"
+    mv "$legacy" "$backup_root/codex-$name"
+  fi
 done
 ```
 
-On Windows, use the same sequence: compare each `skills/index-*` folder with any matching
-`$HOME/.codex/skills/index-*`, move that exact old folder to a dated backup, then use
-`robocopy /E /PURGE` with the destination set to the matching `~/.agents/skills/index-*`
-directory (and separately to Claude's directory). Never target the whole skills directory.
-Unrelated legacy folders remain in place. Reconcile any differences from the saved copies
+If a canonical destination is already a valid symlink to that exact source folder, leave it
+in place; pulling the pack updates it automatically. Never copy or sync a source onto its own
+symlink. Move differing destination folders or links to backup before replacing them. Once
+the `~/.agents/skills/` link is confirmed, archive a matching legacy `.codex` symlink itself
+with `mv`; this does not follow or remove its source.
+
+On Windows, resolve each source and destination before acting. Leave an existing symbolic
+link to the exact source in place. Back up any different folder or link before replacing it
+with a symbolic link to the source. Move matching legacy Codex folders to a dated backup
+after comparing them; leave unrelated legacy folders in place. Reconcile wanted differences
 into the index-wise source before a later sync.
 
 Record the install in `~/.index-wise/config.json`:
