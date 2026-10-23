@@ -1,4 +1,4 @@
-# index-template holds INSTRUCTIONS ONLY — never data. These rules are a safety net so that
+# index-wise holds INSTRUCTIONS ONLY — never data. These rules are a safety net so that
 # raw Biotic data can never be committed by accident. Do not loosen them.
 
 # --- Raw / intermediate data of any kind ---

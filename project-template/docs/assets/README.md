@@ -1,1 +1,1 @@
-Shared bibliography and ICES JMS CSL from academic-writing. The CSL retains its embedded CC BY-SA 3.0 attribution. Add verified primary references to references.bib; report-specific software bibliographies are generated locally from R citation().
+Shared bibliography and ICES JMS CSL from wise-writing. The CSL retains its embedded CC BY-SA 3.0 attribution. Add verified primary references to references.bib; report-specific software bibliographies are generated locally from R citation().

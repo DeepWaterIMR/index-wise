@@ -1,6 +1,6 @@
-# Contributing to index-template
+# Contributing to index-wise
 
-index-template is a **public knowledge pack** for building sdmTMB survey indices. It contains
+index-wise is a **public knowledge pack** for building sdmTMB survey indices. It contains
 **instructions only — never data**. Contributions are welcome; please keep the following in
 mind.
 

@@ -43,14 +43,14 @@ csl: ../../assets/ices_jms.csl
 
 <!-- Adapt this document for the species during `index-compile-data`. It reads bottom-trawl
 data from the IMR Biotic database and, optionally, legacy SPD files; applies the
-quantitative-catch filtering from index-template's `data-filtering.md`; removes duplicates;
+quantitative-catch filtering from index-wise's `data-filtering.md`; removes duplicates;
 computes swept-area density; and saves a compiled dataset with true zeros to the root-level
 data/output. This document is the survey-selection document: keep survey positions, gear,
 timing, catch/occurrence, and filtering decisions here. The companion
 {{SPECIES_SLUG}}-{{REGION_SLUG}}-data-report.qmd is the compiled-data overview.
 Needs access to the IMR Biotic database and an IMR intranet connection. Do NOT hard-wrap prose. -->
 
-This document and the associated analyses are based on [index-template](https://github.com/DeepWaterIMR/index-template) and were developed with researcher-supervised generative AI. Station catch data are acquired from the **IMR Biotic database** when this [Quarto](https://quarto.org/) document is compiled.
+This document and the associated analyses are based on [index-wise](https://github.com/DeepWaterIMR/index-wise) and were developed with researcher-supervised generative AI. Station catch data are acquired from the **IMR Biotic database** when this [Quarto](https://quarto.org/) document is compiled.
 
 A survey means one cruise. A survey is included when at least one positive target-species catch passes the standard haul filters and lies inside the prediction region. Included surveys with a cruise-series code are assigned to that cruise series, where a cruise series means all surveys belonging to one time-series. For each included survey, retain all valid regional hauls assigned to that survey so stations without the target species remain true zeros. Other surveys in the same cruise series may be dropped when they do not contain a qualifying target catch or do not meet the sampling-quality criteria. Assess surveys without a cruise-series code individually and group them under `Other` only after they qualify.
 
@@ -179,7 +179,7 @@ knitr::kable(
 
 ## Filtering decisions — station filter {#sec-filtering-decisions}
 
-Follow index-template `data-filtering.md`. The `samplequality` rule is conditional on the cruise series, and the accepted `gearcondition` codes require survey-specific justification. Together with `stationtype`, these fields define the candidate quantitative hauls. The filtering expression is shown in @lst-filter-expression.
+Follow index-wise `data-filtering.md`. The `samplequality` rule is conditional on the cruise series, and the accepted `gearcondition` codes require survey-specific justification. Together with `stationtype`, these fields define the candidate quantitative hauls. The filtering expression is shown in @lst-filter-expression.
 
 If a cruise series has a documented exception, explain it here. For example, CoastalS (code 23) accepts sample-quality values 1 and 2, whereas other cruise series require value 1. Code 2 identifies hauls targeted using acoustic registrations or other information about fish. CoastalS surveys in the early years targeted saithe acoustically; retaining code 2 therefore requires a documented argument that this selection mechanism remains compatible with the target-species estimand.
 
@@ -578,7 +578,7 @@ After compiling, generate the **data overview** (`{{SPECIES_SLUG}}-{{REGION_SLUG
 
 # Software and reproducibility
 
-This report followed [index-template](https://github.com/DeepWaterIMR/index-template), with document structure and conventions from [academic-writing](https://github.com/DeepWaterIMR/academic-writing).
+This report followed [index-wise](https://github.com/DeepWaterIMR/index-wise), with document structure and conventions from [wise-writing](https://github.com/DeepWaterIMR/wise-writing).
 
 ```{r software-citations}
 #| results: asis

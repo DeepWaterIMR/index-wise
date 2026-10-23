@@ -1,4 +1,4 @@
-# AGENTS.md — index-template
+# AGENTS.md — index-wise
 
 You are helping a scientist at the **Institute of Marine Research** (IMR /
 Havforskningsinstituttet, Norway) build a **spatiotemporal survey index** with
@@ -15,16 +15,23 @@ from [**sdmTMBexperiments**](https://github.com/DeepWaterIMR/sdmTMBexperiments).
 
 ---
 
-## What index-template is
+## What index-wise is
 
 A **vendor-neutral knowledge pack** — not a trained model, not a repo you fill in place. It
 teaches an agent to build a survey index for a chosen species, and it **generates a new
 project folder** for that species. You learn the method by *reading this repo at runtime*.
 
-index-template sits **on top of** [BAIT](https://github.com/DeepWaterIMR/BAIT) (the Biotic AI
+index-wise sits **on top of** [BAIT](https://github.com/DeepWaterIMR/BAIT) (the Biotic AI
 Toolkit). BAIT handles the Biotic **data access, privacy, maps, and life-history** through
-its global `biotic-*` skills; index-template adds the **sdmTMB index-building** layer on top.
+its global `biotic-*` skills; index-wise adds the **sdmTMB index-building** layer on top.
 If BAIT is not installed, install it first (`install https://github.com/DeepWaterIMR/BAIT`).
+
+index-wise is part of the [Fiskwise ecosystem](https://deepwaterimr.github.io/fiskwise/),
+alongside [BAIT](https://github.com/DeepWaterIMR/BAIT),
+[wise-writing](https://github.com/DeepWaterIMR/wise-writing),
+[spict-wise](https://github.com/DeepWaterIMR/spict-wise), and
+[wise-presentations](https://github.com/DeepWaterIMR/wise-presentations). Follow each
+project's own skills and routing guidance for its workflow.
 
 ---
 
@@ -33,7 +40,7 @@ If BAIT is not installed, install it first (`install https://github.com/DeepWate
 Biotic data is confidential and some of it is sensitive. **This repo is public and must
 contain no data and no private information.**
 
-1. **Never commit data or private paths into index-template.** No raw records, no BES
+1. **Never commit data or private paths into index-wise.** No raw records, no BES
    database paths, no local absolute paths (`/Users/...`, `OneDrive`, `CloudStorage`), no
    station coordinates. Templates use **placeholders and code**, never data.
 2. Real paths and real data only ever live in the **generated project folder**, which is the
@@ -50,15 +57,15 @@ If a request would breach any of the above, stop and explain rather than comply.
 
 ## Working across projects (important)
 
-index-template is meant to be installed **once per machine** (BAIT-style) and used to spin up
+index-wise is meant to be installed **once per machine** (BAIT-style) and used to spin up
 **many** species projects — not cloned into each repo. When set up via `index-install`, its
-location is saved to `~/.index-template/config.json` and skills are copied to the agent's
-user-level skills folder (`~/.claude/skills/` for Claude Code, `~/.codex/skills/` for Codex).
+location is saved to `~/.index-wise/config.json` and skills are copied to the agent's
+user-level skills folder (`~/.claude/skills/` for Claude Code, `~/.agents/skills/` for Codex).
 
 - **Trigger:** the user asks to *"make a biomass/abundance index for `<species>` using
-  index-template"*, or to build/validate/report an sdmTMB survey index.
-- **If index-template isn't installed yet** (e.g. *"install
-  https://github.com/DeepWaterIMR/index-template"*), run `skills/index-install/SKILL.md`
+  index-wise"*, or to build/validate/report an sdmTMB survey index.
+- **If index-wise isn't installed yet** (e.g. *"install
+  https://github.com/DeepWaterIMR/index-wise"*), run `skills/index-install/SKILL.md`
   first.
 - **Never install at a filesystem root / system directory.** Refuse and suggest a safe
   user-space location.
@@ -72,7 +79,7 @@ into `knowledge/`) before acting.
 
 | If the user wants to…                                        | Read |
 |--------------------------------------------------------------|------|
-| Install / set up index-template                              | `skills/index-install/SKILL.md` |
+| Install / set up index-wise                              | `skills/index-install/SKILL.md` |
 | Update it (git pull + re-sync skills)                        | `skills/index-update/SKILL.md` |
 | Create / validate study-region polygons                       | `skills/index-make-regions/SKILL.md` |
 | **Start** a new species index (questionnaire → scaffold)     | `skills/index-new-project/SKILL.md` |
@@ -151,11 +158,11 @@ non-obvious, and add a one-line pointer to `MEMORY.md`. See the project's `ai/me
 - **Raster figures**: `fig-format: jpeg`; keep rendered HTML as small as feasible.
 - Comment density and naming match the surrounding file.
 
-## Academic-writing contract
+## wise-writing contract
 
 For every generated project artifact, read the installed `academic-style`,
-`academic-conventions`, and `academic-data-report` skills. index-template supplies the
-scientific workflow; academic-writing supplies structure, style, and publishing conventions.
-Follow index-template's `knowledge/academic-writing.md`. The workflow QMDs are HTML data
+`academic-conventions`, and `academic-data-report` skills. index-wise supplies the
+scientific workflow; wise-writing supplies structure, style, and publishing conventions.
+Follow index-wise's `knowledge/wise-writing.md`. The workflow QMDs are HTML data
 reports under `docs/data-report/`; shared assets belong in `docs/assets/`, project memory in
 `ai/memory/`, tests in `ai/tests/`, and reviews in `ai/review/`.

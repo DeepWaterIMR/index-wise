@@ -1,8 +1,30 @@
-# Synthetic contract checks. Run from the index-template repository root.
+# Synthetic contract checks. Run from the index-wise repository root.
 # Optional --render verifies a lightweight report, never the survey/model pipeline.
 source("scaffold.R")
 workspace <- Sys.getenv("INDEX_TEMPLATE_TEST_DIR", unset = tempfile("index-scaffold-"))
 dir.create(workspace)
+# Test the canonical config and legacy fallback under an isolated temporary home.
+old_home <- Sys.getenv("HOME", unset = NA_character_)
+Sys.setenv(HOME = workspace)
+canonical_root <- file.path(workspace, "canonical-install")
+legacy_root <- file.path(workspace, "legacy-install")
+dir.create(file.path(canonical_root, "project-template"), recursive = TRUE)
+dir.create(file.path(legacy_root, "project-template"), recursive = TRUE)
+dir.create(file.path(workspace, ".index-wise"))
+dir.create(file.path(workspace, ".index-template"))
+jsonlite::write_json(list(index_template_path = canonical_root),
+                     file.path(workspace, ".index-wise", "config.json"), auto_unbox = TRUE)
+jsonlite::write_json(list(index_template_path = legacy_root),
+                     file.path(workspace, ".index-template", "config.json"), auto_unbox = TRUE)
+stopifnot(normalizePath(.find_template()) == normalizePath(file.path(canonical_root, "project-template")))
+# A stale canonical path must not mask a valid legacy install.
+jsonlite::write_json(list(index_template_path = file.path(workspace, "missing-install")),
+                     file.path(workspace, ".index-wise", "config.json"), auto_unbox = TRUE)
+stopifnot(normalizePath(.find_template()) == normalizePath(file.path(legacy_root, "project-template")))
+unlink(c(file.path(workspace, ".index-wise", "config.json"),
+         file.path(workspace, ".index-template", "config.json")))
+stopifnot(normalizePath(.find_template()) == normalizePath("project-template"))
+if (is.na(old_home)) Sys.unsetenv("HOME") else Sys.setenv(HOME = old_home)
 cfg <- yaml::read_yaml("examples/redfish/config.yaml")
 cfg$AUTHORS <- list(list(name = 'Test: Åuthor "One"', affiliation = "test"),
                     list(name = "Second Author", affiliation = c("test", "other")))
@@ -10,6 +32,10 @@ cfg$AFFILIATIONS <- list(list(id = "test", name = "Synthetic Institute"),
                          list(id = "other", name = "Other Institute"))
 config_file <- file.path(workspace, "config.yaml")
 yaml::write_yaml(cfg, config_file)
+# With no saved config, scaffold_index() must still source the template in the current repo.
+Sys.setenv(HOME = workspace)
+scaffold_index(config_file, file.path(workspace, "default-template-project"), dry = TRUE)
+if (is.na(old_home)) Sys.unsetenv("HOME") else Sys.setenv(HOME = old_home)
 target <- file.path(workspace, "project")
 scaffold_index(config_file, target, template = "project-template")
 stopifnot(all(dir.exists(file.path(target, c("ai/memory", "ai/tests", "ai/review",

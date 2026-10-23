@@ -8,9 +8,9 @@ description: Render the (slow) Quarto index documents safely — code-review fir
 Goal: run expensive Quarto renders without wasting compute or blocking the chat. Read
 `knowledge/rendering.md`.
 
-Before producing project files, read `knowledge/academic-writing.md` and the installed
+Before producing project files, read `knowledge/wise-writing.md` and the installed
 `academic-style`, `academic-conventions`, and `academic-data-report` skills. Apply their
-conventions to every generated artifact; retain index-template's scientific workflow.
+conventions to every generated artifact; retain index-wise's scientific workflow.
 
 ## Step 1 — Review before rendering (required)
 

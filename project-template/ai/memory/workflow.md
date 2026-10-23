@@ -9,7 +9,7 @@ metadata:
 
 # Workflow status — {{SPECIES_NAME}}
 
-Update as steps complete. See the index-template `workflow.md` knowledge file for detail.
+Update as steps complete. See the index-wise `workflow.md` knowledge file for detail.
 
 - [ ] **Step 1 — Compile & report data** (`docs/data-report/`). `compile-data.qmd` is the survey-selection
   document; `<species>-<region>-data-report.qmd` is the compiled-data overview. Survey list, filters applied,

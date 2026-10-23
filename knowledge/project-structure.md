@@ -2,7 +2,7 @@
 
 `index-new-project` copies `project-template/` and stamps it with `config.yaml` to produce a
 **new project folder** for one species (or a small group of related species). This is the
-"output" structure — the user's own repo. index-template itself is never this structure.
+"output" structure — the user's own repo. index-wise itself is never this structure.
 
 ```
 <species>-index/
@@ -75,9 +75,9 @@ model-domain label, and set `ADD_REGION_IDENTIFIER: true` with `PARTITION_REGION
 `PARTITION_REGION_LAYER`. The compiled station data should then retain all qualifying hauls in
 the acquisition polygon and carry a `region` field for later model-stage filtering.
 
-All main documents follow `academic-writing.md`: human authors and affiliations, a
+All main documents follow `wise-writing.md`: human authors and affiliations, a
 `published-title: "Version"` date label, narrative software citations, and folded code.
-The scaffold requires `AUTHORS` and `AFFILIATIONS` using academic-writing's schema:
+The scaffold requires `AUTHORS` and `AFFILIATIONS` using wise-writing's schema:
 
 ```yaml
 AUTHORS:

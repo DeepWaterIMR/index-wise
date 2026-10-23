@@ -1,4 +1,4 @@
-# CLAUDE.md — index-template (Claude Code)
+# CLAUDE.md — index-wise (Claude Code)
 
 This is the **Claude Code** pointer. The full agent contract is in
 [`AGENTS.md`](AGENTS.md) — read it. This file only adds Claude-specific notes.
@@ -10,6 +10,13 @@ agent to build a **sdmTMB survey index** for a species and **generates a new pro
 for it. It is installed once per machine; its skills live in `~/.claude/skills/` as
 `index-*`. It is **public — never commit data or private paths here.** See the privacy
 section of [`AGENTS.md`](AGENTS.md).
+
+index-wise is part of the [Fiskwise ecosystem](https://deepwaterimr.github.io/fiskwise/),
+alongside [BAIT](https://github.com/DeepWaterIMR/BAIT),
+[wise-writing](https://github.com/DeepWaterIMR/wise-writing),
+[spict-wise](https://github.com/DeepWaterIMR/spict-wise), and
+[wise-presentations](https://github.com/DeepWaterIMR/wise-presentations). Follow each
+project's own skills and routing guidance for its workflow.
 
 ## Where things are
 
@@ -36,11 +43,11 @@ section of [`AGENTS.md`](AGENTS.md).
 
 For everything else, see [`AGENTS.md`](AGENTS.md).
 
-## Academic-writing contract
+## wise-writing contract
 
 For every generated project artifact, read the installed `academic-style`,
-`academic-conventions`, and `academic-data-report` skills. index-template supplies the
-scientific workflow; academic-writing supplies structure, style, and publishing conventions.
-Follow index-template's `knowledge/academic-writing.md`. The workflow QMDs are HTML data
+`academic-conventions`, and `academic-data-report` skills. index-wise supplies the
+scientific workflow; wise-writing supplies structure, style, and publishing conventions.
+Follow index-wise's `knowledge/wise-writing.md`. The workflow QMDs are HTML data
 reports under `docs/data-report/`; shared assets belong in `docs/assets/`, project memory in
 `ai/memory/`, tests in `ai/tests/`, and reviews in `ai/review/`.

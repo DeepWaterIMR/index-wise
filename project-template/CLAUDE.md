@@ -2,7 +2,7 @@
 
 Claude Code pointer. The full contract is in [`AGENTS.md`](AGENTS.md) — read it.
 
-- **Method & skills**: the *how* lives in the installed **index-template** knowledge pack
+- **Method & skills**: the *how* lives in the installed **index-wise** knowledge pack
   (`index-*` skills) and **BAIT** (`biotic-*` skills for data access). Use them.
 - **Project memory, not local memory**: use this project's [`ai/memory/`](ai/memory/) folder as your
   project memory. Read [`ai/memory/MEMORY.md`](ai/memory/MEMORY.md) first; write new memory files

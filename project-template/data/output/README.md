@@ -1,7 +1,7 @@
 # data/output/
 
 Cached **model outputs** — **git-ignored**. The documents write here so re-renders can load
-instead of recomputing (toggle-controlled; see the index-template `rendering.md`).
+instead of recomputing (toggle-controlled; see the index-wise `rendering.md`).
 
 Typical contents (created by the workflow):
 - `compiled-data.rds` — the filtered, de-duplicated dataset with true zeros.

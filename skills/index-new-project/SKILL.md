@@ -1,6 +1,6 @@
 ---
 name: index-new-project
-description: Start a new sdmTMB survey-index project for a species — run the structured questionnaire, confirm a plan, then scaffold a new project folder from project-template with config.yaml. Use when the user says "make a biomass/abundance index for <species> using index-template", or asks to start/scaffold a new survey index.
+description: Start a new sdmTMB survey-index project for a species — run the structured questionnaire, confirm a plan, then scaffold a new project folder from project-template with config.yaml. Use when the user says "make a biomass/abundance index for <species> using index-wise", or asks to start/scaffold a new survey index.
 ---
 
 # Start a new index project
@@ -11,9 +11,9 @@ scaffold — do not start writing model code yet.**
 
 Read `knowledge/workflow.md` and `knowledge/project-structure.md` first.
 
-Before producing project files, read `knowledge/academic-writing.md` and the installed
+Before producing project files, read `knowledge/wise-writing.md` and the installed
 `academic-style`, `academic-conventions`, and `academic-data-report` skills. Apply their
-conventions to every generated artifact; retain index-template's scientific workflow.
+conventions to every generated artifact; retain index-wise's scientific workflow.
 
 ## Step 1 — The questionnaire (ask; don't assume)
 
@@ -40,7 +40,7 @@ every answer for `ai/memory/scaffold-interview.md`.
    (km), barrier mesh yes/no. GIS polygons are **user-supplied** and go in the project's
    `data/source/` — never in the template.
 9. **Russian data** — included by default; ask only if they want to exclude it.
-10. **Human metadata** — accountable authors and affiliations using academic-writing's
+10. **Human metadata** — accountable authors and affiliations using wise-writing's
     `AUTHORS` and `AFFILIATIONS` schema; confirm exact AI models and roles before reporting.
 11. **Outputs** — which are official vs exploratory vs draft?
 
@@ -55,7 +55,7 @@ gear-width/geartype-covariate implication, or AR1 vs IID for the selected index)
 1. Choose a target directory for the new project (ask the user; a sibling of the current repo
    is typical). Never scaffold at a system root.
 2. Write `config.yaml` values from the answers (see fields in `knowledge/project-structure.md`).
-3. Run `scaffold.R` from the index-template install:
+3. Run `scaffold.R` from the index-wise install:
 
    ```r
    source("<index_template_path>/scaffold.R")

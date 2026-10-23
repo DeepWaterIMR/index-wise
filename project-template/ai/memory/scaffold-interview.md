@@ -32,4 +32,4 @@ Fill this in during `index-new-project` with the actual answers. Keep it in sync
 ## Authorship and reporting
 
 Record confirmed human authors, affiliation IDs and names, and the exact AI model list and
-roles. All workflow reports follow academic-writing data-report style and conventions.
+roles. All workflow reports follow wise-writing data-report style and conventions.

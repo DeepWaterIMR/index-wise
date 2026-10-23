@@ -12,9 +12,9 @@ background material, see the lookup table in `knowledge/workflow.md`.)
 Read `knowledge/sdmtmb.md` and `knowledge/sdmtmbexperiments.md` first, and skim the sdmTMB docs
 (<https://pbs-assess.github.io/sdmTMB/>). **Attach `library(sdmTMBexperiments)`.**
 
-Before producing project files, read `knowledge/academic-writing.md` and the installed
+Before producing project files, read `knowledge/wise-writing.md` and the installed
 `academic-style`, `academic-conventions`, and `academic-data-report` skills. Apply their
-conventions to every generated artifact; retain index-template's scientific workflow.
+conventions to every generated artifact; retain index-wise's scientific workflow.
 
 ## Work in `docs/data-report/fit/fit.qmd`
 

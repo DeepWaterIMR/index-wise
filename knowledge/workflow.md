@@ -4,12 +4,12 @@ Building a survey index is a **four-step** process. Each step is a skill and pro
 more Quarto documents in the generated project. Do the steps in order; don't jump to modelling
 before the data are clean, and don't add complexity before a simple model works.
 
-index-template's own steps and documents have their own names (below) — they are **not**
+index-wise's own steps and documents have their own names (below) — they are **not**
 called by the source paper's internal names. This table exists only so an agent that needs to
 consult the original background material knows what to look for in those (separate,
 IMR-internal) repos:
 
-| index-template document | Background material, if you need to consult it (Vihtakari et al. 2026) |
+| index-wise document | Background material, if you need to consult it (Vihtakari et al. 2026) |
 |---|---|
 | `docs/data-report/survey-selection/compile-data.qmd` | `ref-index-paper/docs/data/{Redfish bottom trawl, BioticExplorer_database, Compile_all_data}.Rmd` |
 | `docs/data-report/data-overview/<species>-<region>-data-report.qmd` | `ref-index-paper/docs/SI files/SI-Text-1-data.qmd` |
@@ -17,7 +17,7 @@ IMR-internal) repos:
 | `docs/data-report/validation/validate.qmd` | `ref-index-paper/docs/SI files/SI-Text-3-model-selection.qmd` (staged selection, status-coded tables, index per candidate) |
 | `docs/data-report/<species>/report.qmd` (+ `*-section.qmd`) | `ref-assessment-index/docs/benchmark/beaked/*` |
 
-As the routine is improved, index-template's documents will diverge from this original
+As the routine is improved, index-wise's documents will diverge from this original
 material — that's expected. Use the table to find *background*, not to decide what the
 current documents should contain; **project-template/docs/ is the current, evolving source of
 truth for what each step actually does.**

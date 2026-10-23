@@ -19,9 +19,9 @@ BAIT is the agent-side guidance and connection workflow; it is not a separate da
 should not be described as one in the data report. Do not copy machine-specific database paths
 into the template or generated project.
 
-Before producing project files, read `knowledge/academic-writing.md` and the installed
+Before producing project files, read `knowledge/wise-writing.md` and the installed
 `academic-style`, `academic-conventions`, and `academic-data-report` skills. Apply their
-conventions to every generated artifact; retain index-template's scientific workflow.
+conventions to every generated artifact; retain index-wise's scientific workflow.
 
 ## Work
 

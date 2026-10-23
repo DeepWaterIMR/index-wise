@@ -21,7 +21,7 @@ and an IMR intranet connection.
 
 ## Background material (not distributed here — no data)
 
-Steps 1–4 are index-template's own documents in `project-template/docs/`, improved directly as
+Steps 1–4 are index-wise's own documents in `project-template/docs/`, improved directly as
 the routine matures — they are not named after or tied to any source paper's internal
 document names. If you want the history behind the method, or expected results to sanity
 check against, see:

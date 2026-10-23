@@ -1,6 +1,6 @@
-<!-- badges / logo go here once available -->
+[![Part of the Fiskwise ecosystem](https://deepwaterimr.github.io/fiskwise/assets/part-of-fiskwise.svg)](https://deepwaterimr.github.io/fiskwise/)
 
-# 📈 index-template — Build sdmTMB survey indices with AI agents
+# 📈 index-wise — Build sdmTMB survey indices with AI agents
 
 <!-- version -->
 **Version 0.2.0** (2026-09-09)
@@ -8,12 +8,12 @@
 
 **Teach your AI coding agent to build a spatiotemporal survey index for stock assessment — for any species, on your own machine.**
 
-index-template is a knowledge pack that turns a general coding agent (Claude Code, Codex, Cursor, Gemini CLI, Mistral, …) into a competent assistant for building [**sdmTMB**](https://sdmtmb.github.io/sdmTMB/) (Anderson et al., 2025) survey indices from IMR bottom-trawl data, reproducing the method of [Vihtakari et al. (2026, ICES Journal of Marine Science)](https://doi.org/10.1093/icesjms/fsag009).
+index-wise is a knowledge pack that turns a general coding agent (Claude Code, Codex, Cursor, Gemini CLI, Mistral, …) into a competent assistant for building [**sdmTMB**](https://sdmtmb.github.io/sdmTMB/) (Anderson et al., 2025) survey indices from IMR bottom-trawl data, reproducing the method of [Vihtakari et al. (2026, ICES Journal of Marine Science)](https://doi.org/10.1093/icesjms/fsag009).
 
 Tell your agent which species you want an index for, and it will:
 
 1. **Ask you a short, structured questionnaire** and confirm a plan.
-2. **Scaffold a new project folder** with a standard structure following academic-writing (`docs/`, `data/`, `R/`, `figures/`, `ai/`, `logs/`, `config/`).
+2. **Scaffold a new project folder** with a standard structure following wise-writing (`docs/`, `data/`, `R/`, `figures/`, `ai/`, `logs/`, `config/`).
 3. **Compile the data** from the IMR Biotic database (and, optionally, legacy SPD files), applying the filtering that makes catches quantitative.
 4. **Fit, validate, and report** an sdmTMB index, using helpers from [sdmTMBexperiments](https://github.com/DeepWaterIMR/sdmTMBexperiments) and maps from [ggOceanMaps](https://mikkovihtakari.github.io/ggOceanMaps/).
 
@@ -21,7 +21,7 @@ Tell your agent which species you want an index for, and it will:
 
 ## 🧰 Built on BAIT
 
-index-template sits **on top of** [BAIT](https://github.com/DeepWaterIMR/BAIT) (the Biotic AI Toolkit). BAIT handles Biotic **data access, the database, privacy, maps, and life-history**; index-template adds the **sdmTMB index-building** layer. If BAIT is not installed yet, install it first:
+index-wise sits **on top of** [BAIT](https://github.com/DeepWaterIMR/BAIT) (the Biotic AI Toolkit). BAIT handles Biotic **data access, the database, privacy, maps, and life-history**; index-wise adds the **sdmTMB index-building** layer. If BAIT is not installed yet, install it first:
 
 ```
 install https://github.com/DeepWaterIMR/BAIT
@@ -38,15 +38,15 @@ This repo is **public and contains instructions only — never data**:
 ## 🚀 Quickstart
 
 1. **Install BAIT** (if you haven't): `install https://github.com/DeepWaterIMR/BAIT`.
-2. **Install index-template:**
+2. **Install index-wise:**
    ```
-   install https://github.com/DeepWaterIMR/index-template
+   install https://github.com/DeepWaterIMR/index-wise
    ```
-   The agent runs [`index-install`](skills/index-install/SKILL.md): a privacy check → cloning index-template → installing the skills globally → verifying BAIT and the R packages (`sdmTMB`, `sdmTMBexperiments`, `ggOceanMaps`).
+   The agent runs [`index-install`](skills/index-install/SKILL.md): a privacy check → cloning index-wise → installing the skills globally → verifying BAIT and the R packages (`sdmTMB`, `sdmTMBexperiments`, `ggOceanMaps`).
 3. **Start a species index:**
    ```
    Let's make a biomass index for snabeluer (beaked redfish) using all bottom trawl data
-   collected during surveys, using index-template.
+   collected during surveys, using index-wise.
    ```
    The agent runs the questionnaire, plans, scaffolds a project, and drives the four-step workflow.
 
@@ -61,7 +61,7 @@ This repo is **public and contains instructions only — never data**:
 | **3.** Validate / select the model | [`index-validate-model`](skills/index-validate-model/SKILL.md) |
 | **4.** Final report + extensions | [`index-final-report`](skills/index-final-report/SKILL.md) |
 
-Each step's document lives in [`project-template/docs/`](project-template/docs/) and is index-template's own, evolving implementation — improve it directly as the routine matures. [`knowledge/workflow.md`](knowledge/workflow.md) points to the (IMR-internal) background material the method was originally distilled from, if you want the history.
+Each step's document lives in [`project-template/docs/`](project-template/docs/) and is index-wise's own, evolving implementation — improve it directly as the routine matures. [`knowledge/workflow.md`](knowledge/workflow.md) points to the (IMR-internal) background material the method was originally distilled from, if you want the history.
 
 Long renders are compiled with [`index-render`](skills/index-render/SKILL.md) in a screen session with a log in `logs/`.
 
@@ -77,9 +77,9 @@ Long renders are compiled with [`index-render`](skills/index-render/SKILL.md) in
 ## 🧰 Siblings
 
 - [**BAIT**](https://github.com/DeepWaterIMR/BAIT) — IMR Biotic data access, the database, privacy, maps, life history. **Required.**
-- [**academic-writing**](https://github.com/DeepWaterIMR/academic-writing) — the writing style, the document conventions, and the project skeleton this pack's scaffolder builds on. **Required for report generation.**
-- [**spict-template**](https://github.com/DeepWaterIMR/spict-template) — SPiCT biomass-dynamic stock assessments. **The index this pack exports is what a SPiCT assessment consumes**; step 4's selected index becomes SPiCT's `obsI`.
-- [**presentation-template**](https://github.com/DeepWaterIMR/presentation-template) — Quarto RevealJS slides.
+- [**wise-writing**](https://github.com/DeepWaterIMR/wise-writing) — the writing style, the document conventions, and the project skeleton this pack's scaffolder builds on. **Required for report generation.**
+- [**spict-wise**](https://github.com/DeepWaterIMR/spict-wise) — SPiCT biomass-dynamic stock assessments. **The index this pack exports is what a SPiCT assessment consumes**; step 4's selected index becomes SPiCT's `obsI`.
+- [**wise-presentations**](https://github.com/DeepWaterIMR/wise-presentations) — Quarto RevealJS slides.
 
 ## 🚨 You are still in charge
 
@@ -93,13 +93,13 @@ Vihtakari, M., Aune, M., Assmann, K.M., Howell, D., Hallfredsson, E.H., & Ward, 
 
 
 
-## Academic-writing compatibility
+## wise-writing compatibility
 
-New projects use academic-writing's folder structure and HTML data-report conventions.
-Read [the shared contract](knowledge/academic-writing.md) and
+New projects use wise-writing's folder structure and HTML data-report conventions.
+Read [the shared contract](knowledge/wise-writing.md) and
 [the generated layout](knowledge/project-structure.md). Supply confirmed `AUTHORS` and
 `AFFILIATIONS` in the scaffold configuration. Existing species projects are not migrated
-automatically. The installed academic-writing skills govern all generated artifacts.
+automatically. The installed wise-writing skills govern all generated artifacts.
 
 Run `Rscript config/validate-scaffold.R` to check a synthetic scaffold without accessing data
 or fitting models. Add `--render` to render a small synthetic report using the same metadata,

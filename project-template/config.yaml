@@ -8,7 +8,7 @@ SPECIES_NAME:  "{{SPECIES_NAME}}"     # display name, e.g. "Beaked redfish"
 SPECIES_SLUG:  "{{SPECIES_SLUG}}"     # kebab-case slug for folders/files, e.g. "snabeluer"
 SPECIES_LATIN: "{{SPECIES_LATIN}}"    # binomial, e.g. "Sebastes mentella"
 
-# Human metadata uses academic-writing's AUTHORS/AFFILIATIONS schema.
+# Human metadata uses wise-writing's AUTHORS/AFFILIATIONS schema.
 # Supply accountable human names and matching affiliation IDs before scaffolding.
 AUTHORS: []
 AFFILIATIONS: []

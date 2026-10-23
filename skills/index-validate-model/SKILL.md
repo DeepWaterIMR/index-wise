@@ -13,9 +13,9 @@ model is not the winner.
 method is the comparability contract in the first file; the functions are only the mechanics.
 Use `sdmTMBexperiments::sdmTMB_selection()` — do not hand-roll a CV loop.
 
-Before producing project files, read `knowledge/academic-writing.md` and the installed
+Before producing project files, read `knowledge/wise-writing.md` and the installed
 `academic-style`, `academic-conventions`, and `academic-data-report` skills. Apply their
-conventions to every generated artifact; retain index-template's scientific workflow.
+conventions to every generated artifact; retain index-wise's scientific workflow.
 
 ## Work in `docs/data-report/validation/validate.qmd`
 

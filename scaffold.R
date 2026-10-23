@@ -23,17 +23,21 @@
 }
 
 # --- Locate the project-template/ directory -------------------------------------------
-# Order: explicit arg -> ~/.index-template/config.json (written by index-install) ->
-# ./project-template -> error.
+# Order: explicit arg -> ~/.index-wise/config.json -> legacy
+# ~/.index-template/config.json -> ./project-template -> error.
 .find_template <- function(template = NULL) {
   if (!is.null(template) && dir.exists(template)) return(normalizePath(template))
 
-  cfg_json <- path.expand("~/.index-template/config.json")
-  if (file.exists(cfg_json) && requireNamespace("jsonlite", quietly = TRUE)) {
-    p <- tryCatch(jsonlite::read_json(cfg_json)$index_template_path, error = function(e) NULL)
-    if (!is.null(p)) {
-      cand <- file.path(p, "project-template")
-      if (dir.exists(cand)) return(normalizePath(cand))
+  cfg_jsons <- path.expand(c("~/.index-wise/config.json",
+                             "~/.index-template/config.json"))
+  if (requireNamespace("jsonlite", quietly = TRUE)) {
+    for (cfg_json in cfg_jsons[file.exists(cfg_jsons)]) {
+      p <- tryCatch(jsonlite::read_json(cfg_json)$index_template_path,
+                    error = function(e) NULL)
+      if (!is.null(p)) {
+        cand <- file.path(p, "project-template")
+        if (dir.exists(cand)) return(normalizePath(cand))
+      }
     }
   }
 
@@ -68,7 +72,7 @@ scaffold_index <- function(config, target, template = NULL, dry = FALSE) {
   if (!grepl("^[A-Za-z0-9-]+$", region_slug))
     stop("REGION_SLUG must contain only letters, numbers, and hyphens: got '", region_slug, "'")
 
-  # Human metadata follows academic-writing's config schema. YAML serialization preserves
+  # Human metadata follows wise-writing's config schema. YAML serialization preserves
   # punctuation, Unicode, and multiple authors without treating their names as YAML code.
   if (!length(cfg$AUTHORS) || !length(cfg$AFFILIATIONS))
     stop("Supply accountable human AUTHORS and AFFILIATIONS in config.yaml before scaffolding.")

@@ -66,7 +66,7 @@ year_n <- dplyr::n_distinct(dt$startyear)
 survey_n <- dplyr::n_distinct(dt$missionid)
 ```
 
-This document and the associated analyses are based on [index-template](https://github.com/DeepWaterIMR/index-template) and were developed with researcher-supervised generative AI.
+This document and the associated analyses are based on [index-wise](https://github.com/DeepWaterIMR/index-wise) and were developed with researcher-supervised generative AI.
 
 The compiled dataset was extracted from the IMR Biotic database on `r metadata$data_downloaded_at_label`.
 
@@ -265,7 +265,7 @@ Record unusual exclusions, missing measurements, gear-width choices, and survey-
 
 # Software and reproducibility
 
-This report followed [index-template](https://github.com/DeepWaterIMR/index-template), with document structure and conventions from [academic-writing](https://github.com/DeepWaterIMR/academic-writing).
+This report followed [index-wise](https://github.com/DeepWaterIMR/index-wise), with document structure and conventions from [wise-writing](https://github.com/DeepWaterIMR/wise-writing).
 
 ```{r software-citations}
 #| results: asis

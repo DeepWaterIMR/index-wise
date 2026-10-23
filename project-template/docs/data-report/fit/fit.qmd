@@ -1,6 +1,6 @@
 ---
 title: "{{SPECIES_NAME}} — first sdmTMB model"
-subtitle: "Step 2 · index-template"
+subtitle: "Step 2 · index-wise"
 format:
   html:
     toc: true
@@ -39,7 +39,7 @@ csl: ../../assets/ices_jms.csl
 <!-- Step 2: the first FEASIBLE model — total {{SPECIES_NAME}} biomass (or abundance), NO
 length groups, NO temperature — to confirm the method works before adding complexity.
 Improve this document directly as the routine matures — see knowledge/workflow.md if you need
-background on the original method. Read index-template's sdmtmb.md and sdmtmbexperiments.md.
+background on the original method. Read index-wise's sdmtmb.md and sdmtmbexperiments.md.
 Do NOT hard-wrap prose. -->
 
 # Data
@@ -174,7 +174,7 @@ If the simple model is sane and the index is plausible, proceed to Step 3 (`inde
 
 # Software and reproducibility
 
-This report followed [index-template](https://github.com/DeepWaterIMR/index-template), with document structure and conventions from [academic-writing](https://github.com/DeepWaterIMR/academic-writing).
+This report followed [index-wise](https://github.com/DeepWaterIMR/index-wise), with document structure and conventions from [wise-writing](https://github.com/DeepWaterIMR/wise-writing).
 
 ```{r software-citations}
 #| results: asis

@@ -1,6 +1,6 @@
 ---
 title: "{{SPECIES_NAME}} — survey index"
-subtitle: "Step 4 · index-template"
+subtitle: "Step 4 · index-wise"
 format:
   html:
     toc: true
@@ -154,7 +154,7 @@ compute is guarded by the matching include_* toggle. -->
 
 # Software and reproducibility
 
-This report followed [index-template](https://github.com/DeepWaterIMR/index-template), with document structure and conventions from [academic-writing](https://github.com/DeepWaterIMR/academic-writing).
+This report followed [index-wise](https://github.com/DeepWaterIMR/index-wise), with document structure and conventions from [wise-writing](https://github.com/DeepWaterIMR/wise-writing).
 
 ```{r software-citations}
 #| results: asis

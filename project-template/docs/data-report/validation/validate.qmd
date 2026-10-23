@@ -1,6 +1,6 @@
 ---
 title: "{{SPECIES_NAME}} — model validation & selection"
-subtitle: "Step 3 · index-template"
+subtitle: "Step 3 · index-wise"
 format:
   html:
     toc: true
@@ -44,7 +44,7 @@ csl: ../../assets/ices_jms.csl
 <!-- State the report question, intended reader, downstream use, and source-data version. -->
 
 
-<!-- Step 3: justify the model. Read index-template's knowledge/model-selection.md BEFORE
+<!-- Step 3: justify the model. Read index-wise's knowledge/model-selection.md BEFORE
 editing this document — it is the method, and every rule in it exists to stop a selection
 table from lying. The mechanics are sdmTMBexperiments::sdmTMB_selection(); do not hand-roll a
 CV loop. Each stage has its own compute toggle and its own cache prefix, so an interrupted run
@@ -530,7 +530,7 @@ Record the decision and its evidence in `ai/memory/`, then proceed to Step 4 (`i
 
 # Software and reproducibility
 
-This report followed [index-template](https://github.com/DeepWaterIMR/index-template), with document structure and conventions from [academic-writing](https://github.com/DeepWaterIMR/academic-writing).
+This report followed [index-wise](https://github.com/DeepWaterIMR/index-wise), with document structure and conventions from [wise-writing](https://github.com/DeepWaterIMR/wise-writing).
 
 ```{r software-citations}
 #| results: asis
