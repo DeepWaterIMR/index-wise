@@ -21,7 +21,14 @@ Tell your agent which species you want an index for, and it will:
 
 ## 🧰 Built on BAIT
 
-index-wise sits **on top of** [BAIT](https://github.com/DeepWaterIMR/BAIT) (the Biotic AI Toolkit). BAIT handles Biotic **data access, the database, privacy, maps, and life-history**; index-wise adds the **sdmTMB index-building** layer. If BAIT is not installed yet, install it first:
+index-wise owns the **sdmTMB index-building** workflow. BAIT handles Biotic **data access, the database, privacy, maps, and life-history**. Install BAIT on demand before compiling index data from Biotic; installing index-wise does not install or refresh the database.
+
+You may install and update packs through Fiskwise's managed lifecycle, or use the standalone
+pack skills in this repository. Shared writing/reporting dependencies are installed on demand;
+they are not a prerequisite for the index-wise pack itself.
+Use `fiskwise-workflow` for requests spanning packs. For managed R tasks, always use
+**`r-code-style`**. The coordinator's lifecycle skills are `fiskwise-install`,
+`fiskwise-update`, and `fiskwise-uninstall`.
 
 ```
 install https://github.com/DeepWaterIMR/BAIT
@@ -37,7 +44,7 @@ This repo is **public and contains instructions only — never data**:
 
 ## 🚀 Quickstart
 
-1. **Install BAIT** (if you haven't): `install https://github.com/DeepWaterIMR/BAIT`.
+1. **Before Biotic data compilation**, install BAIT if needed: `install https://github.com/DeepWaterIMR/BAIT`. Database setup is a separate choice.
 2. **Install index-wise:**
    ```
    install https://github.com/DeepWaterIMR/index-wise
@@ -77,7 +84,7 @@ Long renders are compiled with [`index-render`](skills/index-render/SKILL.md) in
 ## 🧰 Siblings
 
 - [**BAIT**](https://github.com/DeepWaterIMR/BAIT) — IMR Biotic data access, the database, privacy, maps, life history. **Required.**
-- [**wise-writing**](https://github.com/DeepWaterIMR/wise-writing) — the writing style, the document conventions, and the project skeleton this pack's scaffolder builds on. **Required for report generation.**
+- [**wise-writing**](https://github.com/DeepWaterIMR/wise-writing) — the writing style, document conventions, and shared project layout. **Required when scaffolding reports**; install it on demand.
 - [**spict-wise**](https://github.com/DeepWaterIMR/spict-wise) — SPiCT biomass-dynamic stock assessments. **The index this pack exports is what a SPiCT assessment consumes**; step 4's selected index becomes SPiCT's `obsI`.
 - [**wise-presentations**](https://github.com/DeepWaterIMR/wise-presentations) — Quarto RevealJS slides.
 

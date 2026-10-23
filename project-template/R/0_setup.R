@@ -5,17 +5,29 @@
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
 # --- Packages ---------------------------------------------------------------------------
+# The shared helper is copied from wise-writing during scaffolding, so projects remain
+# self-contained after they leave this pack.
+.setup_frames <- sys.frames()
+.setup_file <- if (length(.setup_frames)) .setup_frames[[length(.setup_frames)]]$ofile else NULL
+.setup_root <- if (!is.null(.setup_file) && nzchar(.setup_file)) {
+  dirname(dirname(normalizePath(.setup_file, mustWork = FALSE)))
+} else {
+  getwd()
+}
+source(file.path(.setup_root, "R", "package_setup.R"))
+rm(.setup_frames, .setup_file, .setup_root)
+
 # Every package this project uses, named ONCE, with the GitHub repository for those that are
-# not on CRAN and NA for the rest. Missing packages install themselves on first run, on Linux,
-# macOS and Windows alike. `sdmTMBexperiments` must be ATTACHED (not used as `::`) so that
-# ggOceanMaps land data is on the search path.
+# not on CRAN and NA for the rest. `sdmTMBexperiments` must be ATTACHED (not used as `::`) so
+# that ggOceanMaps land data is on the search path. Missing packages are not installed unless
+# the analyst explicitly opts in for a run with R_INDEX_INSTALL_MISSING=true. The shared helper
+# also respects renv and R_AW_INSTALL_MISSING=false.
 #
 # `here` and `knitr` are deliberately absent: each qmd calls `here::here()` in its own setup
 # chunk *before* sourcing this file, so both must already exist for that source() to run at all.
 # Quarto brings knitr, and here is a dependency of nearly everything else.
 #
-# If the project uses renv (there is an renv.lock), set install_missing_packages to FALSE below
-# and let renv::restore() own the library instead.
+# If the project uses renv (there is an renv.lock), let renv::restore() own the library.
 packages <- c(
   tidyverse = NA,
   sf = NA,
@@ -47,39 +59,13 @@ optional_packages <- c(
   future = NA
 )
 
-# Set FALSE, or export R_INDEX_INSTALL_MISSING=false, to run against the library as it is.
-install_missing_packages <- !identical(
-  tolower(Sys.getenv("R_INDEX_INSTALL_MISSING", unset = "true")), "false")
+# Set R_INDEX_INSTALL_MISSING=true only after package installation has been authorized.
+install_missing_packages <- identical(
+  tolower(trimws(Sys.getenv("R_INDEX_INSTALL_MISSING", unset = "false"))), "true")
 
 install_packages_if_missing <- function(pkgs) {
-  missing <- pkgs[!vapply(names(pkgs), requireNamespace, logical(1), quietly = TRUE)]
-  if (!length(missing)) return(invisible(NULL))
-
-  # Rscript, knitr and Quarto sessions often start without a CRAN mirror and without a
-  # writable user library. Both are needed before installing.
-  repos <- getOption("repos")
-  if (is.na(repos["CRAN"]) || repos["CRAN"] == "@CRAN@") {
-    repos["CRAN"] <- "https://cloud.r-project.org"
-    options(repos = repos)
-  }
-  lib <- strsplit(Sys.getenv("R_LIBS_USER"), .Platform$path.sep)[[1]][1]
-  if (!is.na(lib) && nzchar(lib)) {
-    if (!dir.exists(lib)) dir.create(lib, recursive = TRUE)
-    .libPaths(c(lib, .libPaths()))
-  }
-  # Never fall into the interactive "install from sources?" question, which hangs unattended
-  # renders on macOS and Windows.
-  options(install.packages.compile.from.source = "never")
-
-  if (any(!is.na(missing)) && !requireNamespace("remotes", quietly = TRUE))
-    install.packages("remotes")
-
-  for (package in names(missing)) {
-    message("Installing missing package: ", package)
-    if (is.na(missing[[package]])) install.packages(package)
-    else remotes::install_github(missing[[package]], upgrade = "never")
-  }
-  invisible(NULL)
+  package_setup(pkgs, install_missing_packages = install_missing_packages,
+                project_root = getwd(), attach = function(packages) invisible(NULL))
 }
 
 # Install-and-attach an optional package at the point of use, e.g. ensure_packages("blockCV").
@@ -90,17 +76,12 @@ ensure_packages <- function(...) {
   if (length(unknown))
     stop("Not listed in `packages` or `optional_packages` in R/0_setup.R: ",
          paste(unknown, collapse = ", "))
-  if (isTRUE(install_missing_packages)) install_packages_if_missing(known[nms])
-  invisible(lapply(nms, function(package) {
-    suppressPackageStartupMessages(library(package, character.only = TRUE))
-  }))
+  package_setup(known[nms], install_missing_packages = install_missing_packages,
+                project_root = getwd())
 }
 
-if (isTRUE(install_missing_packages)) install_packages_if_missing(packages)
-
-invisible(lapply(names(packages), function(package) {
-  suppressPackageStartupMessages(library(package, character.only = TRUE))
-}))
+package_setup(packages, install_missing_packages = install_missing_packages,
+              project_root = getwd())
 # Data access (Biotic database) is provided by BAIT — see its biotic-connect skill.
 
 # --- Config -----------------------------------------------------------------------------

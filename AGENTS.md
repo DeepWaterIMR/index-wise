@@ -33,6 +33,22 @@ alongside [BAIT](https://github.com/DeepWaterIMR/BAIT),
 [wise-presentations](https://github.com/DeepWaterIMR/wise-presentations). Follow each
 project's own skills and routing guidance for its workflow.
 
+### Pack boundaries and shared skills
+
+index-wise owns the sdmTMB survey-index method and the species-project scaffold. BAIT owns
+Biotic data access and privacy; wise-writing owns shared scientific style, package-loading,
+project layout, and generic reporting. Keep index-wise installable on its own and obtain shared
+dependencies on demand when the requested work needs them; the Fiskwise coordinator is
+optional.
+
+Use the installed **`r-code-style`** skill for every managed R task. In managed mode, follow
+`fiskwise-install`, `fiskwise-update`, or `fiskwise-uninstall` and do not repeat clone, skill
+registration, or dependency steps. Honor saved R-install consent and disabled install toggles.
+Use `fiskwise-workflow` to route requests spanning packs.
+A project with `renv.lock` is controlled by renv; inspect and report missing packages rather
+than installing or updating them outside renv. Never refresh the Biotic database as part of an
+index-wise install or update; that is a separate opt-in BAIT action.
+
 ---
 
 ## ⛔ PRIVACY — non-negotiable, keep in mind on every task
@@ -59,8 +75,9 @@ If a request would breach any of the above, stop and explain rather than comply.
 
 index-wise is meant to be installed **once per machine** (BAIT-style) and used to spin up
 **many** species projects — not cloned into each repo. When set up via `index-install`, its
-location is saved to `~/.index-wise/config.json` and skills are copied to the agent's
-user-level skills folder (`~/.claude/skills/` for Claude Code, `~/.agents/skills/` for Codex).
+location is saved to `~/.index-wise/config.json` and its `index-*` skills are linked into the
+agent's user-level skills folder (`~/.claude/skills/` for Claude Code,
+`~/.agents/skills/` for Codex).
 
 - **Trigger:** the user asks to *"make a biomass/abundance index for `<species>` using
   index-wise"*, or to build/validate/report an sdmTMB survey index.
@@ -134,6 +151,9 @@ Shared knowledge lives in `knowledge/`:
 8. **Plan mode first.** After the questionnaire, present a plan and confirm before writing
    and compiling documents.
 
+Use **`r-code-style`** for all R changes in managed projects; index-wise's method knowledge
+does not replace the shared R coding guidance.
+
 ---
 
 ## Project memory (in the generated project)
@@ -160,9 +180,10 @@ non-obvious, and add a one-line pointer to `MEMORY.md`. See the project's `ai/me
 
 ## wise-writing contract
 
-For every generated project artifact, read the installed `academic-style`,
-`academic-conventions`, and `academic-data-report` skills. index-wise supplies the
-scientific workflow; wise-writing supplies structure, style, and publishing conventions.
-Follow index-wise's `knowledge/wise-writing.md`. The workflow QMDs are HTML data
+For every generated project artifact, use `r-code-style` for managed R work and read the
+installed `academic-style`, `academic-conventions`, and `academic-data-report` skills.
+index-wise supplies the scientific workflow; wise-writing supplies shared style, package
+loading, and publishing conventions. Install/update wise-writing on demand when those skills
+are needed. Follow index-wise's `knowledge/wise-writing.md`. The workflow QMDs are HTML data
 reports under `docs/data-report/`; shared assets belong in `docs/assets/`, project memory in
 `ai/memory/`, tests in `ai/tests/`, and reviews in `ai/review/`.

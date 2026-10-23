@@ -11,19 +11,24 @@ Goal: get index-wise working **once per machine** so it's available in **every**
 > Trigger: the user prompts *"install https://github.com/DeepWaterIMR/index-wise"* (or
 > similar), or asks to build a survey index with no install yet.
 
-## Step 1 — BAIT + privacy (defer to BAIT)
+For a direct machine-wide install, use `fiskwise-install` when the user chooses managed
+lifecycle. If this skill was invoked by that workflow, handle only index-wise-specific checks
+and leave clone, registry, shared-skill registration, and dependency bookkeeping to the parent.
+The standalone procedure below remains available.
 
-index-wise does **not** define its own privacy gate — it reuses BAIT's.
+## Step 1 — Check workflow dependencies when needed
 
-1. Check `~/.bait/config.json`. If BAIT is **not** installed, run BAIT's
-   `bait-install` skill first (`install https://github.com/DeepWaterIMR/BAIT`). That handles
-   the one-time model-training/data-retention onboarding and records `privacy_onboarded_at`.
-2. If BAIT is installed and onboarding is recorded, **do not re-gate** — a short reminder that
-   raw Biotic data stays local is enough. See BAIT's `biotic-privacy` skill.
+index-wise does **not** define its own privacy gate. BAIT owns Biotic access and its privacy
+onboarding; check or install BAIT when the user is ready to compile Biotic data, not merely to
+install the index-wise knowledge pack.
 
-Before generating scientific reports, also ensure wise-writing is installed and its
-`academic-style`, `academic-conventions`, and `academic-data-report` skills are available.
-Use `academic-writing-install` when needed. See `knowledge/wise-writing.md`.
+1. Before data compilation, check `~/.bait/config.json`. If BAIT is not installed, run BAIT's
+   `bait-install` skill; it handles one-time privacy onboarding and offers database setup
+   separately. If onboarding is already recorded, do not re-gate routine work.
+2. Before generating scientific reports, ensure wise-writing's `academic-style`,
+   `academic-conventions`, and `academic-data-report` skills are available. Install/update
+   wise-writing on demand when needed; its absence does not block standalone index-wise install
+   or model work that does not produce those documents. See `knowledge/wise-writing.md`.
 
 ## Step 2 — Clone index-wise to a sensible place
 
@@ -95,7 +100,9 @@ with a symbolic link to the source. Move matching legacy Codex folders to a date
 after comparing them; leave unrelated legacy folders in place. Reconcile wanted differences
 into the index-wise source before a later sync.
 
-Record the install in `~/.index-wise/config.json`:
+Record the install in `~/.index-wise/config.json`. In managed mode, leave registry and pack
+config updates to `fiskwise-install`; it preserves the compatible `index_template_path` key.
+For standalone installation:
 
 ```json
 { "index_template_path": "<path>/index-wise", "installed_at": "<date>" }
@@ -106,7 +113,11 @@ file first, then falls back to the legacy `~/.index-template/config.json`.
 
 ## Step 4 — Verify the R toolchain
 
-Confirm the modelling packages are installed (see `knowledge/packages.md`):
+Confirm the modelling packages are installed (see `knowledge/packages.md`). In
+Fiskwise-managed mode, `fiskwise-install` uses the saved R-install consent and package helper;
+do not run a second installer here. If installation is disabled, or the target project uses
+`renv.lock`, only report what is missing and let the project/lifecycle owner decide. For a
+standalone install, use this check only with the user's authorization to add missing packages:
 
 ```r
 for (p in c("sdmTMB", "ggOceanMaps", "sf", "quarto"))

@@ -47,12 +47,38 @@
   stop("Cannot locate project-template/. Pass it explicitly via `template=`.")
 }
 
+# Generated projects carry their own copy of wise-writing's shared loader. Resolve it from
+# the installed pack first, then a side-by-side checkout for standalone development use.
+.find_package_setup <- function(template) {
+  candidates <- character()
+  configs <- path.expand(c("~/.wise-writing/config.json", "~/.academic-writing/config.json"))
+  if (requireNamespace("jsonlite", quietly = TRUE)) {
+    for (config in configs[file.exists(configs)]) {
+      pack <- tryCatch(jsonlite::read_json(config)$academic_writing_path,
+                       error = function(e) NULL)
+      if (!is.null(pack)) candidates <- c(candidates,
+        file.path(pack, "project-template", "R", "package_setup.R"))
+    }
+  }
+
+  pack_root <- dirname(normalizePath(template, mustWork = TRUE))
+  candidates <- c(candidates,
+    file.path(dirname(pack_root), "wise-writing", "project-template", "R", "package_setup.R"),
+    file.path(dirname(pack_root), "academic-writing", "project-template", "R", "package_setup.R"))
+
+  found <- candidates[file.exists(candidates)]
+  if (length(found)) return(normalizePath(found[[1]]))
+  stop("Cannot locate wise-writing's R/package_setup.R. Install wise-writing or place its checkout beside index-wise.",
+       call. = FALSE)
+}
+
 scaffold_index <- function(config, target, template = NULL, dry = FALSE) {
 
   if (!requireNamespace("yaml", quietly = TRUE))
     stop("The 'yaml' package is required: install.packages('yaml')")
 
   template <- .find_template(template)
+  package_setup_source <- .find_package_setup(template)
   msg <- function(...) cat(if (dry) "[dry] " else "", ..., "\n", sep = "")
 
   # --- Read and validate the config ---------------------------------------------------
@@ -109,6 +135,11 @@ scaffold_index <- function(config, target, template = NULL, dry = FALSE) {
     dir.create(target, recursive = TRUE, showWarnings = FALSE)
     file.copy(list.files(template, full.names = TRUE, all.files = TRUE, no.. = TRUE),
               target, recursive = TRUE, copy.mode = TRUE)
+    dir.create(file.path(target, "R"), recursive = TRUE, showWarnings = FALSE)
+    if (!file.copy(package_setup_source, file.path(target, "R", "package_setup.R"),
+                   overwrite = TRUE)) {
+      stop("Failed to copy wise-writing's package_setup.R into the scaffolded project.")
+    }
     file.copy(config, file.path(target, "config.yaml"), overwrite = TRUE)
   }
   msg("Copied project-template/ -> ", target)

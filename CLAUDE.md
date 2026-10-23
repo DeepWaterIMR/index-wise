@@ -18,6 +18,14 @@ alongside [BAIT](https://github.com/DeepWaterIMR/BAIT),
 [wise-presentations](https://github.com/DeepWaterIMR/wise-presentations). Follow each
 project's own skills and routing guidance for its workflow.
 
+index-wise owns sdmTMB index methods and scaffolding; BAIT owns Biotic access/privacy; and
+wise-writing owns shared scientific style, package-loading, and generic reporting. Use
+**`r-code-style`** for every managed R task. Install shared packs on demand; standalone
+index-wise use does not require the Fiskwise coordinator. In managed mode, follow
+`fiskwise-install`, `fiskwise-update`, or `fiskwise-uninstall`, honor saved R-install consent,
+disabled toggles, and `renv.lock`, and do not repeat dependency updates. Database refresh stays
+a separate opt-in BAIT action. Use `fiskwise-workflow` to route requests spanning packs.
+
 ## Where things are
 
 - **Skills** — `skills/index-*/SKILL.md`. Installed globally by `skills/index-install`.
@@ -40,14 +48,16 @@ project's own skills and routing guidance for its workflow.
   the approach before scaffolding and rendering.
 - **Code review before render** — Quarto renders are slow; run `/code-review` on changed
   chunks and fix issues before starting a render. See `knowledge/rendering.md`.
+- **R code style** — use the installed `r-code-style` skill for all R changes in managed work.
 
 For everything else, see [`AGENTS.md`](AGENTS.md).
 
 ## wise-writing contract
 
-For every generated project artifact, read the installed `academic-style`,
-`academic-conventions`, and `academic-data-report` skills. index-wise supplies the
-scientific workflow; wise-writing supplies structure, style, and publishing conventions.
+For every generated project artifact, use `r-code-style` for managed R work and read the
+installed `academic-style`, `academic-conventions`, and `academic-data-report` skills.
+index-wise supplies the scientific workflow; wise-writing supplies shared style, package
+loading, and publishing conventions. Install/update wise-writing on demand when needed.
 Follow index-wise's `knowledge/wise-writing.md`. The workflow QMDs are HTML data
 reports under `docs/data-report/`; shared assets belong in `docs/assets/`, project memory in
 `ai/memory/`, tests in `ai/tests/`, and reviews in `ai/review/`.

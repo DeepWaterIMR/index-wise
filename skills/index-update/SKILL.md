@@ -7,6 +7,12 @@ description: Update index-wise to the latest version — git pull the index-wise
 
 Goal: pull the latest index-wise and re-sync its skills, mirroring BAIT's `bait-update`.
 
+For a direct machine-wide update, use `fiskwise-update` when the user chooses managed lifecycle.
+If this skill was invoked by that workflow, handle only index-wise-specific work and leave
+pulls, registry state, skill reconciliation, and dependency checks to the parent. The standalone
+procedure remains available. Updating index-wise never refreshes the Biotic database; that is a
+separate, explicit BAIT action.
+
 ## Step 1 — Locate the install
 
 Read `index_template_path` from `~/.index-wise/config.json`. For existing installs, fall back

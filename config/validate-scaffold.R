@@ -38,6 +38,17 @@ scaffold_index(config_file, file.path(workspace, "default-template-project"), dr
 if (is.na(old_home)) Sys.unsetenv("HOME") else Sys.setenv(HOME = old_home)
 target <- file.path(workspace, "project")
 scaffold_index(config_file, target, template = "project-template")
+shared_setup <- file.path(dirname(normalizePath(".")), "wise-writing",
+                          "project-template", "R", "package_setup.R")
+copied_setup <- file.path(target, "R", "package_setup.R")
+stopifnot(file.exists(copied_setup),
+          identical(readBin(copied_setup, "raw", n = file.info(copied_setup)$size),
+                    readBin(shared_setup, "raw", n = file.info(shared_setup)$size)))
+setup_text <- readLines(file.path(target, "R", "0_setup.R"), warn = FALSE)
+stopifnot(any(grepl('"R", "package_setup.R"', setup_text, fixed = TRUE)),
+          any(grepl('unset = "false"', setup_text, fixed = TRUE)),
+          any(grepl('R_INDEX_INSTALL_MISSING=true', setup_text, fixed = TRUE)),
+          !any(grepl("install.packages(", setup_text, fixed = TRUE)))
 stopifnot(all(dir.exists(file.path(target, c("ai/memory", "ai/tests", "ai/review",
   "R", "docs/assets", "docs/data-report", "figures", "config", "logs")))))
 stopifnot(!any(file.exists(file.path(target, c("memory", "review", "R/00_setup.R")))))
