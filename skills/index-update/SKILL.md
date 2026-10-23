@@ -74,3 +74,7 @@ folders remain untouched. Reconcile wanted edits from the backups into the index
 Summarise what changed (new/updated skills or knowledge files) from the git log since the last
 pull, and remind the user that existing generated projects are unaffected — they can adopt new
 guidance on their next task.
+
+On Windows without symbolic-link privileges, copy each source skill into its own destination
+folder instead. Verify its `SKILL.md` before retiring a legacy copy, and refresh copied skills
+on updates. Do not require administrator privileges solely to install the knowledge pack.

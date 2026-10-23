@@ -127,3 +127,7 @@ Tell the user index-wise is installed and how to start:
 > surveys, using index-wise."*
 
 That triggers `index-new-project`.
+
+On Windows without symbolic-link privileges, copy each source skill into its own destination
+folder instead. Verify its `SKILL.md` before retiring a legacy copy, and refresh copied skills
+on updates. Do not require administrator privileges solely to install the knowledge pack.
