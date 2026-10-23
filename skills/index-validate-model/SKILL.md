@@ -24,8 +24,10 @@ the species and config. The order and its reasons are in `knowledge/model-select
 short, start from the Step 2 model and settle the most expensive, most conditioning setting
 first:
 
-1. **Mesh resolution** — a cutoff ladder; choose the **coarsest mesh within two paired standard
-   errors of the best cross-validated ELPD**, reporting fit time and object size beside it.
+1. **Mesh resolution** — a cutoff ladder; choose the **coarsest mesh from which the index has
+   stabilised**: it and every finer cutoff within 5 % of the finest mesh in the terminal year,
+   over the last five years (the mesh Δρ, after Mohn's rho) and over the whole series. Show the
+   four-panel selection figure (ΔELPD, Δρ, fit time, index); ELPD is supporting, not decisive.
 2. **Random-field structure** — spatial field on/off per component, `ar1`/`rw`/`iid`. Remember
    the assessment use-case: total/length indices → `ar1` with no year effect; the
    assessment-selected index → often `iid` + `year` as a fixed effect, to avoid temporal

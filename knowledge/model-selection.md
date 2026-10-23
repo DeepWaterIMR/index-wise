@@ -93,26 +93,58 @@ comparison made on it.
 
 Stage 2 has an assessment constraint, not just a statistical one — see the section below.
 
-## Mesh resolution: the smallest mesh that is not worse
+## Mesh resolution: the coarsest mesh that does not move the index
 
 A finer mesh is not a better model by default. It is a larger one: more random-field vertices
-per time step, longer fits, more memory, and more chances for a variance parameter to collapse.
-Select the cutoff by the rule **the coarsest mesh whose cross-validated predictive skill is not
-distinguishable from the best**:
+per time step, longer fits (time grows roughly with the square of the vertex count), more
+memory, and more chances for a variance parameter to collapse. And the mesh is a computational
+setting, not a hypothesis about the stock: what matters is whether it changes **the index the
+assessment will read**, above all its terminal years.
 
-1. Fit the ladder and cross-validate it with the **same fold assignment** for every cutoff, so
-   the per-observation scores are paired.
-2. For each cutoff compute the paired difference in pointwise held-out log-likelihood against
-   the best cutoff, $d_i$, and the standard error of the summed difference,
-   $\mathrm{SE} = \sqrt{n}\,\mathrm{sd}(d_i)$ (the standard error `loo::loo_compare()` uses for
-   ELPD differences).
-3. Choose the coarsest cutoff whose ELPD is within two standard errors of the best.
+Cross-validated predictive skill is the wrong primary criterion for this choice. Held-out
+log-likelihood usually keeps improving as the mesh is refined, because a finer field fits
+local, station-scale structure. That structure mostly integrates out when the field is summed
+over the prediction grid, so a large ELPD gain can come with no change in the index. Selecting
+on ELPD therefore pushes the mesh towards the finest one tested, at many times the cost.
 
-Report fit time, vertex count and fitted-object size beside the scores, and look at the index
-each cutoff produces. A cutoff that changes the trend, rather than the uncertainty, is not a
-computational setting and must be discussed. Mesh refinement buys skill unevenly — a large gain
-from a very coarse mesh, then a plateau — so make the ladder dense enough near the plateau to
-find where it starts.
+Select the cutoff instead by the stability of the index, in the spirit of Mohn's rho (Mohn
+1999): treat each coarser mesh as a perturbation of a fine reference mesh and ask how far it
+moves the end of the series.
+
+1. **Fit a ladder** of cutoffs from coarse to as fine as is affordable (e.g. 100, 75, 50, 35,
+   25 km), with everything else at the Step 2 settings. Predict each fit on the same grid at the
+   same reference and compute the index without bias correction.
+2. **Take the finest mesh as the reference** and, for every cutoff, compute the relative
+   difference of the annual index from it, $r_t = I_{c,t} / I_{\mathrm{ref},t} - 1$, and three
+   summaries:
+   - the **terminal-year difference** $r_T$;
+   - the **mesh $\Delta\rho$**, the mean of $r_t$ over the last $n$ years ($n = 5$, the usual
+     retrospective window) — Mohn's rho with mesh coarsening in place of data peeling;
+   - the **mean absolute relative difference** over the whole series, which guards against a
+     mesh that matches the end of the series but distorts its trend.
+3. **Check that the ladder has converged:** the second-finest mesh must be within the tolerance
+   of the reference. If it is not, the reference is not yet a reference; extend the ladder
+   before choosing.
+4. **Choose the coarsest cutoff from which the index has stabilised:** it and every finer
+   cutoff have all three summaries within the tolerance $\tau$. Requiring the finer cutoffs too
+   means the index has settled, rather than crossed the reference by chance at one cutoff.
+   The default is $\tau = 0.05$: an order of magnitude below the Mohn's rho values usually
+   regarded as acceptable for an assessment (about −0.15 to 0.20 for longer-lived species;
+   Hurtado-Ferro et al. 2015) and well inside the coefficient of variation of a typical survey
+   index. Use a smaller tolerance if the index CV is small.
+
+Report vertex count, fit time and fitted-object size beside the three summaries, and show the
+selection as one four-panel figure (`plot_mesh_selection()` in the template's `validate.qmd`):
+(a) ΔELPD ± 2 paired SE, when the ladder was cross-validated; (b) the mesh $\Delta\rho$ and the
+terminal-year difference against the cutoff, with the tolerance band; (c) fit time labelled with
+the vertex count; (d) the index under every cutoff. The selected mesh is where (b) enters the
+band for good, read against the cost in (c). Report the cross-validated
+ELPD as well, as supporting information — a cutoff that is much worse on ELPD *and* moves the
+index is clearly too coarse — but do not select on it.
+
+After the other stages are settled, confirm once that the selected cutoff still meets the
+tolerance against the reference under the final structure, since a reinstated spatial field or
+a different formula can change how sensitive the index is to the mesh.
 
 ## Spatial correlation geometry: barrier and anisotropy
 
@@ -358,3 +390,18 @@ A short "Decision" section stating the chosen formula, family, spatiotemporal st
 cutoff and barrier choice; the evidence (which table, which metric, by how much); and — where
 the choice was not the table's winner — why. Record it in `ai/memory/` as a decision. That
 paragraph is what a reviewer reads.
+
+## References
+
+- Hurtado-Ferro, F., Szuwalski, C. S., Valero, J. L., *et al.* 2015. Looking in the rear-view
+  mirror: bias and retrospective patterns in integrated, age-structured stock assessment
+  models. ICES Journal of Marine Science, 72: 99–110. <https://doi.org/10.1093/icesjms/fsu198>
+- Mohn, R. 1999. The retrospective problem in sequential population analysis: an investigation
+  using cod fishery and simulated data. ICES Journal of Marine Science, 56: 473–488.
+  <https://doi.org/10.1006/jmsc.1999.0481>
+- Thorson, J. T. 2018. Three problems with the conventional delta-model for biomass sampling
+  data, and a computationally efficient alternative. Canadian Journal of Fisheries and Aquatic
+  Sciences, 75: 1369–1382. <https://doi.org/10.1139/cjfas-2017-0266>
+- Vehtari, A., Gelman, A., and Gabry, J. 2017. Practical Bayesian model evaluation using
+  leave-one-out cross-validation and WAIC. Statistics and Computing, 27: 1413–1432.
+  <https://doi.org/10.1007/s11222-016-9696-4>

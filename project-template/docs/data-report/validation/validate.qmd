@@ -344,7 +344,148 @@ plot(sel_mesh, type = "index", newdata = grid)
 
 <!-- Describe the supported finding and refer to @fig-validate-mesh-plots. Confirm caption units, sample size, and interval definitions against the generated result. -->
 
-If the index is insensitive to the cutoff, the coarse mesh is capturing the structure that matters for a year index, and the cheap one is the right instrument.
+### Selecting the cutoff by index stability
+
+The cutoff is a computational setting, so it is selected by how much it moves the index, not by predictive skill (see `knowledge/model-selection.md`). Each cutoff's annual index is compared with the finest mesh's: in the terminal year, averaged over the last `r mesh_window` years (the mesh Δρ, after Mohn's rho), and as the mean absolute difference over the series. The selected cutoff is the coarsest from which the index has stabilised — it and every finer cutoff within `r 100 * mesh_tol` % on all three — because further refinement then no longer moves the index while it still multiplies the fit time.
+
+```{r, eval=params$run_mesh}
+#| label: tbl-validate-mesh-stability
+mesh_tol <- 0.05     # maximum relative difference from the finest mesh
+mesh_window <- 5     # years at the end of the series the mesh delta-rho averages over
+mesh_ref <- paste0(min(mesh_cutoffs), " km")
+
+# One index per cutoff, predicted on the same grid at the same reference, no bias correction.
+mesh_index <- dplyr::bind_rows(lapply(names(sel_mesh$fits), function(nm) {
+  f <- sel_mesh$fits[[nm]]
+  if (is.null(f)) return(NULL)
+  p <- predict(f, newdata = grid, return_tmb_object = TRUE)
+  dplyr::mutate(sdmTMB::get_index(p, area = grid_cell_area_nmi2, bias_correct = FALSE), model = nm)
+}))
+mesh_last_year <- max(mesh_index$year)
+
+mesh_stability <- mesh_index |>
+  dplyr::inner_join(
+    mesh_index |> dplyr::filter(.data$model == mesh_ref) |> dplyr::select("year", ref = "est"),
+    by = "year"
+  ) |>
+  dplyr::mutate(rel_diff = .data$est / .data$ref - 1) |>
+  dplyr::group_by(.data$model) |>
+  dplyr::summarise(
+    terminal = .data$rel_diff[.data$year == mesh_last_year],
+    mesh_rho = mean(.data$rel_diff[.data$year > mesh_last_year - mesh_window]),
+    mard = mean(abs(.data$rel_diff)),
+    .groups = "drop"
+  ) |>
+  dplyr::left_join(
+    sel_mesh$table |>
+      dplyr::transmute(model = .data$model, vertices = .data$knots, fit_minutes = .data$minutes,
+                       comparable = .data$comparable, sanity = .data$sanity),
+    by = "model"
+  ) |>
+  dplyr::mutate(
+    cutoff_km = as.numeric(sub(" km", "", .data$model)),
+    # Fill these from a paired cross-validation of the ladder if one was run (see the
+    # project's validate.qmd); the selection does not use them.
+    delta_elpd = NA_real_, se_delta = NA_real_,
+    stable = abs(.data$terminal) <= mesh_tol & abs(.data$mesh_rho) <= mesh_tol & .data$mard <= mesh_tol
+  ) |>
+  dplyr::arrange(.data$cutoff_km) |>
+  dplyr::mutate(stabilised = cumsum(!.data$stable) == 0) |>
+  dplyr::arrange(dplyr::desc(.data$cutoff_km))
+
+# The ladder has converged only if the second-finest mesh is itself within the tolerance.
+mesh_converged <- isTRUE(mesh_stability$stable[mesh_stability$cutoff_km == sort(mesh_cutoffs)[2]])
+eligible <- mesh_stability |> dplyr::filter(.data$stabilised, .data$comparable %in% TRUE)
+selected_mesh <- if (nrow(eligible)) eligible$model[which.max(eligible$cutoff_km)] else mesh_ref
+
+knitr::kable(
+  mesh_stability |>
+    dplyr::transmute(
+      Cutoff = .data$model, Vertices = .data$vertices, `Fit (min)` = round(.data$fit_minutes, 1),
+      `Terminal (%)` = round(100 * .data$terminal, 1), `Δρ (%)` = round(100 * .data$mesh_rho, 1),
+      `MARD (%)` = round(100 * .data$mard, 1), Stable = .data$stable, Stabilised = .data$stabilised
+    ),
+  caption = paste0(
+    "Index stability across mesh cutoffs, relative to the ", mesh_ref, " mesh. Terminal is the ",
+    "relative difference in ", mesh_last_year, ", Δρ its mean over the last ", mesh_window,
+    " years, and MARD the mean absolute difference over all years. Stabilised marks cutoffs ",
+    "from which every finer cutoff is within ", 100 * mesh_tol, " %. Selected: ", selected_mesh,
+    if (mesh_converged) "." else "; the ladder has NOT converged, so extend it to finer cutoffs."
+  )
+)
+```
+
+<!-- State the selected cutoff, its fit time relative to the reference, its three differences, and whether the ladder converged; refer to @tbl-validate-mesh-stability and @fig-validate-mesh-selection. -->
+
+```{r, eval=params$run_mesh}
+#| label: fig-validate-mesh-selection
+#| fig-height: 7
+#| fig-cap: "Mesh-resolution selection: (a, if cross-validated) ΔELPD from the best cutoff with ±2 paired standard errors; (b) relative difference of the index from the finest mesh over the last years (Δρ) and in the terminal year, with the tolerance band; (c) fit time labelled with the number of mesh vertices; (d) the index under each cutoff with 95 % confidence intervals. The selected cutoff is drawn with filled symbols and a thick line."
+plot_mesh_selection <- function(stability, index, selected, tol, window) {
+  x_scale <- ggplot2::scale_x_reverse(
+    breaks = stability$cutoff_km, expand = ggplot2::expansion(mult = 0.08)
+  )
+  fill_sel <- ggplot2::scale_fill_manual(values = c(`TRUE` = "black", `FALSE` = "white"), guide = "none")
+  stability$selected <- stability$model == selected
+
+  p_elpd <- ggplot2::ggplot(stability, ggplot2::aes(.data$cutoff_km, .data$delta_elpd)) +
+    ggplot2::geom_hline(yintercept = 0, linetype = 2, colour = "grey50") +
+    ggplot2::geom_errorbar(
+      ggplot2::aes(ymin = .data$delta_elpd - 2 * .data$se_delta, ymax = .data$delta_elpd + 2 * .data$se_delta),
+      width = 2
+    ) +
+    ggplot2::geom_point(ggplot2::aes(fill = .data$selected), shape = 21, size = 2.3) +
+    x_scale + fill_sel +
+    ggplot2::labs(x = NULL, y = "ΔELPD")
+
+  rho_long <- stability |>
+    dplyr::select("cutoff_km", "selected", `Δρ (last years)` = "mesh_rho", Terminal = "terminal") |>
+    tidyr::pivot_longer(c("Δρ (last years)", "Terminal"), names_to = "summary", values_to = "rel_diff")
+  p_rho <- ggplot2::ggplot(rho_long, ggplot2::aes(.data$cutoff_km, 100 * .data$rel_diff)) +
+    ggplot2::annotate("rect", xmin = -Inf, xmax = Inf, ymin = -100 * tol, ymax = 100 * tol, alpha = 0.15) +
+    ggplot2::geom_hline(yintercept = 0, linetype = 2, colour = "grey50") +
+    ggplot2::geom_line(ggplot2::aes(linetype = .data$summary), colour = "grey40") +
+    ggplot2::geom_point(ggplot2::aes(shape = .data$summary, fill = .data$selected), size = 2.3) +
+    ggplot2::scale_shape_manual(values = c(21, 24)) +
+    x_scale + fill_sel +
+    ggplot2::labs(x = NULL, y = "Difference (%)", shape = NULL, linetype = NULL) +
+    ggplot2::theme(legend.position = c(0.98, 0.98), legend.justification = c(1, 1),
+                   legend.background = ggplot2::element_blank(), legend.key.height = grid::unit(0.8, "lines"))
+
+  p_time <- ggplot2::ggplot(stability, ggplot2::aes(.data$cutoff_km, .data$fit_minutes)) +
+    ggplot2::geom_line(colour = "grey60") +
+    ggplot2::geom_point(ggplot2::aes(fill = .data$selected), shape = 21, size = 2.3) +
+    ggplot2::geom_text(ggplot2::aes(label = .data$vertices), vjust = -0.9, size = 2.8) +
+    x_scale + fill_sel +
+    ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.05, 0.3))) +
+    ggplot2::labs(x = "Mesh cutoff (km)", y = "Fit time (min)")
+
+  lev <- stability$model[order(-stability$cutoff_km)]
+  idx <- index |> dplyr::mutate(mesh = factor(.data$model, levels = lev))
+  p_index <- ggplot2::ggplot(idx, ggplot2::aes(.data$year, .data$est, colour = .data$mesh, fill = .data$mesh)) +
+    ggplot2::geom_ribbon(ggplot2::aes(ymin = .data$lwr, ymax = .data$upr), alpha = 0.08, colour = NA) +
+    ggplot2::geom_line(ggplot2::aes(linewidth = .data$model == selected)) +
+    ggplot2::scale_linewidth_manual(values = c(`TRUE` = 1.1, `FALSE` = 0.45), guide = "none") +
+    ggplot2::scale_colour_viridis_d(end = 0.9) +
+    ggplot2::scale_fill_viridis_d(end = 0.9) +
+    ggplot2::labs(x = "Year", y = "Index", colour = "Mesh cutoff", fill = "Mesh cutoff") +
+    ggplot2::theme(legend.position = "bottom") +
+    ggplot2::guides(colour = ggplot2::guide_legend(nrow = 2), fill = ggplot2::guide_legend(nrow = 2))
+
+  # Without cross-validation there is no ELPD panel; the selection does not need it.
+  left <- if (all(is.na(stability$delta_elpd))) list(p_rho, p_time) else list(p_elpd, p_rho, p_time)
+  cowplot::plot_grid(
+    cowplot::plot_grid(plotlist = left, ncol = 1, align = "v", labels = letters[seq_along(left)]),
+    p_index,
+    ncol = 2, rel_widths = c(1, 1.25), labels = c("", letters[length(left) + 1])
+  )
+}
+
+
+plot_mesh_selection(mesh_stability, mesh_index, selected_mesh, mesh_tol, mesh_window)
+```
+
+If the index is insensitive to the cutoff, the coarse mesh is capturing the structure that matters for a year index, and the cheap one is the right instrument. The cross-validation below is supporting information; it usually keeps improving with resolution and is not the selection criterion.
 
 ```{r, eval=params$run_mesh_cv}
 #| label: fig-validate-mesh-cv
