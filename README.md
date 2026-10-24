@@ -3,7 +3,7 @@
 # 📈 index-wise — Build sdmTMB survey indices with AI agents
 
 <!-- version -->
-**Version 0.2.1** (2026-10-24)
+**Version 0.2.2** (2026-10-24)
 <!-- /version -->
 
 **Teach your AI coding agent to build a spatiotemporal survey index for stock assessment — for any species, on your own machine.**
