@@ -187,3 +187,13 @@ loading, and publishing conventions. Install/update wise-writing on demand when 
 are needed. Follow index-wise's `knowledge/wise-writing.md`. The workflow QMDs are HTML data
 reports under `docs/data-report/`; shared assets belong in `docs/assets/`, project memory in
 `ai/memory/`, tests in `ai/tests/`, and reviews in `ai/review/`.
+
+## Fiskwise version policy
+
+Follow the [shared version policy](https://github.com/DeepWaterIMR/fiskwise/blob/main/docs/VERSIONING.md).
+Every ordinary authored commit increments the patch by 0.0.1 and stamps the current date
+(`VERSION` for knowledge packs; `DESCRIPTION` `Version` and `Date` for R packages).
+Only an explicit user request may set `FISKWISE_VERSION_BUMP=minor|major`. Never choose one
+autonomously or create tags/releases automatically. Let `.githooks/pre-commit` enforce the
+policy, preserve other custom hooks, and replay existing stamps unchanged during merges or
+rebases.

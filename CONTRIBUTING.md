@@ -47,12 +47,9 @@ Before opening a PR:
 
 ## Version stamping
 
-The repo stamps `VERSION` and the README version line on every commit. Enable the hook once
-per clone:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-The patch level bumps automatically. To bump the minor or major level, edit `VERSION` by hand
-before committing — the hook keeps a hand-set version and only refreshes the date.
+Follow the [shared Fiskwise version policy](https://github.com/DeepWaterIMR/fiskwise/blob/main/docs/VERSIONING.md).
+Every ordinary authored commit increments the patch by 0.0.1 and stamps the current date. A
+minor or major bump requires an explicit user request and `FISKWISE_VERSION_BUMP=minor|major`;
+never choose one autonomously or create tags/releases automatically. Let `.githooks/pre-commit`
+enforce the policy, preserve other custom hooks, and replay existing stamps unchanged during
+merges or rebases. The hook also stamps the README version line.
