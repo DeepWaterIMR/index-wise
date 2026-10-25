@@ -132,10 +132,34 @@ plot_residual_qq(fit_total)
 ## Export the assessment index
 
 ```{r export}
-# Export the SELECTED index in the shape the assessment consumes.
-selected <- index_total   # <- replace with the product named in cfg$SELECTED_INDEX
-saveRDS(dplyr::select(selected, year, est, lwr, upr, se),
-        file.path(out_dir, paste0("{{SPECIES_SLUG}}-assessment-index.rds")))
+# Resolve the configured product explicitly. Never silently substitute the total index.
+source(here::here("R", "assessment_index_handoff.R"))
+index_products <- list(
+  "Total biomass" = index_total
+  # Add every other configured product here, using its exact config name.
+)
+# Versioned handoff: observations plus enough context for the assessment to interpret them.
+assessment_index <- build_assessment_index_handoff(
+  index_products, cfg$SELECTED_INDEX,
+  list(
+    units = cfg$ASSESSMENT_INDEX_UNITS,
+    uncertainty = "se is standard error on log(est); lwr/upr are returned limits",
+    index_type = cfg$ASSESSMENT_INDEX_TYPE,
+    timing = cfg$ASSESSMENT_INDEX_TIMING,
+    spatial_scope = cfg$REGION,
+    provenance = list(
+      project = "index-wise",
+      source = "{{SPECIES_SLUG}} step 4 assessment report",
+      git_commit = tryCatch(
+        system2("git", c("-C", shQuote(here::here()), "rev-parse", "HEAD"),
+                stdout = TRUE, stderr = FALSE),
+        error = function(e) NA_character_
+      )
+    )
+  )
+)
+saveRDS(assessment_index,
+        file.path(out_dir, "assessment-index.rds"))
 ```
 
 <!-- Optional sections. Each is included textually and shares the params above; its heavy

@@ -14,9 +14,9 @@ conventions to every generated artifact; retain index-wise's scientific workflow
 
 ## Step 1 — Review before rendering (required)
 
-**Do not render unreviewed code.** Run `/code-review` (or a careful self-review) on the changed
-qmd chunks and R scripts, and fix issues first. A bug found after a long render costs the whole
-render.
+**Do not render unreviewed code.** Review the changed qmd chunks and R scripts yourself or use
+an available code-review tool, then fix issues first. A `/code-review` command is optional and
+may not be installed in every agent environment.
 
 ## Step 2 — Check the toggles
 
@@ -26,11 +26,25 @@ render.
 
 ## Step 3 — Render detached with a log
 
+Use a background process and save output to `logs/` so rendering can continue after the
+conversation or terminal closes. `screen` is one option on systems where it is installed:
+
 ```bash
 screen -dmS <slug>-<doc> bash -c '
   quarto render "docs/<path>/<doc>.qmd" > "logs/<doc>-$(date +%Y%m%d-%H%M%S).log" 2>&1
 '
 ```
+
+Portable fallback (macOS/Linux):
+
+```bash
+log="logs/<doc>-$(date +%Y%m%d-%H%M%S).log"
+nohup quarto render "docs/<path>/<doc>.qmd" > "$log" 2>&1 < /dev/null &
+echo "PID $!; log $log"
+```
+
+Windows PowerShell: `Start-Process quarto -ArgumentList @('render', 'docs/<path>/<doc>.qmd')
+-RedirectStandardOutput 'logs/<doc>.log' -RedirectStandardError 'logs/<doc>.log'`.
 
 Then tell the user:
 

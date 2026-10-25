@@ -6,10 +6,10 @@ and cache outputs so you only pay the cost once.
 
 ## 1. Review before you render
 
-**Always code-review the changed chunks/scripts before starting a render.** A bug found after
-a two-hour render costs two hours. Run `/code-review` (or a careful self-review) on the
-changed qmd chunks and R scripts, fix the issues, and only then render. This rule is in
-`AGENTS.md` and applies to steps 2–4.
+**Review the changed chunks/scripts before starting a render.** A bug found after a two-hour
+render costs two hours. Use a careful self-review or an available code-review tool; the
+`/code-review` command is optional and may not exist in every environment. Fix issues before
+rendering.
 
 ## 2. Caching toggles
 
@@ -54,14 +54,18 @@ in seconds.
 
 ## 3. Run detached in a screen session
 
-Render in a `screen` (or `tmux`) session so the job survives a disconnect, and **write the
-output to a log in `logs/`**:
+Run the render as a background process so it survives a closed terminal, and **write output to a
+log in `logs/`**. `screen` or `tmux` can manage the process when installed:
 
 ```bash
 screen -dmS <species>-fit bash -c '
   quarto render "docs/data-report/fit/fit.qmd" > "logs/fit-$(date +%Y%m%d-%H%M%S).log" 2>&1
 '
 ```
+
+On macOS/Linux without screen or tmux, use `nohup quarto render ... > logs/<doc>.log 2>&1 &`.
+On Windows PowerShell, use `Start-Process quarto -ArgumentList @('render', '<document.qmd>')
+-RedirectStandardOutput 'logs/<doc>.log' -RedirectStandardError 'logs/<doc>.log'`.
 
 Then **tell the user the session name** and how to check it:
 

@@ -62,7 +62,10 @@ FAMILY: "delta_lognormal"             # delta_lognormal | delta_gamma | tweedie
 SPATIOTEMPORAL: "ar1"                 # ar1 | iid | rw | off
 INCLUDE_TEMPERATURE: false            # temperature smooth is OFF by default
 ASSESSMENT_MODEL: "SPiCT"             # what consumes the selected index
-SELECTED_INDEX: "Over 30 cm biomass"  # which product feeds the assessment
+SELECTED_INDEX: "Total biomass"       # exact name in the report's index_products list
+ASSESSMENT_INDEX_UNITS: "relative index units"
+ASSESSMENT_INDEX_TYPE: "survey biomass"
+ASSESSMENT_INDEX_TIMING: 0.5          # fraction of year; confirm against survey timing
 
 # --- Paths (relative to project root) ---------------------------------------------------
 OUTPUT_DIR: "data/output"

@@ -46,8 +46,8 @@ a separate opt-in BAIT action. Use `fiskwise-workflow` to route requests spannin
   skills.
 - **Plan mode** — after the questionnaire in `index-new-project`, use plan mode to confirm
   the approach before scaffolding and rendering.
-- **Code review before render** — Quarto renders are slow; run `/code-review` on changed
-  chunks and fix issues before starting a render. See `knowledge/rendering.md`.
+- **Code review before render** — Quarto renders are slow; review changed chunks and fix issues
+  before starting a render. `/code-review` is optional where available. See `knowledge/rendering.md`.
 - **R code style** — use the installed `r-code-style` skill for all R changes in managed work.
 
 For everything else, see [`AGENTS.md`](AGENTS.md).

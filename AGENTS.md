@@ -142,10 +142,10 @@ Shared knowledge lives in `knowledge/`:
    observation, and the winner is looked up in the metric column — never at row 1. See
    `knowledge/model-selection.md`; use `sdmTMBexperiments::sdmTMB_selection()` rather than a
    hand-rolled loop.
-6. **Review before you render.** Quarto renders are slow. **Always code-review the changed
-   chunks/scripts (self-review or `/code-review`) and resolve issues before kicking off any
-   expensive render.** See `knowledge/rendering.md`.
-7. **Render in a screen session** with a log in `logs/`, tell the user the session name, and
+6. **Review before you render.** Quarto renders are slow. Review changed chunks/scripts and
+   resolve issues before an expensive render. `/code-review` is optional where available.
+7. **Run renders detached** with a log in `logs/`; screen/tmux are optional tools. Report the
+   process/session and log location, and
    suggest running on a server. Once `data/output` files exist, flip the caching toggles to
    `FALSE` so re-renders load instead of refitting.
 8. **Plan mode first.** After the questionnaire, present a plan and confirm before writing
