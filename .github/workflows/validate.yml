@@ -26,6 +26,7 @@ jobs:
             any::yaml
             any::jsonlite
             any::dplyr
+            any::knitr
       - name: Validate synthetic handoff and scaffold
         working-directory: index-wise
         env:
