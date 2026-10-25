@@ -3,6 +3,18 @@ name: index-install
 description: Install or set up index-wise for building sdmTMB survey indices. Use when the user says "install index-wise", "install https://github.com/DeepWaterIMR/index-wise", "set up index-wise", or first asks to build a survey index and index-wise is not yet installed. Runs onboarding: ensure BAIT, clone index-wise, install skills globally, verify R packages.
 ---
 
+<!-- pack-resources:start -->
+**Pack resources:** resolve `index-wise` from `~/.index-wise/config.json` → `index_template_path` (or
+`~/.fiskwise/config.json` → `components.index-wise.path`). If neither exists, use the
+checkout containing this skill, or locate/obtain the pack through its install instructions.
+Paths such as `knowledge/`, `cookbook/`, `config/` and `project-template/` belong to that
+repository, not the current research directory. For a copied skill, resolve a link that
+leaves this skill's directory against the corresponding source skill under that root;
+keep bundled `references/` links relative to the skill. Never assume `../../` from an
+agent's global skills folder reaches the repository. Use absolute resolved script paths.
+<!-- pack-resources:end -->
+
+
 # Install index-wise
 
 Goal: get index-wise working **once per machine** so it's available in **every** project

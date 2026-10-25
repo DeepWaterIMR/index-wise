@@ -3,6 +3,18 @@ name: index-new-project
 description: Start a new sdmTMB survey-index project for a species — run the structured questionnaire, confirm a plan, then scaffold a new project folder from project-template with config.yaml. Use when the user says "make a biomass/abundance index for <species> using index-wise", or asks to start/scaffold a new survey index.
 ---
 
+<!-- pack-resources:start -->
+**Pack resources:** resolve `index-wise` from `~/.index-wise/config.json` → `index_template_path` (or
+`~/.fiskwise/config.json` → `components.index-wise.path`). If neither exists, use the
+checkout containing this skill, or locate/obtain the pack through its install instructions.
+Paths such as `knowledge/`, `cookbook/`, `config/` and `project-template/` belong to that
+repository, not the current research directory. For a copied skill, resolve a link that
+leaves this skill's directory against the corresponding source skill under that root;
+keep bundled `references/` links relative to the skill. Never assume `../../` from an
+agent's global skills folder reaches the repository. Use absolute resolved script paths.
+<!-- pack-resources:end -->
+
+
 # Start a new index project
 
 Goal: turn *"make a biomass index for `<species>` using all bottom trawl survey data"* into a

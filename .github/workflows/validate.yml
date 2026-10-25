@@ -1,0 +1,35 @@
+name: Validate portable project contracts
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: index-wise
+      - uses: actions/checkout@v4
+        with:
+          repository: DeepWaterIMR/wise-writing
+          path: wise-writing
+      - uses: actions/checkout@v4
+        with:
+          repository: DeepWaterIMR/spict-wise
+          path: spict-wise
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::yaml
+            any::jsonlite
+            any::dplyr
+      - name: Validate synthetic handoff and scaffold
+        working-directory: index-wise
+        env:
+          SPICT_ACADEMIC_WRITING: ${{ github.workspace }}/wise-writing
+        run: |
+          Rscript config/test-assessment-index-handoff.R
+          Rscript config/validate-scaffold.R

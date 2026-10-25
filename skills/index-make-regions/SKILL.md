@@ -3,6 +3,18 @@ name: index-make-regions
 description: Create, modify, validate, order, save, or map named spatial study-region polygons for survey-data extraction, sdmTMB prediction grids, stock assessment, or other spatial analyses. Use when a user asks for non-overlapping regions, a study area, region boundaries, a region GeoPackage, polygon validation, or a ggOceanMaps region map.
 ---
 
+<!-- pack-resources:start -->
+**Pack resources:** resolve `index-wise` from `~/.index-wise/config.json` → `index_template_path` (or
+`~/.fiskwise/config.json` → `components.index-wise.path`). If neither exists, use the
+checkout containing this skill, or locate/obtain the pack through its install instructions.
+Paths such as `knowledge/`, `cookbook/`, `config/` and `project-template/` belong to that
+repository, not the current research directory. For a copied skill, resolve a link that
+leaves this skill's directory against the corresponding source skill under that root;
+keep bundled `references/` links relative to the skill. Never assume `../../` from an
+agent's global skills folder reaches the repository. Use absolute resolved script paths.
+<!-- pack-resources:end -->
+
+
 # Make analysis regions
 
 Create a valid, named polygon partition for analysis. Read `knowledge/regions.md` in full before changing geometry.

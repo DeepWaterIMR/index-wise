@@ -3,6 +3,18 @@ name: index-final-report
 description: Step 4 of the index workflow — build the final model report with extensions (multiple indices, length groups, and optional mesh/barrier/retro/CV/survey-comparison sections) and export the selected index for assessment. Use after the model is validated (step 3). Modelled on ref-assessment-index/benchmark/beaked.
 ---
 
+<!-- pack-resources:start -->
+**Pack resources:** resolve `index-wise` from `~/.index-wise/config.json` → `index_template_path` (or
+`~/.fiskwise/config.json` → `components.index-wise.path`). If neither exists, use the
+checkout containing this skill, or locate/obtain the pack through its install instructions.
+Paths such as `knowledge/`, `cookbook/`, `config/` and `project-template/` belong to that
+repository, not the current research directory. For a copied skill, resolve a link that
+leaves this skill's directory against the corresponding source skill under that root;
+keep bundled `references/` links relative to the skill. Never assume `../../` from an
+agent's global skills folder reaches the repository. Use absolute resolved script paths.
+<!-- pack-resources:end -->
+
+
 # Step 4 — Final report + extensions
 
 Goal: extend the validated model to the full set of assessment products, write the final

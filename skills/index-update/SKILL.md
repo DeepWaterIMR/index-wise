@@ -3,6 +3,18 @@ name: index-update
 description: Update index-wise to the latest version — git pull the index-wise repo and re-sync the index-* skills into the global skills folder. Use when the user says "update index-wise", "pull the latest index-wise", or asks for newer index-building recipes/skills.
 ---
 
+<!-- pack-resources:start -->
+**Pack resources:** resolve `index-wise` from `~/.index-wise/config.json` → `index_template_path` (or
+`~/.fiskwise/config.json` → `components.index-wise.path`). If neither exists, use the
+checkout containing this skill, or locate/obtain the pack through its install instructions.
+Paths such as `knowledge/`, `cookbook/`, `config/` and `project-template/` belong to that
+repository, not the current research directory. For a copied skill, resolve a link that
+leaves this skill's directory against the corresponding source skill under that root;
+keep bundled `references/` links relative to the skill. Never assume `../../` from an
+agent's global skills folder reaches the repository. Use absolute resolved script paths.
+<!-- pack-resources:end -->
+
+
 # Update index-wise
 
 Goal: pull the latest index-wise and re-sync its skills, mirroring BAIT's `bait-update`.

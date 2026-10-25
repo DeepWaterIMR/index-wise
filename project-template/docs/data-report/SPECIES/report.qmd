@@ -143,7 +143,7 @@ assessment_index <- build_assessment_index_handoff(
   index_products, cfg$SELECTED_INDEX,
   list(
     units = cfg$ASSESSMENT_INDEX_UNITS,
-    uncertainty = "se is standard error on log(est); lwr/upr are returned limits",
+    uncertainty = list(column = "se", scale = "log", measure = "standard_error"),
     index_type = cfg$ASSESSMENT_INDEX_TYPE,
     timing = cfg$ASSESSMENT_INDEX_TIMING,
     spatial_scope = cfg$REGION,

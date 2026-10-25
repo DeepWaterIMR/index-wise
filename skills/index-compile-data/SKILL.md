@@ -3,6 +3,18 @@ name: index-compile-data
 description: Step 1 of the index workflow — compile bottom-trawl survey data for a species from the IMR Biotic database (and optional SPD files), apply the quantitative-catch filtering, remove duplicates, compute swept-area density, and write a data report. Use after a project is scaffolded and the user is ready to prepare the data. Needs a local BES database and IMR intranet.
 ---
 
+<!-- pack-resources:start -->
+**Pack resources:** resolve `index-wise` from `~/.index-wise/config.json` → `index_template_path` (or
+`~/.fiskwise/config.json` → `components.index-wise.path`). If neither exists, use the
+checkout containing this skill, or locate/obtain the pack through its install instructions.
+Paths such as `knowledge/`, `cookbook/`, `config/` and `project-template/` belong to that
+repository, not the current research directory. For a copied skill, resolve a link that
+leaves this skill's directory against the corresponding source skill under that root;
+keep bundled `references/` links relative to the skill. Never assume `../../` from an
+agent's global skills folder reaches the repository. Use absolute resolved script paths.
+<!-- pack-resources:end -->
+
+
 # Step 1 — Compile & report the data
 
 Goal: produce one clean, filtered dataset of bottom-trawl stations with true absences and
