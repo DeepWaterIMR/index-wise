@@ -346,7 +346,7 @@ plot(sel_mesh, type = "index", newdata = grid)
 
 ### Selecting the cutoff by index stability
 
-The cutoff is a computational setting, so it is selected by how much it moves the index, not by predictive skill (see `knowledge/model-selection.md`). Each cutoff's annual index is compared with the finest mesh's: in the terminal year, averaged over the last `r mesh_window` years (the mesh Δρ, after Mohn's rho), and as the mean absolute difference over the series. The selected cutoff is the coarsest from which the index has stabilised — it and every finer cutoff within `r 100 * mesh_tol` % on all three — because further refinement then no longer moves the index while it still multiplies the fit time.
+The cutoff is a computational setting, so it is selected by how much it moves the index, not by predictive skill (see `knowledge/model-selection.md`). Each cutoff's annual index is compared with the finest mesh's: in the terminal year, averaged over the last `r mesh_window` years (the mesh Δρ, after Mohn's rho), and as the mean absolute difference over the series. The selected cutoff is the coarsest within `r 100 * mesh_tol` % on all three, because further refinement then no longer moves the index beyond the tolerance while it still multiplies the fit time; whether every finer cutoff is also within it (Stabilised) is reported but not required.
 
 ```{r, eval=params$run_mesh}
 #| label: tbl-validate-mesh-stability
@@ -395,7 +395,7 @@ mesh_stability <- mesh_index |>
 
 # The ladder has converged only if the second-finest mesh is itself within the tolerance.
 mesh_converged <- isTRUE(mesh_stability$stable[mesh_stability$cutoff_km == sort(mesh_cutoffs)[2]])
-eligible <- mesh_stability |> dplyr::filter(.data$stabilised, .data$comparable %in% TRUE)
+eligible <- mesh_stability |> dplyr::filter(.data$stable, .data$comparable %in% TRUE)
 selected_mesh <- if (nrow(eligible)) eligible$model[which.max(eligible$cutoff_km)] else mesh_ref
 
 knitr::kable(
@@ -409,7 +409,7 @@ knitr::kable(
     "Index stability across mesh cutoffs, relative to the ", mesh_ref, " mesh. Terminal is the ",
     "relative difference in ", mesh_last_year, ", Δρ its mean over the last ", mesh_window,
     " years, and MARD the mean absolute difference over all years. Stabilised marks cutoffs ",
-    "from which every finer cutoff is within ", 100 * mesh_tol, " %. Selected: ", selected_mesh,
+    "for which every finer cutoff is also within ", 100 * mesh_tol, " % (reported, not required). Selected: ", selected_mesh,
     if (mesh_converged) "." else "; the ladder has NOT converged, so extend it to finer cutoffs."
   )
 )

@@ -122,12 +122,15 @@ moves the end of the series.
      retrospective window) — Mohn's rho with mesh coarsening in place of data peeling;
    - the **mean absolute relative difference** over the whole series, which guards against a
      mesh that matches the end of the series but distorts its trend.
-3. **Check that the ladder has converged:** the second-finest mesh must be within the tolerance
-   of the reference. If it is not, the reference is not yet a reference; extend the ladder
-   before choosing.
-4. **Choose the coarsest cutoff from which the index has stabilised:** it and every finer
-   cutoff have all three summaries within the tolerance $\tau$. Requiring the finer cutoffs too
-   means the index has settled, rather than crossed the reference by chance at one cutoff.
+3. **Check the ladder:** if the differences shrink steadily towards the reference but the
+   second-finest mesh is still outside the tolerance, the reference is not yet a reference;
+   extend the ladder before choosing. If they scatter without a trend, the ladder is adequate.
+4. **Choose the coarsest cutoff whose three summaries are all within the tolerance** $\tau$.
+   Also report whether every finer cutoff is within it (the index has *stabilised*). Do not
+   require stabilisation: the differences often scatter non-monotonically around the reference
+   by a fraction of the index standard error (Atlantic halibut N62: 50 km within 1 %, 35 km at
+   5.8 %), and requiring it would force the most expensive mesh. When the differences scatter,
+   say so and read them as noise around the reference rather than a converging sequence.
    The default is $\tau = 0.05$: an order of magnitude below the Mohn's rho values usually
    regarded as acceptable for an assessment (about −0.15 to 0.20 for longer-lived species;
    Hurtado-Ferro et al. 2015) and well inside the coefficient of variation of a typical survey
@@ -138,7 +141,7 @@ selection as one four-panel figure (`plot_mesh_selection()` in the template's `v
 (a) ΔELPD ± 2 paired SE, when the ladder was cross-validated; (b) the mesh $\Delta\rho$ and the
 terminal-year difference against the cutoff, with the tolerance band; (c) fit time labelled with
 the vertex count; (d) the index under every cutoff. The selected mesh is where (b) enters the
-band for good, read against the cost in (c). Report the cross-validated
+band, read against the cost in (c). Report the cross-validated
 ELPD as well, as supporting information — a cutoff that is much worse on ELPD *and* moves the
 index is clearly too coarse — but do not select on it.
 
