@@ -30,10 +30,10 @@ a separate opt-in BAIT action. Use `fiskwise-workflow` to route requests spannin
 
 - **Skills** — `skills/index-*/SKILL.md`. Installed globally by `skills/index-install`.
 - **Shared knowledge** — `knowledge/*.md` (the method, filtering, sdmTMB, helpers, packages,
-  project structure, rendering).
+  project structure, rendering, commercial CPUE in `cpue.md` / `cpue-models.md`).
 - **Project skeleton** — `project-template/`, copied and stamped by `scaffold.R` for each new
   species project.
-- **Worked example** — `examples/redfish/`.
+- **Worked examples** — `examples/redfish/`; `examples/snowcrab-ers-cpue/` (synthetic CPUE).
 
 ## Claude-specific notes
 

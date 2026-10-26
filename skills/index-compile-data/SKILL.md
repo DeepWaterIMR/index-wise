@@ -72,15 +72,24 @@ conventions to every generated artifact; retain index-wise's scientific workflow
 6. **Optional SPD files** — only if `USE_SPD: true` (northern/offshore species). Drop SPD
    years/series already in Biotic; tag `source`. For southern/coastal species, skip SPD.
 7. **Swept-area density** — apply the gear-width policy from `config.yaml` (normally a common
-   25 m effective width) to compute `rho_biomass` / `rho_abundance`. Sum catch and swept area
-   to the output unit before division. If a common width is used with multiple gear types,
-   retain `geartype` as a fixed effect in the model.
-8. **Depth** — fill missing/invalid depths from GEBCO (`ggOceanMaps::get_depth()`).
-9. **Length data** — fit length–weight (`ggFishPlots::plot_lw()`) and allocate catches to
+   25 m effective width) to compute `swept_area` with `swept_area_nmi2()` and
+   `rho_biomass` / `rho_abundance`. Keep `swept_area` in the output (`EFFORT: offset` and the
+   Step 2 scale check use it). Sum catch and swept area to the output unit before division. If
+   a common width is used with multiple gear types, retain `geartype` as a fixed effect.
+8. **Index year** — add `index_year` from `startyear` and `month` (`index_year()`, config
+   `INDEX_YEAR_START_MONTH`/`INDEX_YEAR_LABEL`); keep `startyear` as the calendar year. See
+   `knowledge/data-filtering.md` *Index year*.
+9. **Depth** — fill missing/invalid depths from GEBCO (`ggOceanMaps::get_depth()`).
+10. **Catchability covariates** — only if `CATCHABILITY_TERMS` is set: `hour` (UTC) and/or
+    `sun_altitude` (`suncalc`) per haul.
+11. **Length data** — fit length–weight (`ggFishPlots::plot_lw()`) and allocate catches to
    length groups if the project needs length-based products. Raise observations within
    catchsample with a numeric `catchcount / lengthsamplecount` representation factor; do not
-   round and expand rows unless a downstream method requires integer rows.
-10. **Save** the compiled dataset to the root-level `data/output/` (gitignored). Region-specific
+   round and expand rows unless a downstream method requires integer rows. Record
+   `n_measured` per haul. **A positive haul without measured individuals is missing from the
+   class products, never zero** — drop it there or impute pooled shares and flag it
+   (`knowledge/data-filtering.md` *Individual data: missing is not zero*).
+12. **Save** the compiled dataset to the root-level `data/output/` (gitignored). Region-specific
    subdirectories such as `data/output/s62/` are acceptable when two acquisition datasets share
    one project. Never create `docs/data/output/` or any other document-local output directory.
 
@@ -110,7 +119,10 @@ The two Step 1 documents have distinct roles and should not duplicate figures:
   filtering-script appendix.
 - `<slug>-<region>-data-report.qmd` is the compiled-data overview: final station map, effort
   through time, depth and response distributions, continuous effort checks, length products,
-  and diagnostics. Begin this document with a dynamic **Data collation** explanation covering
+  and diagnostics. It also shows the index-year mapping, the survey × year and gear × year
+  balance (`design_balance()`; a flagged level needs a decision before modelling), the
+  terminal-year counts of `LATE_COMPONENTS`, and the coverage of individual data
+  (`length_coverage()`). Begin this document with a dynamic **Data collation** explanation covering
   station-level and individual-level data, then describe the length-group calculation explicitly:
   Keep total biomass directly tied to station catch weight; use observed or estimated individual
   weight multiplied by superindividual representation only for the size-specific products, then

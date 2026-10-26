@@ -11,6 +11,8 @@
 #   Rscript docs/render.R            # render everything
 #   Rscript docs/render.R data       # render only the data documents
 #   Rscript docs/render.R fit        # etc.
+#   Rscript docs/render.R cpue       # the commercial CPUE document (also in "all" when its
+#                                    # logbook extract, config CPUE: file, exists)
 
 args  <- commandArgs(trailingOnly = TRUE)
 stage <- if (length(args)) args[[1]] else "all"
@@ -39,5 +41,8 @@ if (stage %in% c("all", "data")) {
 if (stage %in% c("all", "fit"))      render("docs/data-report/fit/fit.qmd")
 if (stage %in% c("all", "validate")) render("docs/data-report/validation/validate.qmd")
 if (stage %in% c("all", "report"))   render(file.path("docs", "data-report", slug, "report.qmd"))
+cpue_file <- cfg$CPUE$file
+if (identical(stage, "cpue") || (identical(stage, "all") && !is.null(cpue_file) && file.exists(cpue_file)))
+  render("docs/data-report/cpue/cpue.qmd")
 
 message("Done: ", stage)

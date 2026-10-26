@@ -20,6 +20,9 @@ BAIT owns the Biotic data layer. Read its knowledge/skills rather than duplicati
 | [sdmTMB](https://github.com/sdmTMB/sdmTMB) | Spatiotemporal GLMMs (the index model) | `sdmTMB()`, `make_mesh()`, `add_utm_columns()`, `predict()`, `get_index()`, `get_index_split()`, `sanity()`, `sdmTMB_cv()` |
 | [sdmTMBextra](https://github.com/pbs-assess/sdmTMBextra) | Barrier meshes, extras | `add_barrier_mesh()` |
 | [sdmTMBexperiments](https://github.com/DeepWaterIMR/sdmTMBexperiments) | This workflow's helpers | grids, diagnostic maps, comparisons, retro, mesh CV (see `sdmtmbexperiments.md`) |
+| [glmmTMB](https://glmmtmb.github.io/glmmTMB/) | CPUE GLMMs with crossed random effects (`cpue-models.md`) | `glmmTMB()`, `predict(re.form = NA)` |
+| [mgcv](https://cran.r-project.org/package=mgcv) | CPUE GAMMs with spatial and random-effect smooths | `bam()`, `gam()`, `predict(type = "lpmatrix")` |
+| [DHARMa](https://cran.r-project.org/package=DHARMa) | Simulation residuals, grouped dispersion | `simulateResiduals()`, `recalculateResiduals()`, `testDispersion()` |
 
 ## Figures & maps
 
@@ -48,6 +51,8 @@ remotes::install_github("pbs-assess/sdmTMBextra")
 remotes::install_github("DeepWaterIMR/ggFishPlots")
 # suggested by some helpers:
 install.packages(c("concaveman", "blockCV", "inlabru", "DHARMa", "ggspatial", "ggnewscale", "pbapply"))
+# commercial CPUE (mgcv ships with R):
+install.packages("glmmTMB")
 ```
 
 ## Conventions

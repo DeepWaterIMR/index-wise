@@ -33,4 +33,6 @@ jobs:
           SPICT_ACADEMIC_WRITING: ${{ github.workspace }}/wise-writing
         run: |
           Rscript config/test-assessment-index-handoff.R
+          Rscript config/test-index-helpers.R
+          Rscript config/test-cpue-helpers.R
           Rscript config/validate-scaffold.R

@@ -36,6 +36,23 @@ LENGTH_GROUPS: ["(0,10]", "(10,15]", "(15,20]", "(20,25]", "(25,30]", "(30,40]",
 # when more than one major gear type is represented.
 GEAR_WIDTH: 25
 
+# --- Effort and index year --------------------------------------------------------------
+# "density": response = catch / swept area, no offset.
+# "offset":  response = catch, offset = log(swept area in nmi^2); predictions at offset 0 are
+#            densities. Tweedie and Poisson-link delta families let the offset reach the zeros.
+EFFORT: "density"
+# Month the index year begins (1 = calendar year). With 7, a July-June season is one index
+# year, labelled by the calendar year it starts ("start") or ends ("end"). Set this whenever
+# surveys from different seasons are combined, and match ASSESSMENT_INDEX_TIMING to it.
+INDEX_YEAR_START_MONTH: 1
+INDEX_YEAR_LABEL: "start"
+
+# --- Survey integration and catchability ------------------------------------------------
+SURVEY_EFFECT: false                  # cruise-series catchability factor (fsurvey) in the model
+REFERENCE_SURVEY: null                # prediction reference series; null = most-sampled series
+CATCHABILITY_TERMS: []                # e.g. ["hour"] or ["sun_altitude"] for diel catchability
+CATCHABILITY_REFERENCE: {}            # e.g. {hour: 12}; a term without a value uses the median
+
 # --- Spatial domain & mesh --------------------------------------------------------------
 REGION: "ALL"                         # feature/layer name used by a multi-region project
 REGION_SLUG: "all"                    # filename-safe region identifier, e.g. N62 or S62
@@ -56,6 +73,7 @@ GRID_KM: 10                           # prediction grid cell size (km)
 MESH_CUTOFF_KM: 60                    # make_mesh cutoff (km)
 BARRIER: false                        # add a land barrier mesh?
 MAX_DEPTH: 1400                       # deepest grid cell to keep (m)
+MIN_DEPTH: null                       # shallowest grid cell to keep (m); null = no minimum
 
 # --- Model ------------------------------------------------------------------------------
 FAMILY: "delta_lognormal"             # delta_lognormal | delta_gamma | tweedie
@@ -65,7 +83,43 @@ ASSESSMENT_MODEL: "SPiCT"             # what consumes the selected index
 SELECTED_INDEX: "Total biomass"       # exact name in the report's index_products list
 ASSESSMENT_INDEX_UNITS: "relative index units"
 ASSESSMENT_INDEX_TYPE: "survey biomass"
-ASSESSMENT_INDEX_TIMING: 0.5          # fraction of year; confirm against survey timing
+ASSESSMENT_INDEX_TIMING: 0.5          # fraction of the INDEX year; confirm against survey timing
+
+# --- Late data, bridging and robustness -------------------------------------------------
+# Data that usually arrive after the assessment (e.g. one nation's or vessel's hauls), as a
+# compiled-data column and its values: {column: "nation", values: ["90"]}. null = none known.
+LATE_COMPONENTS: null
+PREVIOUS_INDEX_FILE: null             # last assessment's published index (csv/rds: year, est)
+REVISION_TOLERANCE: 0.2               # flag years whose rescaled index moved more than this
+ROBUSTNESS:
+  subsample_props: [0.5, 0.75, 0.9]   # share of stations kept per year
+  subsample_reps: 5                   # replicates per share
+  start_year_peels: 3                 # drop the first 1..n years
+  downweight_years: []                # years with a known problem, down-weighted as a sensitivity
+  downweight_value: 0.1
+
+# --- Commercial CPUE (optional; docs/data-report/cpue, knowledge/cpue.md) -----------------
+# Logbook and landings extracts are local, confidential and git-ignored (data/source/cpue/).
+CPUE:
+  file: "data/source/cpue/logbook_records.rds"  # one row per record, mapped to the schema in cpue.qmd
+  landings_file: null                 # landings per year (year, landed) for the reconciliation
+  source: "ERS"                       # ERS | aggregated logbooks | sales notes
+  unit: "haul"                        # haul | day | trip — one unit per index
+  first_year: null                    # null = first year in the data
+  ranges:                             # plausible ranges [min, max]; null = open
+    catch: [0, null]
+    effort: [0, null]
+  min_years_active: 3                 # core fleet: years a vessel fished
+  min_records_year: 0                 # records of a vessel within a year
+  min_records_total: 100              # records of a vessel in total
+  effort_treatment: "covariate"       # covariate (estimated slope) | offset (catch proportional to effort)
+  engine: "sdmTMB"                    # glmmTMB | mgcv | sdmTMB
+  spatiotemporal: "iid"               # sdmTMB: off | iid | ar1
+  mesh_cutoff_km: 10
+  grid_km: 5                          # prediction grid over the fished domain
+  reference: {}                       # prediction reference, e.g. {log_effort: 5.5, yday_std: -1}
+  final_month: null                   # month the terminal-year data end (final-month retrospective)
+  bootstrap_n: 200
 
 # --- Paths (relative to project root) ---------------------------------------------------
 OUTPUT_DIR: "data/output"

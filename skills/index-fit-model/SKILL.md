@@ -30,9 +30,12 @@ conventions to every generated artifact; retain index-wise's scientific workflow
 
 ## Work in `docs/data-report/fit/fit.qmd`
 
-1. **Load** the compiled dataset from `data/output/`. Set the response
-   (`value = rho_biomass` or `rho_abundance` from `config.yaml`). Keep true zeros.
-2. **Coordinates** — `sdmTMB::add_utm_columns(..., utm_crs = <CRS>)` → `X`, `Y` in **km**.
+1. **Load** the compiled dataset from `data/output/` and build the modelling frame with
+   `prepare_model_data(dt, cfg)`: response from `RESPONSE` and `EFFORT` (density, or catch
+   with the `log_swept_area` offset column), `year` = **index year**, `calendar_year` kept.
+   Keep true zeros.
+2. **Coordinates** — `prepare_model_data()` adds `X`, `Y` in **km**
+   (`sdmTMB::add_utm_columns(..., utm_crs = <CRS>)`).
 3. **Mesh** — `make_mesh(dt, c("X","Y"), cutoff = <MESH_CUTOFF_KM>)`; visualise with
    `plot_mesh()`. Barrier mesh only if `BARRIER: true`.
 4. **Fit** the default model:
@@ -49,13 +52,20 @@ conventions to every generated artifact; retain index-wise's scientific workflow
    ```
 
    Keep `geartype` in the formula when multiple major gears are present (always, if a single
-   set gear width was used — see the gear-width note in `config.yaml`). If `sanity()` fails,
-   simplify (coarser mesh, drop a smooth, change spatiotemporal) rather than forcing it.
+   set gear width was used — see the gear-width note in `config.yaml`). Pass
+   `offset = model_offset(cfg)` (NULL for density). `SURVEY_EFFECT` and `CATCHABILITY_TERMS`
+   add configured terms through `build_formula()`. If `sanity()` fails, simplify (coarser mesh,
+   drop a smooth, change spatiotemporal) rather than forcing it.
 5. **Prediction grid** — `make_survey_prediction_region()` → `make_prediction_grid()` (GEBCO
-   depth), replicate over years, set reference `geartype`/`month`.
-6. **Predict & index** — `predict(fit, newdata = grid, return_tmb_object = TRUE)` →
-   `sdmTMB::get_index(..., area = <cell area in nmi²>)`. Leave `bias_correct = FALSE` while
-   exploring.
+   depth per cell), trim to `MIN_DEPTH`–`MAX_DEPTH`, replicate over index years, set reference
+   `geartype`/`month`, then `add_reference_levels()` for the survey and catchability terms.
+   Report cells outside the data's depth range (`depth_extrapolation()`).
+6. **Predict & index** — `predict_index(fit, grid, area = <cell area in nmi²>)`: offset 0, so
+   predictions are densities per nmi² under either `EFFORT`. Leave `bias_correct = FALSE` while
+   exploring. Then run `check_index_scale(..., fit = fit)`: a median unit ratio (model vs
+   observed density at the hauls) outside 1/1.5–1.5 means a unit error to find before Step 3;
+   the design ratio against an unstratified swept-area estimate is context
+   (`knowledge/sdmtmb.md` *Effort and the index scale*).
 7. **Diagnostics** — `plot_residual_qq()`, `plot_prediction_map()`, `plot_random_field()`,
    `plot_fixed_effects()`.
 8. **Save** the fit, grid, predictions, and index to `data/output/` (toggle-controlled).

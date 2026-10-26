@@ -27,7 +27,7 @@ conventions to every generated artifact; retain index-wise's scientific workflow
 
 Inspect candidate input files and the project configuration read-only, then ask the user for the missing decisions before any geometry or file write. Offer concise, reasonable choices for:
 
-1. **Purpose and domain:** data-extraction domain, model/prediction domain, or both; identify the master polygon that the final regions must exactly cover.
+1. **Purpose and domain:** data-extraction domain, model/prediction domain, or both; identify the master polygon that the final regions must exactly cover. If an area entered the survey mid-series, follow the protocol in `knowledge/regions.md` (*An area entering the survey mid-series*) before enlarging the prediction domain.
 2. **Boundary sources:** supplied regions, depth-limited prediction footprint, ICES/EEZ areas, latitude/longitude caps, survey coverage, or a specified combination. State the proposed precedence where sources conflict.
 3. **Partition rule:** which named polygon has priority where input polygons overlap, or whether an overlap should be split by an explicit boundary.
 4. **Output name:** if `data/gis/regions.gpkg` already exists, **never overwrite it**. Ask for a distinct filename, offering names such as `regions_<study>_v1.gpkg` or `regions_<year>_<domain>.gpkg`. Also confirm the GeoPackage layer name if it is not `regions`.

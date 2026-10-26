@@ -56,17 +56,12 @@ dt <- readRDS(file.path(out_dir, "compiled-data.rds"))
 
 ## Prepare
 
-Response and projected coordinates (km). Keep true zeros.
+Response, effort, index year and projected coordinates (km). Keep true zeros. With `EFFORT: "density"` the response is catch per swept area and there is no offset; with `EFFORT: "offset"` the response is catch and `log(swept_area)` enters as an offset. Either way predictions are made at offset 0, so they are densities per nmi², and `get_index(area =)` scales them once by the grid cell area. `year` is the **index year** (`INDEX_YEAR_START_MONTH`, `INDEX_YEAR_LABEL`); `calendar_year` keeps the survey year.
 
 If Step 1 acquired a broader reporting polygon and added a `region` field, filter that field to the model-domain label here before constructing the mesh. Do not remove the broader stations during survey qualification or data-overview compilation.
 
 ```{r prepare, eval=params$refit_model}
-dt <- dt |>
-  dplyr::rename(lon = longitudestart, lat = latitudestart, year = startyear) |>
-  dplyr::mutate(value = .data[[response_col]], month = as.integer(month)) |>
-  dplyr::filter(!is.na(value))
-
-dt <- sdmTMB::add_utm_columns(dt, ll_names = c("lon", "lat"), utm_crs = dt_crs)  # X, Y in km
+dt <- prepare_model_data(dt, cfg)   # lon/lat, calendar and index year, value, offset, X/Y (km)
 ```
 
 ## Mesh
@@ -87,7 +82,7 @@ plot_mesh(mesh, crs = dt_crs, data = dt)
 
 ## Fit
 
-Default formula `value ~ 0 + geartype + s(month) + s(depth)` (temperature off by default). `geartype` stays in when >1 major gear type is present, or whenever a single set gear width is used.
+Default formula `value ~ 0 + geartype + s(month) + s(depth)` (temperature off by default). `geartype` stays in when >1 major gear type is present, or whenever a single set gear width is used. `SURVEY_EFFECT: true` adds a cruise-series catchability factor (`fsurvey`), and `CATCHABILITY_TERMS` adds one smooth per catchability covariate (e.g. `hour`); both are predicted at the reference levels set on the grid below.
 
 ```{r fit, eval=params$refit_model}
 has_multiple_gears <- dplyr::n_distinct(dt$geartype) > 1
@@ -103,6 +98,7 @@ extra_time <- setdiff(seq(min(dt$year), max(dt$year)), unique(dt$year))
 fit <- sdmTMB::sdmTMB(
   form, data = dt, mesh = mesh,
   family = model_family,
+  offset = model_offset(cfg),   # NULL for EFFORT: density; the column name for EFFORT: offset
   spatial = "on", spatiotemporal = cfg$SPATIOTEMPORAL, time = "year",
   extra_time = if (length(extra_time)) extra_time else NULL,
   control = sdmTMB::sdmTMBcontrol(newton_loops = 2)
@@ -122,12 +118,16 @@ If `sanity()` flags problems (large gradients, non-PD Hessian, range > domain), 
 
 ## Prediction grid
 
+Depth is extracted per cell and the grid is then trimmed to `MIN_DEPTH`–`MAX_DEPTH`. Never match cells to a bathymetry that was first filtered to a depth band: cells outside the band would inherit the band edge's depth instead of being removed. The table reports cells outside the depth range of the data, where the depth smooth extrapolates.
+
 ```{r grid, eval=params$recompute_grid}
 region <- make_survey_prediction_region(dt, crs = dt_crs)
 grid   <- make_prediction_grid(region, resolution = grid_side_size, max_depth = cfg$MAX_DEPTH)
+if (!is.null(cfg$MIN_DEPTH)) grid <- grid[grid$depth >= cfg$MIN_DEPTH, ]
 grid   <- tidyr::crossing(as.data.frame(grid), year = sort(unique(dt$year)))
 grid$geartype <- levels(factor(dt$geartype))[1]   # reference gear
 grid$month    <- 8L                               # reference month
+grid <- add_reference_levels(grid, dt, cfg)       # survey and catchability references
 saveRDS(grid, file.path(out_dir, "prediction-grid.rds"))
 ```
 
@@ -135,13 +135,25 @@ saveRDS(grid, file.path(out_dir, "prediction-grid.rds"))
 grid <- readRDS(file.path(out_dir, "prediction-grid.rds"))
 ```
 
+```{r}
+#| label: tbl-fit-depth-range
+knitr::kable(
+  depth_extrapolation(grid[grid$year == min(grid$year), ], dt),
+  caption = "Prediction-grid cells (one year) outside the observed depth range of the data."
+)
+```
+
+<!-- Describe the supported finding and refer to @tbl-fit-depth-range. Justify any extrapolated cells or trim the grid. -->
+
 ## Predict and index
+
+`predict_index()` predicts at offset 0 on the years the model was fitted to and integrates with the grid cell area, so the same call is correct for both effort conventions.
 
 ```{r}
 #| label: fig-fit-index
 #| fig-cap: "Estimated annual index. The line represents the estimate and the shaded interval spans the returned lower and upper limits."
-pred  <- predict(fit, newdata = grid, return_tmb_object = TRUE)
-index <- sdmTMB::get_index(pred, bias_correct = params$bias_correct, area = grid_cell_area_nmi2)
+index <- predict_index(fit, grid, area = grid_cell_area_nmi2, bias_correct = params$bias_correct)
+pred  <- predict(fit, newdata = grid, return_tmb_object = TRUE)   # for the maps below
 saveRDS(index, file.path(out_dir, "index-total.rds"))
 
 ggplot2::ggplot(index, ggplot2::aes(year, est)) +
@@ -151,6 +163,27 @@ ggplot2::ggplot(index, ggplot2::aes(year, est)) +
 ```
 
 <!-- Describe the supported finding and refer to @fig-fit-index. Confirm caption units, sample size, and interval definitions against the generated result. -->
+
+## Absolute scale check
+
+A relative index hides unit errors in the swept area, the offset or the cell area, because they only scale it by a constant. Two checks guard the absolute scale. The **unit ratio** compares the model's density at the sampled hauls (predicted at offset 0) with the observed density there; it does not depend on coverage, so a median outside 1/1.5–1.5 points to a wrong swept-area unit or an offset on the wrong scale. The **design ratio** compares the index with an unstratified swept-area estimate (mean observed density times the grid area); it differs legitimately where the grid includes rarely sampled cells, and only a departure of an order of magnitude suggests a misplaced cell area or tow-distance division.
+
+```{r}
+#| label: tbl-fit-scale-check
+density_col <- if (identical(cfg$RESPONSE, "abundance")) "rho_abundance" else "rho_biomass"
+grid_area_nmi2 <- grid_cell_area_nmi2 * sum(grid$year == min(grid$year))
+scale_check <- check_index_scale(index, dt, total_area = grid_area_nmi2,
+                                 density_col = density_col, fit = fit)
+if (!isTRUE(scale_check$ok)) warning("Model and observed densities at the hauls differ by a median factor of ",
+                                     signif(scale_check$unit_ratio, 3), ". Check the swept-area units and the offset before Step 3.")
+knitr::kable(
+  dplyr::mutate(scale_check$table, dplyr::across(c(est, design_est, mean_density), signif, 3),
+                dplyr::across(dplyr::ends_with("_ratio"), round, 2)),
+  caption = "Unit ratio (model / observed density at the hauls) and design ratio (index / unstratified swept-area estimate) per index year."
+)
+```
+
+<!-- Report both median ratios with inline R from scale_check$unit_ratio and scale_check$design_ratio, and refer to @tbl-fit-scale-check. -->
 
 ## Diagnostics
 
@@ -203,6 +236,13 @@ AI-assisted drafting and analysis require researcher review. The responsible aut
 #| lst-cap: "Complete shared package, configuration, and model setup."
 #| code-fold: true
 #| code-summary: "Show setup script"
+```
+
+```{r index-helpers-appendix, code = readLines(here::here("R", "index_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-index-helpers
+#| lst-cap: "Complete effort, index-year, reference, balance, bridging and robustness helpers."
+#| code-fold: true
+#| code-summary: "Show index helpers"
 ```
 
 ```{r helpers-appendix, code = readLines(here::here("R", "report_helpers.R")), eval = FALSE, echo = TRUE}

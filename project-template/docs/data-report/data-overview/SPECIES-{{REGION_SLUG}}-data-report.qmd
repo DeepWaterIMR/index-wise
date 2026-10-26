@@ -64,6 +64,10 @@ positive_station_n <- sum(dt$rho_biomass > 0, na.rm = TRUE)
 zero_station_n <- sum(dt$rho_biomass == 0, na.rm = TRUE)
 year_n <- dplyr::n_distinct(dt$startyear)
 survey_n <- dplyr::n_distinct(dt$missionid)
+if (!"index_year" %in% names(dt)) {
+  dt$index_year <- index_year(dt$startyear, dt$month, cfg$INDEX_YEAR_START_MONTH %||% 1L,
+                              cfg$INDEX_YEAR_LABEL %||% "start")
+}
 ```
 
 This document and the associated analyses are based on [index-wise](https://github.com/DeepWaterIMR/index-wise) and were developed with researcher-supervised generative AI.
@@ -196,6 +200,71 @@ dplyr::filter(dt, is.finite(depth)) |>
 
 <!-- Describe the supported finding and refer to @fig-data-report-depth. Confirm caption units, sample size, and interval definitions against the generated result. -->
 
+## Index year and design balance
+
+The model's time step is the **index year** (`INDEX_YEAR_START_MONTH` = `r cfg$INDEX_YEAR_START_MONTH %||% 1`, labelled by the calendar year it `r cfg$INDEX_YEAR_LABEL %||% "start"`s). When surveys from several seasons are combined, every survey of one season must fall in the intended index year; the first table shows how calendar months map to index years for each cruise series.
+
+```{r}
+#| label: tbl-data-report-index-year
+knitr::kable(
+  dt |>
+    dplyr::group_by(cruiseseries) |>
+    dplyr::summarise(
+      months = paste(sort(unique(month)), collapse = ", "),
+      calendar_years = paste0(min(startyear), "–", max(startyear)),
+      index_years = paste0(min(index_year), "–", max(index_year)),
+      shifted_hauls = sum(index_year != startyear),
+      .groups = "drop"
+    ),
+  caption = "Survey months, calendar years and index years by cruise series. Shifted hauls are assigned to an index year other than their calendar year."
+)
+```
+
+<!-- Describe the supported finding and refer to @tbl-data-report-index-year. -->
+
+A survey, gear or vessel whose share of the hauls swings between years is confounded with the year effect: its catchability difference is then estimated from few years and can be read as a trend. The tables flag factor levels whose annual share ranges over more than 0.5.
+
+```{r}
+#| label: tbl-data-report-balance
+balance <- lapply(intersect(c("cruiseseries", "geartype"), names(dt)), function(v) {
+  b <- design_balance(dt, v, time_col = "index_year")
+  dplyr::mutate(b$shift, factor = v, level = as.character(.data[[v]]), .before = 1) |>
+    dplyr::select(-dplyr::all_of(v))
+})
+knitr::kable(
+  dplyr::bind_rows(balance),
+  digits = 2,
+  caption = "Annual haul share by cruise series and gear type: years present, minimum and maximum share, and whether the share range exceeds 0.5."
+)
+```
+
+```{r}
+#| label: fig-data-report-balance
+#| fig-cap: "Share of retained hauls by gear type in each index year."
+design_balance(dt, "geartype", time_col = "index_year")$counts |>
+  ggplot2::ggplot(ggplot2::aes(index_year, share, fill = geartype)) +
+  ggplot2::geom_col() +
+  ggplot2::labs(x = "Index year", y = "Share of hauls", fill = "Gear type")
+```
+
+<!-- Describe the supported finding and refer to @tbl-data-report-balance and @fig-data-report-balance. A flagged level needs a decision: drop it, model it, or justify the confounding. -->
+
+## Terminal-year completeness
+
+Some data typically arrive after the assessment (for example one nation's or one vessel's hauls). Set `LATE_COMPONENTS` in `config.yaml` to the compiled-data column and values concerned; the table then shows their haul counts in recent index years, so an incomplete terminal year is visible. The robustness section of the final report refits the index without them in the terminal year.
+
+```{r, eval=!is.null(cfg$LATE_COMPONENTS)}
+#| label: tbl-data-report-late
+late_col <- cfg$LATE_COMPONENTS$column
+recent <- dplyr::filter(dt, index_year > max(index_year) - 5)
+knitr::kable(
+  as.data.frame.matrix(table(recent$index_year,
+                             ifelse(recent[[late_col]] %in% cfg$LATE_COMPONENTS$values,
+                                    "late component", "other"))),
+  caption = "Retained hauls in the last five index years from the components that usually arrive late."
+)
+```
+
 ## Response distribution
 
 ```{r}
@@ -227,6 +296,17 @@ ggplot2::ggplot(dt, ggplot2::aes(distance, fill = geartype)) +
 ## Length-product checks
 
 If the project has length-based products, adapt this section to the compiled length allocation. Keep the threshold definition and missing-length treatment explicit. Positive stations without usable lengths should remain available for total biomass while being missing from the length-specific products. Caption every figure and table.
+
+```{r, eval="n_measured" %in% names(dt)}
+#| label: tbl-data-report-length-coverage
+knitr::kable(
+  length_coverage(dt, time_col = "index_year"),
+  digits = 3,
+  caption = "Positive hauls and catch without measured individuals, by index year. These hauls are missing, not zero, in the size-, sex- and length-specific products."
+)
+```
+
+<!-- Describe the supported finding and refer to @tbl-data-report-length-coverage. State whether the missing hauls are dropped from the class products or given imputed class shares, and flag imputed hauls in the data. -->
 
 ```{r, eval=FALSE}
 #| label: fig-data-report-length
@@ -294,6 +374,13 @@ AI-assisted drafting and analysis require researcher review. The responsible aut
 #| lst-cap: "Complete shared package, configuration, and model setup."
 #| code-fold: true
 #| code-summary: "Show setup script"
+```
+
+```{r index-helpers-appendix, code = readLines(here::here("R", "index_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-index-helpers
+#| lst-cap: "Complete effort, index-year, reference, balance, bridging and robustness helpers."
+#| code-fold: true
+#| code-summary: "Show index helpers"
 ```
 
 ```{r helpers-appendix, code = readLines(here::here("R", "report_helpers.R")), eval = FALSE, echo = TRUE}

@@ -1,0 +1,420 @@
+---
+title: "{{SPECIES_NAME}} — commercial CPUE index"
+subtitle: "CPUE · index-wise"
+format:
+  html:
+    toc: true
+    toc-title: "{{SPECIES_NAME}} — commercial CPUE index"
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+    fig-format: jpeg
+    fig-dpi: 160
+    embed-resources: true
+params:
+  refit_model: true       # FALSE → load the fit from data/output/cpue
+  run_selection: false    # drop-one fixed-effect candidates (one fit each)
+  run_bootstrap: false    # vessel bootstrap of the index (slow: CPUE bootstrap_n fits)
+  run_sensitivity: false  # filter, retrospective, forward and final-month runs (slow)
+  bias_correct: false     # sdmTMB: TRUE for the final index
+execute:
+  fig-width: 6.69
+  warning: false
+  message: false
+author: {{AUTHORS_YAML}}
+affiliations: {{AFFILIATIONS_YAML}}
+date: today
+date-format: "YYYY-MM-DD"
+published-title: "Version"
+lang: en-US
+bibliography:
+  - ../../assets/references.bib
+  - ../../assets/cpue-software.bib
+csl: ../../assets/ices_jms.csl
+---
+
+# Purpose
+
+<!-- State the report question, intended reader, downstream use, and source-data version. -->
+
+
+<!-- A standardised commercial CPUE index for {{SPECIES_NAME}} from logbook (or sales-note) records. Read index-wise's knowledge/cpue.md (the data) and knowledge/cpue-models.md (the models) before adapting it; the skills index-cpue-data and index-cpue-model walk through it. Logbook records are confidential: never show individual vessels or precise fishing positions, and keep the extract in the git-ignored data/source/cpue/. Do NOT hard-wrap prose. -->
+
+# Data
+
+<!-- Describe the source (ERS, aggregated logbooks, sales notes), its unit of observation, years, coverage and extraction date with inline R. -->
+
+```{r setup}
+knitr::opts_knit$set(root.dir = here::here())
+source(here::here("R", "0_setup.R"))
+cpue_cfg <- cfg$CPUE %||% list()
+cpue_dir <- file.path(out_dir, "cpue")
+dir.create(cpue_dir, recursive = TRUE, showWarnings = FALSE)
+engine <- cpue_cfg$engine %||% "sdmTMB"
+```
+
+The record frame has one row per **`r cpue_cfg$unit %||% "haul"`** with the columns `year`, `month`, `yday`, `vessel_id`, `vessel_length`, `catch` (kg), `effort` (e.g. traps or trawl hours), `lon`, `lat`, `depth`, and optional covariates (`soak`, `gear_spec`, `area`). Map the extract to these names in the next chunk; everything below reads them.
+
+```{r load}
+records <- readRDS(here::here(cpue_cfg$file))
+# <- adapt: commercial data differ by source, country, period and fishery, so this mapping is
+# bespoke to this extract (index-wise knowledge/cpue.md). Document each field's meaning, unit and
+# valid years in ai/memory/. Illustration only, for one Norwegian ERS extract:
+# records <- dplyr::transmute(records, year = fangstar, month = lubridate::month(starttidspunkt),
+#   yday = lubridate::yday(starttidspunkt), vessel_id = rc, vessel_length = storste_lengde,
+#   catch = rundvekt, effort = innsats, soak = varighet / 60, lon = stopp_lg, lat = stopp_lt,
+#   depth = NA_real_)
+required <- c("year", "month", "yday", "vessel_id", "catch", "effort", "lon", "lat")
+missing_cols <- setdiff(required, names(records))
+if (length(missing_cols)) stop("Map these columns to the CPUE schema: ", paste(missing_cols, collapse = ", "))
+if (!is.null(cpue_cfg$first_year)) records <- dplyr::filter(records, year >= cpue_cfg$first_year)
+```
+
+# Analysis
+
+## Coverage of the landings
+
+```{r, eval=!is.null(cpue_cfg$landings_file)}
+#| label: tbl-cpue-reconcile
+landings <- readRDS(here::here(cpue_cfg$landings_file))
+knitr::kable(cpue_reconcile(records, landings), digits = 2,
+             caption = "Logbook catch, landed catch (t) and coverage per year. A low or falling coverage means the index describes a small or shrinking part of the fleet.")
+```
+
+<!-- Describe the coverage and refer to @tbl-cpue-reconcile. -->
+
+## Vessels and the core fleet
+
+Vessels replaced under the same identifier get a new identifier from the year of the change. The filter cascade then applies the plausible ranges and the core-fleet thresholds from `config.yaml`; each step's share of records and catch is reported, and each threshold is varied in the sensitivity analysis.
+
+```{r}
+#| label: tbl-cpue-filters
+if ("vessel_length" %in% names(records)) records <- cpue_vessel_changes(records)
+records <- cpue_vessel_activity(records)
+range_step <- function(v, r) {
+  lo <- r[[1]]; hi <- if (length(r) > 1) r[[2]] else NULL
+  bquote(!is.na(.(as.name(v))) & .(as.name(v)) >= .(lo %||% -Inf) & .(as.name(v)) <= .(hi %||% Inf))
+}
+ranges <- cpue_cfg$ranges %||% list()
+steps <- c(
+  list("positive catch" = quote(catch > 0), "effort recorded" = quote(!is.na(effort) & effort > 0)),
+  stats::setNames(lapply(names(ranges), function(v) range_step(v, ranges[[v]])),
+                  paste(names(ranges), "in range")),
+  list("vessel years active" = bquote(years_active >= .(cpue_cfg$min_years_active %||% 1)),
+       "vessel records per year" = bquote(records_year >= .(cpue_cfg$min_records_year %||% 0)),
+       "vessel records in total" = bquote(records_total >= .(cpue_cfg$min_records_total %||% 0)))
+)
+cascade <- cpue_filter_cascade(records, steps)
+d <- cascade$data
+knitr::kable(dplyr::mutate(cascade$log, catch = catch / 1000), digits = 3,
+             caption = "Filter cascade: records, vessels and catch (t) retained after each step, and their share of all records.")
+```
+
+<!-- Describe the supported finding and refer to @tbl-cpue-filters. Explain any step that removes a large share of the catch. -->
+
+## Exploration
+
+```{r}
+#| label: fig-cpue-fleet
+#| fig-cap: "Records and active vessels per year in the selected data, and the vessels by years active. Fleet composition that changes over time is what the vessel effect must absorb."
+fleet <- d |> dplyr::group_by(year) |>
+  dplyr::summarise(records = dplyr::n(), vessels = dplyr::n_distinct(vessel_id), .groups = "drop")
+cowplot::plot_grid(
+  ggplot2::ggplot(fleet, ggplot2::aes(year, records)) + ggplot2::geom_col() +
+    ggplot2::labs(x = "Year", y = "Records"),
+  ggplot2::ggplot(dplyr::distinct(d, year, vessel_id, years_active),
+                  ggplot2::aes(year, fill = factor(years_active))) + ggplot2::geom_bar() +
+    ggplot2::labs(x = "Year", y = "Vessels", fill = "Years active"),
+  ncol = 1, labels = "AUTO")
+```
+
+```{r}
+#| label: fig-cpue-effort
+#| fig-cap: "Catch against effort per record (log scales) with a smooth. The slope informs whether effort enters as an offset (slope 1) or as a covariate."
+ggplot2::ggplot(d, ggplot2::aes(effort, catch)) +
+  ggplot2::geom_point(alpha = 0.1, size = 0.5) + ggplot2::geom_smooth() +
+  ggplot2::scale_x_log10() + ggplot2::scale_y_log10() +
+  ggplot2::labs(x = "Effort", y = "Catch (kg)")
+```
+
+Fishing positions are shown aggregated to grid cells, never as individual records.
+
+```{r}
+#| label: fig-cpue-coverage
+#| fig-cap: "Records per 0.5° × 0.25° cell and year in the selected data."
+cells <- d |>
+  dplyr::mutate(lon_c = floor(lon * 2) / 2 + 0.25, lat_c = floor(lat * 4) / 4 + 0.125) |>
+  dplyr::count(year, lon_c, lat_c)
+ggplot2::ggplot(cells, ggplot2::aes(lon_c, lat_c, fill = n)) + ggplot2::geom_tile() +
+  ggplot2::facet_wrap(~year) + ggplot2::scale_fill_viridis_c(trans = "log10") +
+  ggplot2::labs(x = "Longitude", y = "Latitude", fill = "Records") + ggplot2::coord_quickmap()
+```
+
+<!-- Describe @fig-cpue-fleet, @fig-cpue-effort and @fig-cpue-coverage: fleet changes, effort saturation and shifts of the fished area. -->
+
+## Model data and reference conditions
+
+```{r model-data}
+d <- d |>
+  dplyr::mutate(vessel_id = factor(vessel_id), fyear = factor(year), log_effort = log(effort),
+                yday_std = (yday - mean(yday)) / stats::sd(yday),
+                vessel_year = factor(paste(vessel_id, year)))
+if ("depth" %in% names(d) && any(is.finite(d$depth)))
+  d$depth_std <- (d$depth - mean(d$depth, na.rm = TRUE)) / stats::sd(d$depth, na.rm = TRUE)
+d <- sdmTMB::add_utm_columns(d, ll_names = c("lon", "lat"), utm_crs = cfg$CRS)   # X, Y in km
+# Reference conditions: the configured values, else the median effort and season day.
+reference <- utils::modifyList(list(log_effort = NULL, yday_std = NULL), cpue_cfg$reference %||% list())
+if ("depth_std" %in% names(d)) reference$depth_std <- reference$depth_std %||% 0
+offset_col <- if (identical(cpue_cfg$effort_treatment, "offset")) "log_effort" else NULL
+```
+
+## Model
+
+The formulas are the starting point for this species; adapt the covariates and keep the structure: `0 + fyear`, effort, season and depth smooths, and a vessel random intercept. `config.yaml` `CPUE: engine` selects the engine (see `cpue-models.md`).
+
+```{r formulas}
+effort_term <- if (is.null(offset_col)) "log_effort + " else ""
+depth_term <- if ("depth_std" %in% names(d)) " + s(depth_std, k = 4)" else ""
+cpue_formula <- switch(engine,
+  glmmTMB = stats::as.formula(paste0("catch ~ 0 + fyear + ", effort_term,
+    "splines::ns(yday_std, df = 3)", if (nzchar(depth_term)) " + splines::ns(depth_std, df = 3)",
+    if (!is.null(offset_col)) " + offset(log_effort)", " + (1 | vessel_id)")),
+  mgcv = stats::as.formula(paste0("catch ~ fyear + ", effort_term, "s(yday_std, k = 4)", depth_term,
+    if (!is.null(offset_col)) " + offset(log_effort)",
+    " + s(X, Y, k = 40) + s(vessel_id, bs = 're')")),
+  sdmTMB = stats::as.formula(paste0("catch ~ 0 + fyear + ", effort_term, "s(yday_std, k = 4)",
+    depth_term, " + (1 | vessel_id)")),
+  stop("CPUE engine must be glmmTMB, mgcv or sdmTMB."))
+cpue_formula
+fit_cpue <- function(formula, data) {
+  switch(engine,
+    glmmTMB = { ensure_packages("glmmTMB")
+      glmmTMB::glmmTMB(formula, data = data, family = Gamma(link = "log")) },
+    mgcv = mgcv::bam(formula, data = data, family = Gamma(link = "log")),
+    sdmTMB = sdmTMB::sdmTMB(formula, data = data, family = Gamma(link = "log"),
+      mesh = sdmTMB::make_mesh(data, c("X", "Y"), cutoff = cpue_cfg$mesh_cutoff_km %||% 10),
+      offset = offset_col, spatial = "on",
+      spatiotemporal = cpue_cfg$spatiotemporal %||% "iid", time = "year"))
+}
+```
+
+```{r fit, eval=params$refit_model}
+fit <- fit_cpue(cpue_formula, d)
+saveRDS(fit, file.path(cpue_dir, "cpue-fit.rds"))
+```
+
+```{r load-fit, eval=!params$refit_model}
+fit <- readRDS(file.path(cpue_dir, "cpue-fit.rds"))
+```
+
+For the spatial engines the index is integrated over a fixed grid of the **fished domain**: the convex hull of the selected records, trimmed to their depth range. Cells nobody fished are not part of the index (see `cpue-models.md`, *The prediction domain*).
+
+```{r grid}
+hull <- sf::st_as_sf(d, coords = c("X", "Y"), crs = NA) |> sf::st_union() |> sf::st_convex_hull()
+cell <- cpue_cfg$grid_km %||% 5
+centres <- sf::st_make_grid(hull, cellsize = cell, what = "centers")
+centres <- centres[lengths(sf::st_intersects(centres, hull)) > 0]
+grid <- as.data.frame(sf::st_coordinates(centres))
+grid_ll <- sf::st_coordinates(sf::st_transform(sf::st_sf(geometry = centres * 1000, crs = cfg$CRS), 4326))
+grid$lon <- grid_ll[, 1]; grid$lat <- grid_ll[, 2]
+if ("depth_std" %in% names(d)) {
+  grid$depth <- ggOceanMaps::get_depth(grid[, c("lon", "lat")], bathy.style = "rc", bind = FALSE)
+  grid <- grid[is.finite(grid$depth) & grid$depth >= min(d$depth, na.rm = TRUE) &
+                 grid$depth <= max(d$depth, na.rm = TRUE), ]
+  grid$depth_std <- (grid$depth - mean(d$depth, na.rm = TRUE)) / stats::sd(d$depth, na.rm = TRUE)
+}
+grid <- merge(grid, data.frame(year = sort(unique(d$year))))
+grid$fyear <- factor(grid$year, levels = levels(d$fyear))
+ref_row <- cpue_newdata(d, reference)[1, ]
+for (v in names(reference)) grid[[v]] <- ref_row[[v]]
+grid$vessel_id <- factor(NA, levels = levels(d$vessel_id))
+```
+
+## Index
+
+```{r}
+#| label: fig-cpue-index
+#| fig-cap: "Standardised CPUE index (relative to its mean, with 95% interval) and nominal CPUE (ratio of sums, relative to its mean)."
+index <- switch(engine,
+  glmmTMB = cpue_year_index(fit, cpue_newdata(d, reference)),
+  mgcv = cpue_gam_area_index(fit, grid, area = cell^2, exclude = "s(vessel_id)"),
+  sdmTMB = cpue_sdm_index(fit, grid, area = cell^2, bias_correct = params$bias_correct))
+saveRDS(index, file.path(cpue_dir, "cpue-index.rds"))
+nominal <- cpue_nominal(d)
+ggplot2::ggplot(index, ggplot2::aes(year, index)) +
+  ggplot2::geom_ribbon(ggplot2::aes(ymin = index_lwr, ymax = index_upr), alpha = 0.3) +
+  ggplot2::geom_line() +
+  ggplot2::geom_line(data = nominal, linetype = 2) +
+  ggplot2::labs(x = "Year", y = "Relative CPUE")
+```
+
+<!-- Describe the supported finding and refer to @fig-cpue-index. Where nominal and standardised CPUE diverge, say which covariate or which shift of the fleet explains it. -->
+
+## Selection
+
+Drop-one candidates of the fixed effects, fitted to the same records (`model-selection.md`). The effort slope (covariate version) is reported beside the table: 1 means catch proportional to effort.
+
+```{r, eval=params$run_selection}
+#| label: tbl-cpue-selection
+terms <- attr(stats::terms(cpue_formula), "term.labels")
+fixed <- terms[!grepl("\\||bs = .re.|fyear", terms)]
+candidates <- c(list("Full model" = cpue_formula), stats::setNames(lapply(fixed, function(tm)
+  stats::update(cpue_formula, stats::as.formula(paste(". ~ . -", tm)))), paste("No", fixed)))
+selection <- dplyr::bind_rows(lapply(names(candidates), function(nm) {
+  f <- tryCatch(fit_cpue(candidates[[nm]], d), error = function(e) NULL)
+  data.frame(model = nm, AIC = if (is.null(f)) NA_real_ else stats::AIC(f))
+})) |> dplyr::mutate(deltaAIC = AIC - min(AIC, na.rm = TRUE)) |> dplyr::arrange(AIC)
+knitr::kable(selection, digits = 1, caption = "Drop-one fixed-effect candidates on identical records, ordered by AIC.")
+```
+
+## Diagnostics
+
+```{r}
+#| label: tbl-cpue-dispersion
+if (engine == "sdmTMB") print(sdmTMB::sanity(fit))
+groups <- list(vessel = d$vessel_id, `vessel-year` = d$vessel_year,
+               year = d$fyear)
+if ("area" %in% names(d)) groups$`area-year` <- interaction(d$area, d$year)
+knitr::kable(cpue_pearson_groups(fit, groups), digits = 3,
+             caption = "Grouped residual dispersion (Pearson residuals summed by group, relative to the ungrouped variance). About 1 for independent records; above 1 for groups the model does not contain means correlated records and too narrow intervals.")
+```
+
+```{r, eval=engine == "glmmTMB" && requireNamespace("DHARMa", quietly = TRUE)}
+#| label: tbl-cpue-dharma
+knitr::kable(cpue_dharma_groups(fit, list(records = NULL, vessel = d$vessel_id,
+                                           `vessel-year` = d$vessel_year)), digits = 3,
+             caption = "Simulation-based (DHARMa) dispersion by group for the glmmTMB fit.")
+```
+
+<!-- Report sanity() and the grouped dispersion and refer to @tbl-cpue-dispersion (and @tbl-cpue-dharma). A vessel-year dispersion well above 1 calls for a (1 | vessel_year) term or the vessel bootstrap. -->
+
+## Uncertainty: vessel bootstrap
+
+```{r, eval=params$run_bootstrap}
+#| label: fig-cpue-bootstrap
+#| fig-cap: "Vessel bootstrap of the index: the model's interval (shaded) and the 2.5–97.5% range of the bootstrap indices (dashed)."
+boot <- cpue_vessel_bootstrap(d, function(db) {
+  f <- fit_cpue(cpue_formula, db)
+  switch(engine,
+    glmmTMB = cpue_year_index(f, cpue_newdata(db, reference)),
+    mgcv = cpue_gam_area_index(f, grid, area = cell^2, exclude = "s(vessel_id)", nsim = 1),
+    sdmTMB = cpue_sdm_index(f, grid, area = cell^2))
+}, n_boot = cpue_cfg$bootstrap_n %||% 200)
+saveRDS(boot, file.path(cpue_dir, "cpue-bootstrap.rds"))
+boot_range <- boot |> dplyr::group_by(year) |>
+  dplyr::summarise(lo = stats::quantile(index, 0.025, na.rm = TRUE),
+                   hi = stats::quantile(index, 0.975, na.rm = TRUE), .groups = "drop")
+ggplot2::ggplot(index, ggplot2::aes(year, index)) +
+  ggplot2::geom_ribbon(ggplot2::aes(ymin = index_lwr, ymax = index_upr), alpha = 0.3) +
+  ggplot2::geom_line() +
+  ggplot2::geom_line(data = boot_range, ggplot2::aes(y = lo), linetype = 2) +
+  ggplot2::geom_line(data = boot_range, ggplot2::aes(y = hi), linetype = 2) +
+  ggplot2::labs(x = "Year", y = "Relative CPUE")
+```
+
+## Sensitivity
+
+Each run refits the selected model with one change: peeling the last or the first years, and cutting every year's data at the month the terminal-year data end (`CPUE: final_month`).
+
+```{r, eval=params$run_sensitivity}
+#| label: fig-cpue-sensitivity
+#| fig-cap: "Index under retrospective peels (A), forward peels (B) and the final-month cut (C), each rescaled to its mean over the years it shares with the full model."
+run_index <- function(db, label, panel) {
+  f <- fit_cpue(cpue_formula, droplevels(db))
+  i <- switch(engine,
+    glmmTMB = cpue_year_index(f, cpue_newdata(droplevels(db), reference)),
+    mgcv = cpue_gam_area_index(f, grid[grid$year %in% db$year, ], area = cell^2,
+                               exclude = "s(vessel_id)", nsim = 1),
+    sdmTMB = cpue_sdm_index(f, grid, area = cell^2))
+  shared <- intersect(i$year, index$year)
+  dplyr::mutate(i, relative = est / mean(est[year %in% shared]), run = label, panel = panel)
+}
+yrs <- sort(unique(d$year))
+runs <- c(
+  lapply(1:3, function(k) run_index(dplyr::filter(d, year <= max(yrs) - k), paste("to", max(yrs) - k), "A")),
+  lapply(1:3, function(k) run_index(dplyr::filter(d, year >= min(yrs) + k), paste("from", min(yrs) + k), "B")),
+  if (!is.null(cpue_cfg$final_month))
+    list(run_index(dplyr::filter(d, month <= cpue_cfg$final_month),
+                   paste("months 1 -", cpue_cfg$final_month), "C"))
+)
+sensitivity <- dplyr::bind_rows(runs)
+saveRDS(sensitivity, file.path(cpue_dir, "cpue-sensitivity.rds"))
+full <- dplyr::mutate(index, relative = index, run = "full model")
+ggplot2::ggplot(sensitivity, ggplot2::aes(year, relative, colour = run)) +
+  ggplot2::geom_line() +
+  ggplot2::geom_line(data = full, colour = "black", linewidth = 1, inherit.aes = FALSE,
+                     ggplot2::aes(year, relative)) +
+  ggplot2::facet_wrap(~panel, ncol = 1) +
+  ggplot2::labs(x = "Year", y = "Relative CPUE", colour = NULL)
+```
+
+<!-- Describe @fig-cpue-sensitivity: how far the terminal year moves, and whether the trend depends on the first years or the season cut. Vary the filter thresholds the same way. -->
+
+## Export
+
+```{r export}
+source(here::here("R", "assessment_index_handoff.R"))
+cpue_handoff <- build_assessment_index_handoff(
+  list("Commercial CPUE" = dplyr::transmute(index, year, est = index, lwr = index_lwr,
+                                            upr = index_upr, se)),
+  "Commercial CPUE",
+  list(units = "relative CPUE",
+       uncertainty = list(column = "se", scale = "log", measure = "standard_error"),
+       index_type = "commercial CPUE",
+       timing = 0.5,   # <- set to the mid-season of the fishery as a fraction of the year
+       spatial_scope = paste("fished domain of", cpue_cfg$source %||% "logbook", "records"),
+       provenance = list(project = "index-wise", source = "{{SPECIES_SLUG}} CPUE report",
+                         engine = engine, formula = paste(deparse(cpue_formula), collapse = ""))))
+saveRDS(cpue_handoff, file.path(out_dir, "assessment-index-cpue.rds"))
+```
+
+# Results and recommendations
+
+<!-- Summarize supported findings using inline R. State what the index represents (fleet, gear, area, season, reference conditions), its known breaks, and whether the assessment should use the model or the bootstrap uncertainty. Refer to every figure and table in a short interpretive sentence. -->
+
+# Software and reproducibility
+
+This report followed [index-wise](https://github.com/DeepWaterIMR/index-wise), with document structure and conventions from [wise-writing](https://github.com/DeepWaterIMR/wise-writing).
+
+```{r software-citations}
+#| results: asis
+source(here::here("R", "report_helpers.R"))
+# Add every additional package that influenced this report, including optional packages.
+report_software(
+  c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "sdmTMB", "mgcv", "glmmTMB", "DHARMa", "knitr"),
+  here::here("docs", "assets", "cpue-software.bib")
+)
+```
+
+<!-- Before release, replace this draft disclosure with the exact researcher-confirmed model names and roles. Append to existing model lists; never claim approval that has not occurred. -->
+AI-assisted drafting and analysis require researcher review. The responsible authors must confirm the AI models used and approve the final content.
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+# Appendix: analysis scripts {.appendix}
+
+<!-- Add one folded listing for each additional R script used by this report, in run order. Do not use placeholder paths or silently omit missing scripts. -->
+
+```{r setup-appendix, code = readLines(here::here("R", "0_setup.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-setup-script
+#| lst-cap: "Complete shared package, configuration, and model setup."
+#| code-fold: true
+#| code-summary: "Show setup script"
+```
+
+```{r cpue-helpers-appendix, code = readLines(here::here("R", "cpue_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-cpue-helpers
+#| lst-cap: "Complete CPUE record, index, diagnostic and bootstrap helpers."
+#| code-fold: true
+#| code-summary: "Show CPUE helpers"
+```
+
+```{r helpers-appendix, code = readLines(here::here("R", "report_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-report-helpers
+#| lst-cap: "Complete software citation helper."
+#| code-fold: true
+#| code-summary: "Show report helpers"
+```

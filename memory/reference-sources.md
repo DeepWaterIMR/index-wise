@@ -37,6 +37,12 @@ Content was **adapted** (not copied; data/paths stripped) from:
   per-candidate resumable caches with an env-var fan-out across R processes; reporting the AIC
   gap when the carried-forward model is not the winner; and looking values up by label rather
   than row position in a rendered document.
+- **IMR crustacean assessment projects** (snow crab, red king crab, northern shrimp in the
+  Barents Sea and in the Skagerrak–Norwegian Deep), reviewed 2026-10-26. Their survey indices
+  supplied the effort/index-scale convention, index years for combined seasons, survey
+  integration, catchability covariates, bridging, robustness sections and the stacked class
+  model; their logbook and sales-note indices supplied the commercial CPUE layer (see
+  [[cpue-lessons]]). Methods only; no data or paths.
 - **spict-template** — the scaffold/AGENTS/memory conventions mirrored here.
 - **BAIT** — the knowledge-pack + global-skills model, and the data-access layer.
 

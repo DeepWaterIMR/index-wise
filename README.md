@@ -3,7 +3,7 @@
 # 📈 index-wise — Build sdmTMB survey indices with AI agents
 
 <!-- version -->
-**Version 0.2.5** (2026-10-25)
+**Version 0.2.6** (2026-10-26)
 <!-- /version -->
 
 **Teach your AI coding agent to build a spatiotemporal survey index for stock assessment — for any species, on your own machine.**
@@ -67,6 +67,10 @@ This repo is **public and contains instructions only — never data**:
 | **2.** Fit the first feasible model | [`index-fit-model`](skills/index-fit-model/SKILL.md) |
 | **3.** Validate / select the model | [`index-validate-model`](skills/index-validate-model/SKILL.md) |
 | **4.** Final report + extensions | [`index-final-report`](skills/index-final-report/SKILL.md) |
+| CPUE — prepare logbook / sales-note records | [`index-cpue-data`](skills/index-cpue-data/SKILL.md) |
+| CPUE — standardise and export (glmmTMB, mgcv, sdmTMB) | [`index-cpue-model`](skills/index-cpue-model/SKILL.md) |
+
+The two CPUE skills are an optional track for a **commercial CPUE index** beside the survey index. Logbook and sales-note data are not Biotic data; the background is in [`knowledge/cpue.md`](knowledge/cpue.md) and [`knowledge/cpue-models.md`](knowledge/cpue-models.md), and [`examples/snowcrab-ers-cpue/`](examples/snowcrab-ers-cpue/) runs all three engines on synthetic data with a known trend.
 
 Each step's document lives in [`project-template/docs/`](project-template/docs/) and is index-wise's own, evolving implementation — improve it directly as the routine matures. [`knowledge/workflow.md`](knowledge/workflow.md) points to the (IMR-internal) background material the method was originally distilled from, if you want the history.
 
@@ -80,6 +84,7 @@ Long renders are compiled with [`index-render`](skills/index-render/SKILL.md) in
 - [`project-template/`](project-template/) — the skeleton copied into each new project.
 - [`scaffold.R`](scaffold.R) — stamps a project from `config.yaml`.
 - [`examples/redfish/`](examples/redfish/) — a worked example.
+- [`examples/snowcrab-ers-cpue/`](examples/snowcrab-ers-cpue/) — a simplified, synthetic snow crab ERS CPUE index with glmmTMB, mgcv and sdmTMB.
 
 ## 🧰 Siblings
 

@@ -305,10 +305,20 @@ dt <- stn |>
     biomass   = dplyr::coalesce(catchweight_sp, 0),   # <- adapt to your join of species catch
     count     = dplyr::coalesce(catchcount_sp, 0),
     gear_width = gear_width_m(geartype),
-    swept_area = distance * (gear_width / 1852),        # nmi^2
+    swept_area = swept_area_nmi2(distance, gear_width), # nmi^2; the one conversion in the project
     rho_biomass   = biomass / swept_area,
-    rho_abundance = count   / swept_area
+    rho_abundance = count   / swept_area,
+    month = if ("month" %in% names(stn)) month else as.integer(format(as.Date(station_date), "%m")),
+    # Index year (config INDEX_YEAR_START_MONTH/LABEL); startyear stays the calendar year.
+    index_year = index_year(startyear, month, cfg$INDEX_YEAR_START_MONTH %||% 1L,
+                            cfg$INDEX_YEAR_LABEL %||% "start")
   )
+
+# For size-, sex- or length-based products, add the number of measured target individuals per
+# haul from indall (`n_measured`, 0 when none). A positive haul with n_measured == 0 stays in the
+# total product and is MISSING from class products (see data-filtering.md); never zero-fill it.
+# dt <- dplyr::left_join(dt, measured_per_haul, by = "haul_id") |>
+#   dplyr::mutate(n_measured = dplyr::coalesce(n_measured, 0L))
 
 # Fill missing/invalid bottom depth from GEBCO:
 dt$depth <- ggOceanMaps::get_depth(
@@ -324,6 +334,21 @@ cruise_series_cols <- setNames(
   ))(length(cruise_series_levels)),
   cruise_series_levels
 )
+```
+
+## Catchability covariates
+
+Only when `CATCHABILITY_TERMS` is set. Species that migrate vertically by day (e.g. shrimp, many crabs and redfish) are caught at different rates by day and night. `hour` is the haul start time in UTC; at high latitudes, where polar day and night decouple light from clock time, `sun_altitude` (degrees above the horizon at the haul position) is the better proxy. Both are predicted at the reference in `CATCHABILITY_REFERENCE`.
+
+```{r catchability, eval=params$recompile && length(unlist(cfg$CATCHABILITY_TERMS)) > 0}
+haul_time <- as.POSIXct(paste(dt$station_date, dt$stationstarttime), tz = "UTC")  # <- adapt
+dt$hour <- as.numeric(format(haul_time, "%H")) + as.numeric(format(haul_time, "%M")) / 60
+if ("sun_altitude" %in% unlist(cfg$CATCHABILITY_TERMS)) {
+  ensure_packages("suncalc")   # installed on demand; see R/0_setup.R
+  sun <- suncalc::getSunlightPosition(
+    data = data.frame(date = haul_time, lat = dt$latitudestart, lon = dt$longitudestart))
+  dt$sun_altitude <- sun$altitude * 180 / pi
+}
 ```
 
 ## Save
@@ -607,6 +632,13 @@ AI-assisted drafting and analysis require researcher review. The responsible aut
 #| lst-cap: "Complete shared package, configuration, and model setup."
 #| code-fold: true
 #| code-summary: "Show setup script"
+```
+
+```{r index-helpers-appendix, code = readLines(here::here("R", "index_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-index-helpers
+#| lst-cap: "Complete effort, index-year, reference, balance, bridging and robustness helpers."
+#| code-fold: true
+#| code-summary: "Show index helpers"
 ```
 
 ```{r helpers-appendix, code = readLines(here::here("R", "report_helpers.R")), eval = FALSE, echo = TRUE}

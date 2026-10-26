@@ -43,24 +43,44 @@ every answer for `ai/memory/scaffold-interview.md`.
    are represented, keep `geartype` as a fixed effect; revert to gear-specific widths only when
    diagnostics justify the extra complexity.
 5. **Response & length groups** — biomass or abundance density? Which products: total biomass,
-   over-X-cm biomass (what threshold?), length-group abundances (which breaks)?
-6. **Assessment model** — what consumes the index (e.g. SPiCT)? This drives the
+   over-X-cm biomass (what threshold?), length-group abundances (which breaks)? Size-, sex- or
+   maturity-class products: separate fits or one stacked class model
+   (`knowledge/model-selection.md`)?
+6. **Effort** — density response, or catch with a `log(swept_area)` offset (`EFFORT`)? Default
+   `density`; choose `offset` when bridging from an index that used one, or for Tweedie and
+   Poisson-link delta families.
+7. **Seasons and index year** — are surveys from different seasons combined? Which surveys
+   share a time step, and when does the index year begin (`INDEX_YEAR_START_MONTH`,
+   `INDEX_YEAR_LABEL`; `knowledge/data-filtering.md`)? A survey catchability factor
+   (`SURVEY_EFFECT`) and which survey is the prediction reference? One combined index or
+   separate seasonal indices?
+8. **Catchability** — does the species migrate vertically or otherwise change catchability
+   with time of day? If so, offer `hour` or `sun_altitude` (`CATCHABILITY_TERMS`) and a
+   reference (`CATCHABILITY_REFERENCE`, e.g. daylight); they are tested in Step 3, not imposed.
+9. **Assessment model** — what consumes the index (e.g. SPiCT)? This drives the
    spatiotemporal/year-effect choice for the selected index (AR1 + no year effect for total/
-   length; IID + year fixed effect for the assessment-selected index).
-7. **Years** — first year to include (default `> 1980`).
-8. **Domain** — study area / prediction region, CRS (EPSG), grid cell size (km), mesh cutoff
-   (km), barrier mesh yes/no. GIS polygons are **user-supplied** and go in the project's
-   `data/source/` — never in the template.
-9. **Russian data** — included by default; ask only if they want to exclude it.
-10. **Human metadata** — accountable authors and affiliations using wise-writing's
+   length; IID + year fixed effect, or a year effect with AR1, for the assessment-selected
+   index). Does an index already exist? If so, record its configuration (family, year effect,
+   fields, domain) and its published values (`PREVIOUS_INDEX_FILE`) for bridging.
+10. **Late data** — which data typically arrive after the assessment (a nation's or vessel's
+    hauls, a late survey)? Record them as `LATE_COMPONENTS` and agree how the terminal year is
+    handled (`knowledge/data-filtering.md`).
+11. **Years** — first year to include (default `> 1980`).
+12. **Domain** — study area / prediction region, CRS (EPSG), grid cell size (km), mesh cutoff
+    (km), barrier mesh yes/no, depth range of the grid (`MIN_DEPTH`, `MAX_DEPTH`). Has an area
+    entered the survey mid-series (`knowledge/regions.md`)? GIS polygons are **user-supplied**
+    and go in the project's `data/source/` — never in the template.
+13. **Russian data** — included by default; ask only if they want to exclude it.
+14. **Human metadata** — accountable authors and affiliations using wise-writing's
     `AUTHORS` and `AFFILIATIONS` schema; confirm exact AI models and roles before reporting.
-11. **Outputs** — which are official vs exploratory vs draft?
+15. **Outputs** — which are official vs exploratory vs draft?
 
 ## Step 2 — Plan (plan mode)
 
 Summarise the answers, the resulting `config.yaml`, the documents to be created, and the order
 of work. **Confirm with the user before scaffolding.** Flag anything ambiguous (e.g. the
-gear-width/geartype-covariate implication, or AR1 vs IID for the selected index).
+gear-width/geartype-covariate implication, AR1 vs IID for the selected index, the index-year
+definition when seasons are combined, or how late-arriving data are handled).
 
 ## Step 3 — Scaffold
 

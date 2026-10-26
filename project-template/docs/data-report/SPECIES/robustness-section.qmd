@@ -1,0 +1,81 @@
+<!-- Included by report.qmd. Shares its params. Robustness of the total index to the data it
+rests on (config ROBUSTNESS and LATE_COMPONENTS): whole-station subsampling within years,
+start-year peels, the terminal year without data that usually arrive late, and down-weighting
+of years with a known problem. Each run refits the selected model on a fresh mesh at the same
+cutoff (refit_on()); a barrier mesh is not rebuilt there. These are diagnostics of the final
+model, never criteria for choosing it. -->
+
+```{r, eval=params$include_robustness}
+#| label: fig-robustness-section-runs
+#| fig-cap: "Total index under station subsampling (A), start-year peels (B) and, where configured, the terminal year without late-arriving data (C) and down-weighted years (D), each panel with the full model. Every run is rescaled to its mean over the years it shares with the full model."
+#| fig-height: 8
+#| output: asis
+cat("## Robustness\n\n")
+fit_total <- readRDS(file.path(out_dir, "model-fit-total.rds"))
+rob <- cfg$ROBUSTNESS %||% list()
+rob_index <- function(fit) predict_index(fit, grid, area = grid_cell_area_nmi2,
+                                         bias_correct = FALSE)
+base_index <- rob_index(fit_total)
+rescale_to_base <- function(index, run, panel, replicate = 1L) {
+  shared <- intersect(index$year, base_index$year)
+  dplyr::mutate(index, relative = est / mean(est[year %in% shared]), run = run, panel = panel,
+                replicate = replicate)
+}
+runs <- list(rescale_to_base(base_index, "full model", "all"))
+
+# A. Whole stations within each year, so no station is split.
+for (p in unlist(rob$subsample_props %||% c(0.5, 0.75, 0.9))) {
+  for (r in seq_len(rob$subsample_reps %||% 5)) {
+    f <- refit_on(fit_total, subsample_stations(dt, p, seed = r), cutoff = cfg$MESH_CUTOFF_KM)
+    runs[[length(runs) + 1]] <- rescale_to_base(rob_index(f), paste0(100 * p, "% stations"), "A", r)
+  }
+}
+# B. Drop the first 1..n years.
+for (k in seq_len(rob$start_year_peels %||% 3)) {
+  f <- refit_on(fit_total, dplyr::filter(dt, year >= min(dt$year) + k), cutoff = cfg$MESH_CUTOFF_KM)
+  runs[[length(runs) + 1]] <- rescale_to_base(rob_index(f), paste("from", min(dt$year) + k), "B")
+}
+# C. The terminal year as it would look if the late-arriving component were missing.
+late <- cfg$LATE_COMPONENTS
+if (!is.null(late) && length(late$values)) {
+  if (!late$column %in% names(dt)) stop("LATE_COMPONENTS column '", late$column, "' is not in the data.")
+  dt_late <- dplyr::filter(dt, !(year == max(year) & .data[[late$column]] %in% late$values))
+  f <- refit_on(fit_total, dt_late, cutoff = cfg$MESH_CUTOFF_KM)
+  runs[[length(runs) + 1]] <- rescale_to_base(rob_index(f), "terminal year without late data", "C")
+}
+# D. Down-weight years with a known problem (weights act on the likelihood, not the data).
+dw_years <- unlist(rob$downweight_years)
+if (length(dw_years)) {
+  w <- ifelse(fit_total$data$year %in% dw_years, rob$downweight_value %||% 0.1, 1)
+  f <- update(fit_total, weights = w)
+  runs[[length(runs) + 1]] <- rescale_to_base(rob_index(f),
+    paste("weight", rob$downweight_value %||% 0.1, "in", paste(dw_years, collapse = ", ")), "D")
+}
+robustness <- dplyr::bind_rows(runs)
+saveRDS(robustness, file.path(out_dir, "robustness.rds"))
+
+full <- dplyr::filter(robustness, panel == "all") |> dplyr::select(year, full = relative)
+panels <- setdiff(unique(robustness$panel), "all")
+plot_data <- dplyr::bind_rows(lapply(panels, function(pn) dplyr::bind_rows(
+  dplyr::filter(robustness, panel == pn),
+  dplyr::mutate(dplyr::filter(robustness, panel == "all"), panel = pn)
+)))
+print(
+  ggplot2::ggplot(plot_data, ggplot2::aes(year, relative, group = interaction(run, replicate),
+                                          colour = run)) +
+    ggplot2::geom_line(alpha = 0.6) +
+    ggplot2::facet_wrap(~panel, ncol = 1, scales = "free_y") +
+    ggplot2::labs(x = "Index year", y = "Index relative to shared-year mean", colour = NULL) +
+    ggplot2::theme(legend.position = "bottom")
+)
+
+terminal <- robustness |>
+  dplyr::filter(year == max(base_index$year), panel != "all") |>
+  dplyr::left_join(full, by = "year") |>
+  dplyr::group_by(panel, run) |>
+  dplyr::summarise(terminal_change = mean(relative / full - 1), runs = dplyr::n(), .groups = "drop")
+print(knitr::kable(terminal, digits = 3,
+                   caption = "Mean relative change of the terminal-year index against the full model, per robustness run."))
+```
+
+<!-- Describe the supported finding and refer to @fig-robustness-section-runs. State how far the terminal year moves under subsampling and late data, and whether the start-year peels change the trend. -->

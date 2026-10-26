@@ -45,6 +45,10 @@ https://github.com/DeepWaterIMR/index-wise`).
 | 2. Fit first model | `docs/data-report/fit/fit.qmd` | `index-fit-model` |
 | 3. Validate / select | `docs/data-report/validation/validate.qmd` | `index-validate-model` |
 | 4. Final report + export | `docs/data-report/{{SPECIES_SLUG}}/report.qmd` (+ `*-section.qmd`) | `index-final-report` |
+| Optional: commercial CPUE | `docs/data-report/cpue/cpue.qmd` (`CPUE:` block of `config.yaml`) | `index-cpue-data`, `index-cpue-model` |
+
+Logbook and sales-note records are confidential at the record level: keep the extract in
+`data/source/cpue/`, and show only aggregates (no individual vessels, positions in cells).
 
 Full rebuild: `Rscript docs/render.R` (slow — see the rendering rules).
 

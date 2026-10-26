@@ -34,12 +34,22 @@ LENGTH_GROUPS: ["(0,10]", "(10,15]", "(15,20]", "(20,25]", "(25,30]", "(30,40]",
 # --- Gear width ---
 GEAR_WIDTH: "per_gear"   # 25 m shrimp/Campelen, ~94 m cod/Alfredo
 
+# --- Effort, index year and catchability (template defaults) ---
+EFFORT: "density"
+INDEX_YEAR_START_MONTH: 1
+INDEX_YEAR_LABEL: "start"
+SURVEY_EFFECT: false
+REFERENCE_SURVEY: null
+CATCHABILITY_TERMS: []
+CATCHABILITY_REFERENCE: {}
+
 # --- Spatial domain & mesh ---
 CRS: 32633               # UTM 33N
 GRID_KM: 10
 MESH_CUTOFF_KM: 60
 BARRIER: false
 MAX_DEPTH: 1400
+MIN_DEPTH: null
 
 # --- Model ---
 FAMILY: "delta_lognormal"
@@ -47,6 +57,17 @@ SPATIOTEMPORAL: "ar1"
 INCLUDE_TEMPERATURE: false
 ASSESSMENT_MODEL: "SPiCT"
 SELECTED_INDEX: "Over 30 cm biomass"
+
+# --- Late data, bridging and robustness (template defaults) ---
+LATE_COMPONENTS: null
+PREVIOUS_INDEX_FILE: null
+REVISION_TOLERANCE: 0.2
+ROBUSTNESS:
+  subsample_props: [0.5, 0.75, 0.9]
+  subsample_reps: 5
+  start_year_peels: 3
+  downweight_years: []
+  downweight_value: 0.1
 
 # --- Paths ---
 OUTPUT_DIR: "data/output"

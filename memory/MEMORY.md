@@ -8,3 +8,5 @@ those carry their own `memory/`). One line per file.
 - [conventions.md](conventions.md) — house rules for editing this repo.
 - [first-project-lessons.md](first-project-lessons.md) — reusable workflow, filtering, mapping,
   document-structure, and provenance lessons from the first complete project.
+- [cpue-lessons.md](cpue-lessons.md) — design of the commercial CPUE layer and the practices it
+  was distilled from.

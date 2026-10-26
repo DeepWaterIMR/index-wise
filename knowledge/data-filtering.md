@@ -164,11 +164,16 @@ width for all trawls:
 stn <- stn |>
   dplyr::mutate(
     gear_width    = 25,                          # metres; common effective width for all trawls
-    swept_area    = distance * (gear_width / 1852),   # nmi² (1852 m per nmi)
+    swept_area    = swept_area_nmi2(distance, gear_width),  # nmi²: distance × width / 1852
     rho_biomass   = biomass / swept_area,      # kg   · nmi⁻²
     rho_abundance = count   / swept_area       # n    · nmi⁻²
   )
 ```
+
+Keep `swept_area` in the compiled data even when the model uses densities: `EFFORT: "offset"`
+models catch with `log(swept_area)` as offset, and the Step 2 scale check needs both. Do the
+unit conversion only through `swept_area_nmi2()` (project `R/index_helpers.R`); see
+`sdmtmb.md` *Effort and the index scale*.
 
 ### Gear width is a documented simplification
 
@@ -176,6 +181,63 @@ Use a common 25 m effective width for all trawls when the project adopts the sim
 If more than one major gear type is represented, keep `geartype` in the spatial GLMM as a fixed
 effect so the model can estimate systematic gear differences. Revert to gear-specific widths
 only if diagnostics show that the common-width assumption is inadequate.
+
+## Index year
+
+The model's time step is the **index year**. It equals the calendar year unless the surveys
+that belong together straddle New Year: an autumn survey and the following winter survey, or a
+season from July to June. Set `INDEX_YEAR_START_MONTH` (the month an index year begins) and
+`INDEX_YEAR_LABEL` (`"start"` or `"end"`: which calendar year names it):
+
+| Design | `START_MONTH` | `LABEL` | Autumn Y | Winter Y+1 |
+|---|---|---|---|---|
+| Calendar year | 1 | – | Y | Y+1 |
+| Season July–June, named by its start | 7 | `"start"` | Y | Y |
+| Season July–June, named by its end | 7 | `"end"` | Y+1 | Y+1 |
+
+`index_year()` computes it from `startyear` and `month`. Keep `startyear` (calendar) beside
+`index_year` in the compiled data, label every model figure by index year, and use index years
+for every year-specific setting (skipped years, down-weighted years, the previous index).
+Mixing the two conventions puts a setting one year off without any error.
+
+## Individual data: missing is not zero
+
+Size-, sex-, maturity- and length-based products split a station's catch using its measured
+individuals. A positive station **without** measured individuals has an unknown split. It stays
+in the total product and is **missing** from the class products. Zero-filling it is the common
+error: a join of length groups onto stations followed by `tidyr::complete(fill = 0)` or
+`replace_na(share, 0)` silently turns such stations into zeros at every length, and biases the
+class indices low in years with incomplete sampling.
+
+1. Record `n_measured` (measured target individuals per haul, 0 when none) in Step 1.
+2. Report per index year the share of positive hauls and of catch without measurements
+   (`length_coverage()`; data-report table).
+3. Then either drop those hauls from the class products only, or impute their class shares
+   from a pooled distribution (same index year and stratum, else same year, else all years) and
+   flag them:
+
+   ```r
+   pooled <- shares |>                       # shares: haul_id, class, share (measured hauls)
+     dplyr::left_join(dplyr::select(dt, haul_id, year, stratum), by = "haul_id") |>
+     dplyr::group_by(year, stratum, class) |>
+     dplyr::summarise(w = sum(share), .groups = "drop_last") |>
+     dplyr::mutate(pooled_share = w / sum(w)) |>
+     dplyr::ungroup()
+   # class_source: "measured" | "imputed" | "no catch" — keep it in the compiled class data.
+   ```
+
+4. Raise measured individuals to the catch (`catchcount / lengthsamplecount`); summing the
+   measured individuals is correct only when every individual was measured.
+
+## Data that arrive after the assessment
+
+Some components are routinely incomplete in the terminal year: another nation's vessel, a
+charter vessel, a late-entered survey. Ask during scaffolding, set
+`LATE_COMPONENTS: {column: ..., values: [...]}`, and let the data report show their haul counts
+in recent years. Decide with the assessment lead whether the terminal year is used as it is
+(wider uncertainty, revised next year) or the component is excluded from the whole series; the
+robustness section shows how far the terminal year moves without it. Including a nation's data
+by default (as for Russian data above) does not settle when those data arrive.
 
 ## Depth
 
