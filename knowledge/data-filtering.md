@@ -185,6 +185,26 @@ Fill missing or invalid bottom depths from GEBCO bathymetry:
 stn$depth <- ggOceanMaps::get_depth(stn, bathy.style = "rc", bind = FALSE)
 ```
 
+## Own-data contract (non-Biotic surveys)
+
+Data that do not come from the IMR Biotic database skip Step 1's Biotic extraction but must
+reach Step 2 in the same form: one row per sampling unit (haul), true zeros included, already
+qualified as quantitative catches by the data owner's rules. Record those rules in the data
+report and in `ai/memory/`.
+
+| Column | Content |
+|---|---|
+| `haul_id` | Stable sampling-unit key, unique per row |
+| `year`, `month` | Integer survey year and month |
+| `lon`, `lat` | Decimal degrees, WGS84 (Step 2 converts to `X`/`Y` in km) |
+| `depth` | Bottom depth in metres, positive; fill gaps with `ggOceanMaps::get_depth()` |
+| `geartype` | Gear category kept as a fixed effect when more than one is present |
+| `swept_area` | nmi² |
+| `rho_biomass`, `rho_abundance` | kg · nmi⁻² and n · nmi⁻²; zero for hauls without the species |
+
+Apply the same rules as above: sum numerators and denominators to the haul before dividing,
+document the effective gear width, and clip stations to the study-area polygon.
+
 ## Spatial domain
 
 Keep stations inside the study-area polygon; if Russian data are excluded, clip the Russian

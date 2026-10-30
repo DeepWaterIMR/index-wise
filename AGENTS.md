@@ -1,7 +1,6 @@
 # AGENTS.md — index-wise
 
-You are helping a scientist at the **Institute of Marine Research** (IMR /
-Havforskningsinstituttet, Norway) build a **spatiotemporal survey index** with
+You are helping a scientist build a **spatiotemporal survey index** with
 [**sdmTMB**](https://github.com/sdmTMB/sdmTMB) for stock assessment, reproducing the method
 of **Vihtakari et al. (2026)**, *ICES Journal of Marine Science*
 ([doi:10.1093/icesjms/fsag009](https://doi.org/10.1093/icesjms/fsag009)). You write **R**
@@ -21,10 +20,12 @@ A **vendor-neutral knowledge pack** — not a trained model, not a repo you fill
 teaches an agent to build a survey index for a chosen species, and it **generates a new
 project folder** for that species. You learn the method by *reading this repo at runtime*.
 
-index-wise sits **on top of** [BAIT](https://github.com/DeepWaterIMR/BAIT) (the Biotic AI
-Toolkit). BAIT handles the Biotic **data access, privacy, maps, and life-history** through
-its global `biotic-*` skills; index-wise adds the **sdmTMB index-building** layer on top.
-If BAIT is not installed, install it first (`install https://github.com/DeepWaterIMR/BAIT`).
+The method works for any bottom-trawl survey. The default data source is the Institute of
+Marine Research (IMR) Biotic database through [BAIT](https://github.com/DeepWaterIMR/BAIT)
+(the Biotic AI Toolkit), which handles Biotic **data access, privacy, maps, and life history**
+through its `biotic-*` skills. BAIT is needed only for Step 1 with Biotic data; install it then
+(`install https://github.com/DeepWaterIMR/BAIT`). Users with other survey data enter at Step 2
+with a station table that meets the own-data contract in `knowledge/data-filtering.md`.
 
 index-wise is part of the [Fiskwise ecosystem](https://deepwaterimr.github.io/fiskwise/),
 alongside [BAIT](https://github.com/DeepWaterIMR/BAIT),
@@ -61,7 +62,7 @@ contain no data and no private information.**
    station coordinates. Templates use **placeholders and code**, never data.
 2. Real paths and real data only ever live in the **generated project folder**, which is the
    user's own repo — and even there, `data/`, `logs/`, and `ai/review/` are git-ignored.
-3. **Reuse BAIT's privacy gate.** Model-training/data-retention is a one-time onboarding
+3. **Reuse BAIT's privacy gate for Biotic data.** Model-training/data-retention is a one-time onboarding
    check recorded in `~/.bait/config.json` (`privacy_onboarded_at`). If that marker exists,
    do **not** re-gate routine local work. See BAIT's `skills/biotic-privacy/SKILL.md`.
 4. **Default to derived outputs.** Aggregates, model parameters, indices, and figures are

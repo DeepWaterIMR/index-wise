@@ -23,6 +23,8 @@ swept-area density for the target species, plus a data report. **Read
 most often go wrong.
 
 **Prerequisites:** a locally installed BES Biotic database and an **IMR intranet connection**.
+For other survey data, skip the Biotic extraction and deliver a station table that meets the
+own-data contract in `knowledge/data-filtering.md`, then document it in the data report.
 Use BAIT for data access: `biotic-server-setup` (if the DB is missing/stale), `biotic-connect`,
 `biotic-query`, `taxaindex` (species) and the cruise-series lookup (surveys).
 

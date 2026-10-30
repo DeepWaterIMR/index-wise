@@ -3,7 +3,7 @@
 # 📈 index-wise — Build sdmTMB survey indices with AI agents
 
 <!-- version -->
-**Version 0.2.7** (2026-10-30)
+**Version 0.2.8** (2026-10-30)
 <!-- /version -->
 
 **Teach your AI coding agent to build a spatiotemporal survey index for stock assessment — for any species, on your own machine.**
@@ -84,7 +84,7 @@ Long renders are compiled with [`index-render`](skills/index-render/SKILL.md) in
 
 ## 🧰 Siblings
 
-- [**BAIT**](https://github.com/DeepWaterIMR/BAIT) — IMR Biotic data access, the database, privacy, maps, life history. **Required.**
+- [**BAIT**](https://github.com/DeepWaterIMR/BAIT) — IMR Biotic data access, the database, privacy, maps, life history. **Required for Biotic data** (Step 1); other survey data can use the own-data contract in [`knowledge/data-filtering.md`](knowledge/data-filtering.md).
 - [**wise-writing**](https://github.com/DeepWaterIMR/wise-writing) — the writing style, document conventions, and shared project layout. **Required when scaffolding reports**; install it on demand.
 - [**spict-wise**](https://github.com/DeepWaterIMR/spict-wise) — SPiCT biomass-dynamic stock assessments. **The index this pack exports is what a SPiCT assessment consumes**; step 4's selected index becomes SPiCT's `obsI`.
 - [**wise-presentations**](https://github.com/DeepWaterIMR/wise-presentations) — Quarto RevealJS slides.
