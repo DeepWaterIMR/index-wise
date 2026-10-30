@@ -1,6 +1,6 @@
 ---
 name: index-compile-data
-description: Step 1 of the index workflow — compile bottom-trawl survey data for a species from the IMR Biotic database (and optional SPD files), apply the quantitative-catch filtering, remove duplicates, compute swept-area density, and write a data report. Use after a project is scaffolded and the user is ready to prepare the data. Needs a local BES database and IMR intranet.
+description: Step 1 of the index workflow — compile bottom-trawl survey data for a species from the IMR Biotic database (and optional SPD files), apply the quantitative-catch filtering, remove duplicates, compute swept-area density, and write a data report. Use after a project is scaffolded and the user is ready to prepare the data. Needs a local BES database and IMR intranet. For sdmTMB index work outside a scaffolded index-wise project, use index-sdmtmb.
 ---
 
 <!-- pack-resources:start -->

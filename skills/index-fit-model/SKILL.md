@@ -1,6 +1,6 @@
 ---
 name: index-fit-model
-description: Step 2 of the index workflow — fit the first feasible sdmTMB model (no length groups) to confirm the method works, build the prediction grid, and compute a survey index. Use after the data are compiled (step 1) and the user is ready to model.
+description: Step 2 of the index workflow — fit the first feasible sdmTMB model (no length groups) to confirm the method works, build the prediction grid, and compute a survey index. Use after the data are compiled (step 1) and the user is ready to model. For sdmTMB index work outside a scaffolded index-wise project, use index-sdmtmb.
 ---
 
 <!-- pack-resources:start -->

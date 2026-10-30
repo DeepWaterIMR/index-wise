@@ -42,8 +42,8 @@ a separate opt-in BAIT action. Use `fiskwise-workflow` to route requests spannin
   memory files there). Do **not** use `~/.claude/projects/.../memory/` for project facts —
   that folder is only for user-level preferences/identity.
 - **Skills** — when the user types `/index-...` or asks to build/validate/report an index,
-  invoke the matching skill. When they ask for Biotic data access, defer to BAIT's `biotic-*`
-  skills.
+  invoke the matching skill. Outside a scaffolded project, use `index-sdmtmb`. When they ask
+  for Biotic data access, defer to BAIT's `biotic-*` skills.
 - **Plan mode** — after the questionnaire in `index-new-project`, use plan mode to confirm
   the approach before scaffolding and rendering.
 - **Code review before render** — Quarto renders are slow; review changed chunks and fix issues

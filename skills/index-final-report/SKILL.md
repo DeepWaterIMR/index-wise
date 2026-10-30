@@ -1,6 +1,6 @@
 ---
 name: index-final-report
-description: Step 4 of the index workflow — build the final model report with extensions (multiple indices, length groups, and optional mesh/barrier/retro/CV/survey-comparison sections) and export the selected index for assessment. Use after the model is validated (step 3). Modelled on ref-assessment-index/benchmark/beaked.
+description: Step 4 of the index workflow — build the final model report with extensions (multiple indices, length groups, and optional mesh/barrier/retro/CV/survey-comparison sections) and export the selected index for assessment. Use after the model is validated (step 3). Modelled on ref-assessment-index/benchmark/beaked. For sdmTMB index work outside a scaffolded index-wise project, use index-sdmtmb.
 ---
 
 <!-- pack-resources:start -->

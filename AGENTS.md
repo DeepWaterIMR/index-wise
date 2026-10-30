@@ -100,6 +100,7 @@ into `knowledge/`) before acting.
 | Install / set up index-wise                              | `skills/index-install/SKILL.md` |
 | Update it (git pull + re-sync skills)                        | `skills/index-update/SKILL.md` |
 | Create / validate study-region polygons                       | `skills/index-make-regions/SKILL.md` |
+| Any sdmTMB index question, in any project layout             | `skills/index-sdmtmb/SKILL.md` |
 | **Start** a new species index (questionnaire → scaffold)     | `skills/index-new-project/SKILL.md` |
 | **Step 1** — compile & report the data                       | `skills/index-compile-data/SKILL.md` |
 | **Step 2** — fit the first feasible model                    | `skills/index-fit-model/SKILL.md` |

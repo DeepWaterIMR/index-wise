@@ -1,6 +1,6 @@
 ---
 name: index-validate-model
-description: Step 3 of the index workflow — validate and select the sdmTMB model via cross-validation and sensitivity analysis (component ranking, fixed effects, family, spatiotemporal structure, mesh resolution, retrospective). Use after a first feasible model works (step 2).
+description: Step 3 of the index workflow — validate and select the sdmTMB model via cross-validation and sensitivity analysis (component ranking, fixed effects, family, spatiotemporal structure, mesh resolution, retrospective). Use after a first feasible model works (step 2). For sdmTMB index work outside a scaffolded index-wise project, use index-sdmtmb.
 ---
 
 <!-- pack-resources:start -->

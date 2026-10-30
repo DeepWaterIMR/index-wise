@@ -3,7 +3,7 @@
 # 📈 index-wise — Build sdmTMB survey indices with AI agents
 
 <!-- version -->
-**Version 0.2.8** (2026-10-30)
+**Version 0.2.9** (2026-10-30)
 <!-- /version -->
 
 **Teach your AI coding agent to build a spatiotemporal survey index for stock assessment — for any species, on your own machine.**
@@ -64,6 +64,7 @@ This repo is **public and contains instructions only — never data**:
 |------|-------|
 | Scaffold a project (questionnaire + plan) | [`index-new-project`](skills/index-new-project/SKILL.md) |
 | Create valid study-region polygons | [`index-make-regions`](skills/index-make-regions/SKILL.md) |
+| Ask about or review an sdmTMB index in any project | [`index-sdmtmb`](skills/index-sdmtmb/SKILL.md) |
 | **1.** Compile & report the data | [`index-compile-data`](skills/index-compile-data/SKILL.md) |
 | **2.** Fit the first feasible model | [`index-fit-model`](skills/index-fit-model/SKILL.md) |
 | **3.** Validate / select the model | [`index-validate-model`](skills/index-validate-model/SKILL.md) |
