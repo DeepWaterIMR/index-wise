@@ -4,14 +4,10 @@ description: Step 3 of the index workflow — validate and select the sdmTMB mod
 ---
 
 <!-- pack-resources:start -->
-**Pack resources:** resolve `index-wise` from `~/.index-wise/config.json` → `index_template_path` (or
-`~/.fiskwise/config.json` → `components.index-wise.path`). If neither exists, use the
-checkout containing this skill, or locate/obtain the pack through its install instructions.
-Paths such as `knowledge/`, `cookbook/`, `config/` and `project-template/` belong to that
-repository, not the current research directory. For a copied skill, resolve a link that
-leaves this skill's directory against the corresponding source skill under that root;
-keep bundled `references/` links relative to the skill. Never assume `../../` from an
-agent's global skills folder reaches the repository. Use absolute resolved script paths.
+**Pack resources:** the `index-wise` root is `~/.index-wise/config.json` → `index_template_path`, else `~/.fiskwise/config.json` →
+`components.index-wise.path`, else the checkout containing this skill. Paths such as `knowledge/`
+and `project-template/` are relative to that root, never `../../` from a skills folder; resolve
+links that leave this skill's folder against the source skill there. Use absolute paths.
 <!-- pack-resources:end -->
 
 

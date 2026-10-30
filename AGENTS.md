@@ -8,9 +8,8 @@ with **tidyverse** syntax; figures with **ggplot2**, maps with
 [**ggOceanMaps**](https://mikkovihtakari.github.io/ggOceanMaps/), and index-specific helpers
 from [**sdmTMBexperiments**](https://github.com/DeepWaterIMR/sdmTMBexperiments).
 
-> This is the entry point for **Codex, Cursor, Gemini CLI, Mistral, and other agents**.
-> Claude Code reads the equivalent pointer in [`CLAUDE.md`](CLAUDE.md). Keep substantive
-> guidance in sync while preserving agent-specific setup notes.
+> Entry point for every agent. Claude Code imports this file from [`CLAUDE.md`](CLAUDE.md),
+> which adds only Claude-specific notes.
 
 ---
 
@@ -192,10 +191,6 @@ reports under `docs/data-report/`; shared assets belong in `docs/assets/`, proje
 
 ## Fiskwise version policy
 
-Follow the [shared version policy](https://github.com/DeepWaterIMR/fiskwise/blob/main/docs/VERSIONING.md).
-Every ordinary authored commit increments the patch by 0.0.1 and stamps the current date
-(`VERSION` for knowledge packs; `DESCRIPTION` `Version` and `Date` for R packages).
-Only an explicit user request may set `FISKWISE_VERSION_BUMP=minor|major`. Never choose one
-autonomously or create tags/releases automatically. Let `.githooks/pre-commit` enforce the
-policy, preserve other custom hooks, and replay existing stamps unchanged during merges or
-rebases.
+Maintainers: the `.githooks/pre-commit` hook bumps the patch version and date on every commit;
+minor or major bumps only on the user's explicit request. Details: `CONTRIBUTING.md` and the
+[shared policy](https://github.com/DeepWaterIMR/fiskwise/blob/main/docs/VERSIONING.md).
