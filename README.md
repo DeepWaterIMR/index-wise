@@ -3,7 +3,7 @@
 # 📈 index-wise — Build sdmTMB survey indices with AI agents
 
 <!-- version -->
-**Version 0.2.6** (2026-10-26)
+**Version 0.2.7** (2026-10-30)
 <!-- /version -->
 
 **Teach your AI coding agent to build a spatiotemporal survey index for stock assessment — for any species, on your own machine.**
@@ -26,6 +26,7 @@ index-wise owns the **sdmTMB index-building** workflow. BAIT handles Biotic **da
 You may install and update packs through Fiskwise's managed lifecycle, or use the standalone
 pack skills in this repository. Shared writing/reporting dependencies are installed on demand;
 they are not a prerequisite for the index-wise pack itself.
+The versioned assessment index also feeds survey indices of [spict-wise](https://github.com/DeepWaterIMR/spict-wise) and [gadget-wise](https://github.com/DeepWaterIMR/gadget-wise) models.
 Use `fiskwise-workflow` for requests spanning packs. For managed R tasks, always use
 **`r-code-style`**. The coordinator's lifecycle skills are `fiskwise-install`,
 `fiskwise-update`, and `fiskwise-uninstall`.
