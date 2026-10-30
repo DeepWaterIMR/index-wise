@@ -81,7 +81,8 @@ set of assessment products:
 - **Multiple indices**: total biomass, over-X-cm biomass, and length-group abundance indices.
 - **Optional include sections** (`*-section.qmd`, switched by a YAML param + a compute
   toggle): mesh comparison, barrier mesh, retrospective, cross-validation, survey comparison.
-- **Choose the assessment index** and export it (year, est, lwr, upr, se) to `data/output`.
+- **Choose the assessment index** and export it as the `assessment-index.rds` hand-off
+  (`assessment-index-handoff.md`) to `data/output`.
 
 Note the structural choice: total/length indices use `spatiotemporal = "ar1"` and **no** year
 fixed effect; the assessment-selected index (feeding e.g. SPiCT) often uses `iid` and **year

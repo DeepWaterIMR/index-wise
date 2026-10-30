@@ -35,8 +35,8 @@ conventions to every generated artifact; retain index-wise's scientific workflow
    simulation-based diagnostics.
 3. **Bias correction** — `bias_correct = TRUE` for the final index runs (slow; behind a
    toggle).
-4. **Export** the selected index (`year, est, lwr, upr, se`) to `data/output/` in the shape the
-   assessment consumes (e.g. an `.rds` for a SPiCT project).
+4. **Export** the selected index as the versioned `assessment-index.rds` hand-off
+   (`knowledge/assessment-index-handoff.md`); spict-wise and gadget-wise read it directly.
 
 ## Optional include sections
 

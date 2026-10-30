@@ -59,5 +59,6 @@ Otherwise, work in the user's own structure and conventions, and use this skill.
 - Use the `sdmTMBexperiments` helpers rather than hand-rolled loops when the project already
   uses or allows them; otherwise reproduce the convention and cite the knowledge file.
 - Long fits and renders: run detached with a log (see `knowledge/rendering.md`).
-- Exported indices that feed an assessment follow `spict-wise`'s index contract (`year`, `est`,
-  `se` on the log scale); record the producing commit.
+- An index that feeds an assessment goes out as the versioned hand-off in
+  `knowledge/assessment-index-handoff.md`, which spict-wise and gadget-wise read; record the
+  producing commit.

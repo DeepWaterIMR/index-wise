@@ -29,9 +29,14 @@ with a station table that meets the own-data contract in `knowledge/data-filteri
 index-wise is part of the [Fiskwise ecosystem](https://deepwaterimr.github.io/fiskwise/),
 alongside [BAIT](https://github.com/DeepWaterIMR/BAIT),
 [wise-writing](https://github.com/DeepWaterIMR/wise-writing),
-[spict-wise](https://github.com/DeepWaterIMR/spict-wise), and
+[spict-wise](https://github.com/DeepWaterIMR/spict-wise),
+[gadget-wise](https://github.com/DeepWaterIMR/gadget-wise), and
 [wise-presentations](https://github.com/DeepWaterIMR/wise-presentations). Follow each
 project's own skills and routing guidance for its workflow.
+
+**Upstream:** BAIT (IMR Biotic data) or the own-data contract. **Downstream:** spict-wise and
+gadget-wise read the selected index through `knowledge/assessment-index-handoff.md`;
+wise-writing and wise-presentations carry the report and slides.
 
 ### Pack boundaries and shared skills
 
@@ -118,6 +123,8 @@ Shared knowledge lives in `knowledge/`:
 - `model-selection.md` — **the comparability contract** for Step 3: identical records, when
   AIC is and is not comparable, per-observation hold-out likelihood, the selection stages,
   AIC-then-CV cost control, and how to report a carried-forward model that is not the winner.
+- `assessment-index-handoff.md` — the versioned format that passes the selected index to
+  spict-wise and gadget-wise.
 - `packages.md` — the package ecosystem and install lines.
 - `project-structure.md` — the structure of the generated project folder.
 - `rendering.md` — Quarto rendering, screen sessions, logs, toggles, figure formats.
