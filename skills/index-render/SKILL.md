@@ -35,7 +35,7 @@ may not be installed in every agent environment.
 ## Step 3 — Render detached with a log
 
 Use a background process and save output to `logs/` so rendering can continue after the
-conversation or terminal closes. `screen` is one option on systems where it is installed:
+conversation or terminal closes. `screen` is one option on systems where it is installed. Fill placeholders such as `<slug>`, `<doc>` and `<path>` with plain names (letters, digits, `_`, `-`, and `/` in paths); never paste user text containing quotes, `$`, `;` or backticks into these commands.
 
 ```bash
 screen -dmS <slug>-<doc> bash -c '

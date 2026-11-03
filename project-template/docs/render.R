@@ -20,7 +20,7 @@ if (!requireNamespace("quarto", quietly = TRUE))
 if (!requireNamespace("yaml", quietly = TRUE))
   stop("The 'yaml' package is required: install.packages('yaml')")
 
-cfg  <- yaml::read_yaml("config.yaml")
+cfg  <- yaml::read_yaml("config.yaml", eval.expr = FALSE)
 slug <- cfg$SPECIES_SLUG
 region_slug <- if (!is.null(cfg$REGION_SLUG)) cfg$REGION_SLUG else if (!is.null(cfg$REGION)) cfg$REGION else "all"
 

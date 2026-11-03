@@ -19,7 +19,7 @@
 .read_yaml_utf8 <- function(path) {
   txt <- readChar(path, file.info(path)$size, useBytes = TRUE)
   Encoding(txt) <- "UTF-8"
-  yaml::yaml.load(txt)
+  yaml::yaml.load(txt, eval.expr = FALSE)
 }
 
 # --- Locate the project-template/ directory -------------------------------------------

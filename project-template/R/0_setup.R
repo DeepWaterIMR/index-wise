@@ -96,7 +96,7 @@ package_setup(packages, install_missing_packages = install_missing_packages,
 .read_yaml_utf8 <- function(path) {
   txt <- readChar(path, file.info(path)$size, useBytes = TRUE)
   Encoding(txt) <- "UTF-8"
-  yaml::yaml.load(txt)
+  yaml::yaml.load(txt, eval.expr = FALSE)
 }
 cfg <- .read_yaml_utf8(.find_config())
 

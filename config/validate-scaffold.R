@@ -25,7 +25,7 @@ unlink(c(file.path(workspace, ".index-wise", "config.json"),
          file.path(workspace, ".index-template", "config.json")))
 stopifnot(normalizePath(.find_template()) == normalizePath("project-template"))
 if (is.na(old_home)) Sys.unsetenv("HOME") else Sys.setenv(HOME = old_home)
-cfg <- yaml::read_yaml("examples/redfish/config.yaml")
+cfg <- yaml::read_yaml("examples/redfish/config.yaml", eval.expr = FALSE)
 cfg$AUTHORS <- list(list(name = 'Test: Åuthor "One"', affiliation = "test"),
                     list(name = "Second Author", affiliation = c("test", "other")))
 cfg$AFFILIATIONS <- list(list(id = "test", name = "Synthetic Institute"),
@@ -53,7 +53,7 @@ stopifnot(all(dir.exists(file.path(target, c("ai/memory", "ai/tests", "ai/review
   "R", "docs/assets", "docs/data-report", "figures", "config", "logs")))))
 stopifnot(!any(file.exists(file.path(target, c("memory", "review", "R/00_setup.R")))))
 stopifnot(file.exists(file.path(target, ".here")),
-          yaml::read_yaml(file.path(target, "VERSION"))$version == "0.1.0")
+          yaml::read_yaml(file.path(target, "VERSION"), eval.expr = FALSE)$version == "0.1.0")
 qmds <- list.files(file.path(target, "docs"), "\\.qmd$", recursive = TRUE, full.names = TRUE)
 main <- qmds[!grepl("-section.qmd$", qmds)]
 stopifnot(length(main) == 5L)
@@ -79,7 +79,7 @@ for (path in qmds) {
   stopifnot(!in_r)
   if (!path %in% main) next
   ends <- which(text == "---")
-  header <- yaml::yaml.load(paste(text[(ends[1] + 1):(ends[2] - 1)], collapse = "\n"))
+  header <- yaml::yaml.load(paste(text[(ends[1] + 1):(ends[2] - 1)], collapse = "\n"), eval.expr = FALSE)
   stopifnot(header$author[[1]]$name == cfg$AUTHORS[[1]]$name,
             header$affiliations[[1]]$id == "test",
             header$author[[1]]$affiliations[[1]]$ref == "test",
