@@ -73,7 +73,8 @@ This report builds the indices the assessment needs. Define the response for eac
 - **Over-`r cfg$OVER_CM` cm biomass** — biomass of individuals above the threshold.
 - **Length-group abundance** — one index per group in `config.yaml` `LENGTH_GROUPS`.
 - **Selected assessment index** — `r cfg$SELECTED_INDEX` (feeds `r cfg$ASSESSMENT_MODEL`);
-  often `iid` + `year` as a fixed effect. Confirm with the assessment lead.
+  `iid` + `year` as a fixed effect for a state-space model such as SPiCT, which smooths the
+  series itself. Confirm with the assessment lead.
 
 ```{r fit-products, eval=params$refit_models}
 # Fit the total-biomass model (and length-based variants as needed). Example (total):

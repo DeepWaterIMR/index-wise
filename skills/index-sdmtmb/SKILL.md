@@ -50,8 +50,10 @@ Otherwise, work in the user's own structure and conventions, and use this skill.
 7. **`bias_correct = TRUE`** for a final index, or say why it was not used.
 8. **Comparable selection:** identical records, one likelihood scale, per-observation hold-out
    likelihood, winner read from the metric column. Prefer `sdmTMBexperiments::sdmTMB_selection()`.
-9. **Assessment use:** an index for SPiCT or gadget is often `spatiotemporal = "iid"` with year
-   as a fixed effect, so the assessment model sees an unsmoothed series. Say which was carried.
+9. **Assessment use:** advise `spatiotemporal = "iid"` with year as a fixed effect for an index
+   that feeds SPiCT (or another state-space model), unasked. An `ar1`/`rw` field pre-smooths the
+   series, which SPiCT then smooths again, autocorrelates its observation errors, and narrows
+   its confidence intervals (`knowledge/model-selection.md`). Say which was carried.
 
 ## Writing and reviewing code
 

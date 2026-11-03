@@ -315,7 +315,7 @@ plot(sel_st, type = "index", newdata = grid)
 
 ::: {.callout-important}
 ## The assessment constrains this choice, not only the fit
-Total and length-group indices use `spatiotemporal = "ar1"` with **no** year fixed effect. The assessment-selected index (here: `r cfg$ASSESSMENT_MODEL`) often uses `iid` with **year as a fixed effect**, so the series is not temporally smoothed before the assessment model sees it. If the table prefers `ar1` for the assessment index, say so and carry `iid` anyway — with the reason stated. Confirm with the user which product the assessment consumes.
+Total and length-group indices use `spatiotemporal = "ar1"` with **no** year fixed effect. The assessment-selected index (here: `r cfg$ASSESSMENT_MODEL`) uses `iid` with **year as a fixed effect** when that model is state-space, as SPiCT is: SPiCT separates process from observation error itself, and an `ar1` field would smooth the series twice, autocorrelate its observation errors and understate its uncertainty. If the table prefers `ar1` for the assessment index, say so and carry `iid` anyway — with the reason stated. Confirm with the user which product the assessment consumes.
 :::
 
 ## Stage 5 — Mesh resolution

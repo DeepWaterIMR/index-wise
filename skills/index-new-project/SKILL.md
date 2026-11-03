@@ -42,7 +42,8 @@ every answer for `ai/memory/scaffold-interview.md`.
    over-X-cm biomass (what threshold?), length-group abundances (which breaks)?
 6. **Assessment model** — what consumes the index (e.g. SPiCT)? This drives the
    spatiotemporal/year-effect choice for the selected index (AR1 + no year effect for total/
-   length; IID + year fixed effect for the assessment-selected index).
+   length; IID + year fixed effect for an index feeding SPiCT, which smooths the series
+   itself). If the answer is SPiCT, tell the user this now.
 7. **Years** — first year to include (default `> 1980`).
 8. **Domain** — study area / prediction region, CRS (EPSG), grid cell size (km), mesh cutoff
    (km), barrier mesh yes/no. GIS polygons are **user-supplied** and go in the project's

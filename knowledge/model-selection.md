@@ -346,12 +346,35 @@ trade worth making.
 
 ## The assessment constraint on the spatiotemporal structure
 
-Statistical fit is not the only criterion here. Total and length-group indices use
-`spatiotemporal = "ar1"` and **no** year fixed effect. The assessment-selected index (feeding
-e.g. SPiCT) often uses `iid` with **year as a fixed effect**, so that the series is not
-temporally smoothed before the assessment model sees it. If cross-validation prefers `ar1` for
-the assessment index, say so in the text and carry `iid` anyway, with the reason — see the next
-section.
+Statistical fit is not the only criterion here. Total and length-group indices, read as
+descriptions of the stock, use `spatiotemporal = "ar1"` and **no** year fixed effect. An index
+that feeds a state-space assessment model — **SPiCT above all**, and also SAM or a state-space
+JABBA — defaults to `spatiotemporal = "iid"` with **year as a fixed effect**
+(`formula = value ~ 0 + factor(year) + ...`). Advise this whenever `ASSESSMENT_MODEL` is SPiCT,
+without waiting to be asked.
+
+Why: an `ar1` or `rw` field, a smoother on year (`s(year)`), or `time_varying = ~ 1` all borrow
+strength across years, so each year's estimate is pulled towards its neighbours. That is
+smoothing, and SPiCT already smooths: it treats biomass as a latent state with process error
+(`sdb`) and the index as an observation of it with observation error (`sdi`). A pre-smoothed
+index therefore
+
+1. is **smoothed twice**, and SPiCT attributes too much of the variation to the latent state;
+2. carries **autocorrelated observation errors**, which breaks the independence the OSA residual
+   tests assume (Ljung–Box in `plotspict.diagnostic()`); and
+3. has **understated inter-annual variability and standard errors**, so `sdi` is
+   underestimated, `stdevfacI` is too small, and the advice confidence intervals are too narrow.
+
+With an `iid` field and year as a fixed effect, each year's level is estimated from that year's
+data alone, and its standard error — larger than under `ar1`, as it should be — goes to SPiCT as
+`stdevfacI`. Let the assessment model separate process from observation noise.
+
+If cross-validation prefers `ar1` for the assessment index, say so in the text and carry `iid`
+anyway, with the reason — see the next section. If a year has too few positive catches for its
+year effect to be estimated, report it and drop that year from the hand-off (SPiCT handles a
+missing year) rather than returning to `ar1`. For an assessment model that is not state-space
+(e.g. gadget3), the same independence argument applies to its likelihood, so prefer `iid` + year
+there too; confirm with the assessment lead.
 
 ## When the carried-forward model is not the winner
 

@@ -85,8 +85,9 @@ set of assessment products:
   (`assessment-index-handoff.md`) to `data/output`.
 
 Note the structural choice: total/length indices use `spatiotemporal = "ar1"` and **no** year
-fixed effect; the assessment-selected index (feeding e.g. SPiCT) often uses `iid` and **year
-as a fixed effect** to avoid temporal smoothing. Confirm with the user which the assessment
+fixed effect; the assessment-selected index for SPiCT (or another state-space model) uses `iid`
+and **year as a fixed effect**, because the assessment model smooths the series itself — see
+`model-selection.md`, *The assessment constraint*. Confirm with the user which the assessment
 consumes.
 
 ## Throughout

@@ -37,5 +37,7 @@ An `.rds` file (default `assessment-index.rds`) holding a list:
   in the same change. Consumers reject versions they do not know.
 - The consumer copies the file to its `data/source/` and records the producer commit in its
   project memory.
-- An index that feeds an assessment is usually fitted with `spatiotemporal = "iid"` and year as a
-  fixed effect (see `model-selection.md`); say which was carried.
+- An index that feeds SPiCT or another state-space assessment is fitted with
+  `spatiotemporal = "iid"` and year as a fixed effect, so the assessment model does not receive a
+  pre-smoothed series (see `model-selection.md`); record the structure carried in
+  `metadata$provenance`.

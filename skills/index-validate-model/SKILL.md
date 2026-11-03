@@ -38,8 +38,10 @@ first:
    four-panel selection figure (ΔELPD, Δρ, fit time, index); ELPD is supporting, not decisive.
 2. **Random-field structure** — spatial field on/off per component, `ar1`/`rw`/`iid`. Remember
    the assessment use-case: total/length indices → `ar1` with no year effect; the
-   assessment-selected index → often `iid` + `year` as a fixed effect, to avoid temporal
-   smoothing. Confirm with the user which the assessment consumes.
+   assessment-selected index for SPiCT → `iid` + `year` as a fixed effect, because SPiCT
+   smooths the series itself (`knowledge/model-selection.md`, *The assessment constraint*). If
+   CV prefers `ar1`, report it and carry `iid`. Confirm with the user which the assessment
+   consumes.
 3. **Barrier and anisotropy** — sensitivity of the index to each, on the selected mesh.
 4. **Fixed effects** — the full model, each term dropped in turn, candidate additions. Survey ×
    gear is usually not estimable; flag misrecorded gear in the data report.

@@ -28,8 +28,10 @@ conventions to every generated artifact; retain index-wise's scientific workflow
    - Total biomass (`spatiotemporal = "ar1"`, no year effect).
    - Over-X-cm biomass (threshold from `config.yaml`).
    - Length-group abundance indices (breaks from `config.yaml`).
-   - The **assessment-selected index** — often `iid` + `year` as a fixed effect (confirm with
-     the user). Use `get_index_split()` to compute many indices efficiently.
+   - The **assessment-selected index** — `iid` + `year` as a fixed effect when it feeds SPiCT
+     or another state-space model, so the series is not smoothed twice
+     (`knowledge/model-selection.md`). Use `get_index_split()` to compute many indices
+     efficiently.
 2. **Results** — fixed-effect estimates/tables (`plot_fixed_effects()`), predicted density maps
    (`plot_prediction_map()`), random fields, residual Q-Q, variance partitioning, and
    simulation-based diagnostics.

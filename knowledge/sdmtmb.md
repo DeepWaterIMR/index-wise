@@ -112,8 +112,9 @@ index <- sdmTMB::get_index(pred, bias_correct = TRUE, area = grid_cell_area_nmi2
 
 - **X/Y must be km.** Passing metres puts data in the wrong place and breaks the mesh.
 - **Keep true zeros** — the binomial part needs absences.
-- **AR1 vs IID + year effect** — for assessment inputs that must not be temporally smoothed,
-  use `spatiotemporal = "iid"` with `year` as a fixed effect. See `workflow.md` step 4.
+- **AR1 vs IID + year effect** — an index for SPiCT or another state-space assessment must not
+  be temporally smoothed: use `spatiotemporal = "iid"` with `year` as a fixed effect, and no
+  `s(year)` or `time_varying`. See `model-selection.md`, *The assessment constraint*.
 - Bias correction and `simulate()` are slow; cache model outputs to `data/output` and toggle
   refits off on re-render (`rendering.md`).
 - **Report the mesh's real vertex count**, read from the object (`mesh$mesh$n`), not the cutoff
