@@ -215,7 +215,7 @@ stnall |>
 ```{r station-filter, eval=params$recompile}
 accepted_gearcondition <- c(1, 2) # verify against the survey protocol/reference codes
 
-stn <- stnall |>
+stn_lazy <- stnall |>
   dplyr::filter(
     gearcategory == "Bottom trawls",
     missiontypename %in% c("Forskningsfartøy", "Leiefartøy"),
@@ -228,7 +228,16 @@ stn <- stnall |>
     distance >= 0.3, distance <= 5
     # is.na(gear) | !gear %in% obsolete_gear_codes, # add non-missing survey-specific obsolete gear codes
     # cruiseseries %in% cfg$SURVEYS             # restrict to the chosen surveys
-  ) |>
+  )
+
+# Count before collecting: a filter that silently matched far more rows than expected (a
+# dropped condition, a NULL-propagation slip) should stop here, not exhaust memory.
+n_candidate <- dplyr::pull(dplyr::count(stn_lazy), n)
+max_collect <- cfg$MAX_COLLECT_ROWS %||% 2000000L
+if (n_candidate > max_collect)
+  stop(n_candidate, " candidate stations exceed MAX_COLLECT_ROWS (", max_collect, ").")
+
+stn <- stn_lazy |>
   dplyr::collect() |>
   dplyr::filter(
     dplyr::if_else(

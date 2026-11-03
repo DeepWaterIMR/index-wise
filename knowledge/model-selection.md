@@ -189,6 +189,23 @@ sparser length group. When two candidates are not distinguishable on the selecti
 prefer the simpler one, and confirm that the chosen structure converges for every product before
 calling the selection final.
 
+"Not distinguishable" needs a rule, stated before the results are seen. Use the
+**one-standard-error rule** (Hastie et al. 2009, §7.10): among the *eligible* candidates
+(converged, comparable, passing `sanity()`), choose the one with the fewest parameters whose
+cross-validated ELPD is within one **paired** standard error of the best. The paired SE comes
+from the per-observation differences on one shared fold assignment, which is far smaller than
+the SE of either ELPD alone. Apply the same rule to every stage, the formula stage included —
+an exception for "best ELPD" there quietly re-admits the larger model.
+
+## Confirm the final specification one setting at a time
+
+The staged search above carries each winner forward, so later stages are conditional on earlier
+choices. Once a specification is in `config.yaml`, confirm it **one setting at a time**: for each
+stage, vary that setting alone around the final model and hold every other setting at its final
+value. If any stage's selection differs from the final model, report it as an inconsistency,
+update `config.yaml`, and re-render until every comparison agrees with the model being carried.
+This makes each table a direct check on the reported model rather than on an intermediate one.
+
 ## Selection criteria versus diagnostics of the final model
 
 Select on predictive skill (cross-validated ELPD, with AIC as a first filter), convergence and
@@ -407,6 +424,14 @@ Selection is the slowest thing in the project, so it is the most likely to be in
   which point candidates start failing for reasons that have nothing to do with the model.
 - Free each fit between candidates in any hand-written loop (`rm(m); gc()`); `sdmTMB_selection()`
   keeps only the summary and the fit you asked it to keep.
+- **Key each stage's cache to the settings it holds fixed.** Append a short hash of those
+  settings (mesh cutoff, family, formula, fields, data version) to the stage's `cache_prefix`,
+  so a changed upstream choice cannot silently reuse stale candidate fits. Leave the setting
+  the stage *varies* out of its own key — otherwise changing `MESH_CUTOFF_KM` in the config
+  invalidates the mesh ladder that chose it.
+- **Compare candidate indices on one fixed selection grid**, independent of `GRID_KM`, and
+  scale by that grid's cell area. Otherwise a grid change between renders moves every index and
+  the comparison measures the grid, not the candidate.
 
 See `rendering.md` for the render-side toggles and the screen-session discipline.
 
@@ -419,7 +444,9 @@ paragraph is what a reviewer reads.
 
 ## References
 
-- Hurtado-Ferro, F., Szuwalski, C. S., Valero, J. L., *et al.* 2015. Looking in the rear-view
+- Hastie, T., Tibshirani, R., and Friedman, J. 2009. The Elements of Statistical Learning: Data
+  Mining, Inference, and Prediction. 2nd edn. Springer, New York.
+  <https://doi.org/10.1007/978-0-387-84858-7>- Hurtado-Ferro, F., Szuwalski, C. S., Valero, J. L., *et al.* 2015. Looking in the rear-view
   mirror: bias and retrospective patterns in integrated, age-structured stock assessment
   models. ICES Journal of Marine Science, 72: 99–110. <https://doi.org/10.1093/icesjms/fsu198>
 - Mohn, R. 1999. The retrospective problem in sequential population analysis: an investigation

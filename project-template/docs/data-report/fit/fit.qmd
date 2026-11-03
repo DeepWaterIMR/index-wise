@@ -63,7 +63,8 @@ If Step 1 acquired a broader reporting polygon and added a `region` field, filte
 ```{r prepare, eval=params$refit_model}
 dt <- dt |>
   dplyr::rename(lon = longitudestart, lat = latitudestart, year = startyear) |>
-  dplyr::mutate(value = .data[[response_col]], month = as.integer(month)) |>
+  dplyr::mutate(value = .data[[response_col]], month = as.integer(month),
+                log_swept_area = log(swept_area)) |>   # used only when EFFORT is "offset"
   dplyr::filter(!is.na(value))
 
 dt <- sdmTMB::add_utm_columns(dt, ll_names = c("lon", "lat"), utm_crs = dt_crs)  # X, Y in km
@@ -102,8 +103,8 @@ extra_time <- setdiff(seq(min(dt$year), max(dt$year)), unique(dt$year))
 
 fit <- sdmTMB::sdmTMB(
   form, data = dt, mesh = mesh,
-  family = model_family,
-  spatial = "on", spatiotemporal = cfg$SPATIOTEMPORAL, time = "year",
+  family = model_family, offset = model_offset,
+  spatial = model_spatial, spatiotemporal = cfg$SPATIOTEMPORAL, time = "year",
   extra_time = if (length(extra_time)) extra_time else NULL,
   control = sdmTMB::sdmTMBcontrol(newton_loops = 2)
 )
@@ -128,6 +129,10 @@ grid   <- make_prediction_grid(region, resolution = grid_side_size, max_depth = 
 grid   <- tidyr::crossing(as.data.frame(grid), year = sort(unique(dt$year)))
 grid$geartype <- levels(factor(dt$geartype))[1]   # reference gear
 grid$month    <- 8L                               # reference month
+# Predict at one unit of swept area, so the prediction is a density and get_index(area =)
+# scales it once. Under a Poisson-link family the encounter/positive split at this point is not
+# interpretable (one nmi^2 is tens of hauls); only the product is.
+grid$log_swept_area <- 0
 saveRDS(grid, file.path(out_dir, "prediction-grid.rds"))
 ```
 
@@ -158,8 +163,10 @@ ggplot2::ggplot(index, ggplot2::aes(year, est)) +
 #| label: fig-fit-diagnostics
 #| fig-cap: "Diagnostics of the first model: residual quantiles, mean predictions, the spatial random field, and fixed effects."
 plot_residual_qq(fit)
+# A delta model's predict() can return est1/est2 without a combined est column.
+if (!"est" %in% names(pred$data)) pred$data$est <- delta_log_density(pred$data, fit)
 plot_prediction_map(pred, crs = dt_crs, column = "est", type = "mean")
-plot_random_field(pred, crs = dt_crs, field = "omega")
+if ("omega" %in% fitted_fields(fit)) plot_random_field(pred, crs = dt_crs, field = "omega")
 plot_fixed_effects(fit)
 ```
 

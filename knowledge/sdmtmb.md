@@ -141,3 +141,38 @@ index <- sdmTMB::get_index(pred, bias_correct = TRUE, area = grid_cell_area_nmi2
   `setdiff(min(dt$year):max(dt$year), unique(dt$year))`.
 - **Selection tables lie unless the candidates are comparable** — identical records, a common
   likelihood scale, hold-out likelihood per observation. See `model-selection.md`.
+- **An integer `cutoff` silently wrecks the mesh.** `yaml` parses `MESH_CUTOFF_KM: 100` as
+  `100L`, and `make_mesh()` given an integer cutoff builds one vertex per unique location
+  (53 221 instead of 76 vertices for one 14 683-haul dataset; the only signal is the generic
+  ">1000 vertices" warning, and the fit never finishes). Only `class()` shows the difference.
+  The template's `R/0_setup.R` coerces measurement settings to double after reading the
+  config; add any new numeric setting to that list.
+- **Offsets in `sdmTMB_cv()`.** Pass the offset as a **column name** (`offset =
+  "log_swept_area"`) so each fold subsets it; a vector is not subset. For a candidate without an
+  offset, **omit** the argument: `sdmTMB_cv()` rejects an explicit `offset = NULL` ("Please use
+  a character value for 'offset'") although `sdmTMB()` accepts it. `cv$converged` is a single
+  logical (all folds converged), not a per-fold vector.
+- **Degenerate terms — read which parameter collapsed.** Typical patterns in coastal survey
+  data:
+  - `s(month)` with very uneven seasonal coverage: smooth SD at 0 in both delta components,
+    tiny eigenvalues, NaN SEs on every fixed effect and NaN index limits. A survey-series term
+    usually already carries the season; drop the month smooth (`INCLUDE_MONTH: false`).
+  - A spatial field with `sigma_O` near 0 and a huge `ln_tau_O` SE: switch it off for that
+    component only (`SPATIAL: ["on", "off"]`).
+  - An AR1 field with `rho` at 0.99–1.00 has absorbed the persistent spatial pattern; the
+    matching spatial field then collapses. Test `"rw"` (and spatial off) against it.
+  - Changing family moves the collapse: a field that was estimable under a standard delta can
+    collapse in the other component under a Poisson-link delta. Re-run the random-field stage
+    after any family change.
+- **`predict()` and the Poisson-link offset.** sdmTMB applies the fitting offset to both
+  Poisson-link components, but (sdmTMB 1.0.0.9011) a *prediction-time* offset is not applied to
+  component 1, although the total stays correct. Harmless at `offset = 0`, the recommended
+  prediction point; check before predicting at any other offset.
+- **Combine delta components on the right link.** Use `est1 + est2` (log scale) for a
+  Poisson-link first component and `plogis(est1) * exp(est2)` for a logit one
+  (`delta_log_density()` in the template). Branch on `fit$family$link[1]`.
+- **`plot_random_field()` errors on a field that is switched off** rather than skipping it;
+  plot only the fields the fit has (`fitted_fields()` in the template).
+- **`execute: warning: false` hides `warning()`.** In a long selection render, report candidate
+  failures with `cat()`/`message()`, and make every results table emit its full column set
+  even when a candidate crashed, so one failure cannot kill hours of fitting at the last chunk.

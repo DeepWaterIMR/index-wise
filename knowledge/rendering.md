@@ -74,6 +74,14 @@ Rendering in screen session "<species>-fit". Attach with:  screen -r <species>-f
 Follow the log with:  tail -f logs/fit-*.log
 ```
 
+- The template's `render.sh` wraps this: it writes a timestamped log with host, commit and
+  exit status, and sets a UTF-8 locale. Without that locale, a detached render writes
+  Norwegian letters, Greek table headers and em dashes in captions or `cat()` output as
+  `<U+2014>`-style escapes. Use `screen -dmS <species>-fit ./render.sh <doc.qmd> -P key:value`.
+- **A slow chunk on a laptop may be the machine, not the code.** Check `uptime` before
+  concluding a fit is stuck: file-sync and antivirus daemons (OneDrive, Spotlight, Defender)
+  have pushed the load average past 100 while a render looked hung. Run fits and long renders
+  on the modelling server, including development checks.
 - List sessions: `screen -ls`. Detach from inside: `Ctrl-a d`.
 - **Suggest running on a server.** For big meshes / many length groups / bias correction,
   offer to run the render on a compute server to speed things up and free the laptop.

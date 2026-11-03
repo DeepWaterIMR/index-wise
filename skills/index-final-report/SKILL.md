@@ -53,6 +53,37 @@ toggle (default off), mirroring the benchmark:
   (`compare_surveys`): filter to one `cruiseseries`, build a survey-specific mesh and grid,
   compute the index, compare (`plot(type = "index"|"scatter"|"spatial")`).
 
+## Annual update mode
+
+Once the specification is selected, the report is re-run every year for the assessment. Keep
+it an update report, not a repeat of model selection (that stays in `validate.qmd` and the
+benchmark documentation):
+
+- **Fit the final model from `config.yaml`** through one function used by every product, and
+  inject the settings into the `sdmTMB()` call as values (`rlang::inject(sdmTMB::sdmTMB(...,
+  family = !!model_family, ...))`), so `fit$call` can be re-evaluated by `sdmTMB_retro()` and
+  refit helpers in a fresh environment.
+- **Archive each year's inputs and outputs**: the compiled roster as
+  `data/output/archive/compiled-data-<last complete year>.rds` and the exported index as
+  `archive/index-<year>.csv`. Next year compares against the latest earlier archive, which
+  separates changes from new data from changes in the database's back catalogue.
+- **Survey signal**: refit the selected product leaving out one survey series at a time, and fit
+  the major series alone over their own footprint (start year: first with enough hauls).
+  Compare mean-scaled indices by correlation, mean absolute relative difference and the terminal
+  year. If the dropped series is the prediction reference, move the reference to the series
+  with most positive hauls and say so.
+- **Previous index**: compare with the index the assessment last read, by shape on a common
+  scale; keep its source path in config.
+- **Record failed refits, do not stop.** A leave-one-out or single-series fit that does not
+  converge becomes a row with a reason, so one failure cannot kill a long server render.
+- **Check convergence per product.** A specification that passes for total biomass can fail for
+  a sparse size product (AR1 `rho` at 1, a smooth SD at 0, non-PD Hessian); the products'
+  diagnostics and the survey-signal results inherit that failure and are provisional until it
+  is fixed.
+- Run a first round with `bias_correct: false`, then the final run with bias correction.
+- A `dev_mode` parameter (a fraction of hauls, a coarse mesh, no archive or export) smoke-tests
+  the document before a server run.
+
 ## Rendering
 
 This is the heaviest document (many indices × length groups × bias correction). **Code-review

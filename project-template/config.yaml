@@ -25,6 +25,7 @@ SURVEYS:                              # cruise-series labels (groups of surveys)
 USE_SPD: false                        # legacy SPD files? true for northern/offshore; false for southern/coastal
 INCLUDE_RUSSIAN: true                 # Russian data included by DEFAULT; set false to exclude
 FIRST_YEAR: 1981                      # earliest year to include
+MAX_COLLECT_ROWS: 2000000              # stop before collecting more candidate stations than this
 
 # --- Response & products ----------------------------------------------------------------
 RESPONSE: "biomass"                   # "biomass" (rho_biomass) or "abundance" (rho_abundance)
@@ -58,8 +59,15 @@ BARRIER: false                        # add a land barrier mesh?
 MAX_DEPTH: 1400                       # deepest grid cell to keep (m)
 
 # --- Model ------------------------------------------------------------------------------
-FAMILY: "delta_lognormal"             # delta_lognormal | delta_gamma | tweedie
+# EFFORT: "density" models swept-area density; "offset" models raw catch with a log swept-area
+# offset. Under a standard delta-lognormal/gamma the two are the same model (log-likelihoods
+# differ by a constant Jacobian, so never compare their AICs); under Tweedie they differ. The
+# offset reaches the occurrence component only in a Poisson-link delta family.
+EFFORT: "density"                     # density | offset
+FAMILY: "delta_lognormal"             # delta_lognormal | delta_gamma | delta_lognormal_poisson_link | delta_gamma_poisson_link | tweedie
+SPATIAL: "on"                         # one value, or one per delta component, e.g. ["on", "off"]
 SPATIOTEMPORAL: "ar1"                 # ar1 | iid | rw | off
+INCLUDE_MONTH: true                   # month smooth; switch off if it collapses (uneven seasons)
 INCLUDE_TEMPERATURE: false            # temperature smooth is OFF by default
 ASSESSMENT_MODEL: "SPiCT"             # what consumes the selected index
 SELECTED_INDEX: "Total biomass"       # exact name in the report's index_products list

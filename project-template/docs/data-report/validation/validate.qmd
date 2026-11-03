@@ -60,12 +60,14 @@ source(here::here("R", "0_setup.R"))
 
 dt <- readRDS(file.path(out_dir, "compiled-data.rds")) |>
   dplyr::rename(lon = longitudestart, lat = latitudestart, year = startyear) |>
-  dplyr::mutate(value = .data[[response_col]], month = as.integer(month)) |>
+  dplyr::mutate(value = .data[[response_col]], month = as.integer(month),
+                log_swept_area = log(swept_area)) |>   # used only when EFFORT is "offset"
   dplyr::filter(!is.na(value))
 dt <- sdmTMB::add_utm_columns(dt, ll_names = c("lon", "lat"), utm_crs = dt_crs)
 dt$fyear <- factor(dt$year)   # for the "year as a fixed effect" candidates
 
 grid <- readRDS(file.path(out_dir, "prediction-grid.rds"))
+grid$log_swept_area <- 0      # predict a density: one unit of swept area
 
 # Years the survey skipped. An `ar1`/`rw` field assumes evenly spaced steps, so a gap makes
 # sdmTMB warn about irregular time spacing and can leave the fit grinding for a very long time;
@@ -123,10 +125,12 @@ cat(attr(dt_sel, "dropped"), "of", nrow(dt), "stations dropped as incomplete for
 # between its rows, which is what makes each table interpretable.
 sel_args <- list(
   data = dt_sel, mesh = mesh_sel, formula = full_formula, family = model_family,
-  time = "year", spatial = "on", spatiotemporal = cfg$SPATIOTEMPORAL,
+  time = "year", spatial = model_spatial, spatiotemporal = cfg$SPATIOTEMPORAL,
   cache_dir = sel_dir, only = only, complete_cases = FALSE
 )
 if (length(extra_time)) sel_args$extra_time <- extra_time
+# Assigning NULL leaves `offset` out of the list: sdmTMB_cv() rejects an explicit offset = NULL.
+sel_args$offset <- model_offset
 run_stage <- function(candidates, prefix, ...) {
   do.call(sdmTMB_selection,
           c(list(candidates), sel_args, list(cache_prefix = prefix), list(...)))

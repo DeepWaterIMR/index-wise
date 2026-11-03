@@ -56,9 +56,10 @@ knitr::opts_knit$set(root.dir = here::here())
 source(here::here("R", "0_setup.R"))
 dt <- readRDS(file.path(out_dir, "compiled-data.rds")) |>
   dplyr::rename(lon = longitudestart, lat = latitudestart, year = startyear) |>
-  dplyr::mutate(month = as.integer(month))
+  dplyr::mutate(month = as.integer(month), log_swept_area = log(swept_area))
 dt   <- sdmTMB::add_utm_columns(dt, ll_names = c("lon", "lat"), utm_crs = dt_crs)
 grid <- readRDS(file.path(out_dir, "prediction-grid.rds"))
+grid$log_swept_area <- 0      # predict a density: one unit of swept area
 mesh <- sdmTMB::make_mesh(dt, xy_cols = c("X", "Y"), cutoff = cfg$MESH_CUTOFF_KM)
 has_multiple_gears <- dplyr::n_distinct(dt$geartype) > 1
 ```
@@ -81,13 +82,14 @@ This report builds the indices the assessment needs. Define the response for eac
 # `data = dt` sizes the smooth bases to what the survey sampled; use the specification Step 3
 # selected rather than the config default whenever the two differ.
 form <- build_formula(cfg, has_multiple_gears, data = dt)
-dt$value <- dt$rho_biomass
+dt$value <- dt[[response_col]]
 # Years the survey skipped: an `ar1` field assumes evenly spaced steps, and a gap makes sdmTMB
 # warn about irregular time spacing and can leave the fit grinding for a very long time.
 extra_time <- setdiff(seq(min(dt$year), max(dt$year)), unique(dt$year))
 fit_total <- sdmTMB::sdmTMB(
   form, data = dplyr::filter(dt, !is.na(value)), mesh = mesh,
-  family = model_family, spatial = "on", spatiotemporal = "ar1", time = "year",
+  family = model_family, offset = model_offset, spatial = model_spatial,
+  spatiotemporal = "ar1", time = "year",
   extra_time = if (length(extra_time)) extra_time else NULL,
   control = sdmTMB::sdmTMBcontrol(newton_loops = 2)
 )

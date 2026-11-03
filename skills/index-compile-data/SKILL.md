@@ -35,6 +35,15 @@ conventions to every generated artifact; retain index-wise's scientific workflow
 
 ## Work
 
+0. **Check the database date first.** Record when the local Biotic database was last updated
+   (BAIT `biotic-server-setup`) and the latest year it holds, and compare with the intended
+   last complete year. An outdated database truncates the series silently: one project's
+   compile ended in 2020 instead of 2025, and a whole model-selection round ran on the short
+   series before it was noticed. Update the database before compiling, not after.
+   Keep every lazy query bounded: compute date literals in R before the query (date
+   extraction inside `filter()` does not translate to DuckDB), and `count()` before every
+   `collect()` against `MAX_COLLECT_ROWS`.
+
 1. **Adapt the survey-selection document** `docs/data-report/survey-selection/compile-data.qmd` for this species and
    region: set
    `filter_sp` and the survey list from `config.yaml`. Read `stnall` (stations) and `indall`
