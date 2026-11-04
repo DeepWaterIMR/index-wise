@@ -87,11 +87,42 @@ Follow the log with:  tail -f logs/fit-*.log
   offer to run the render on a compute server to speed things up and free the laptop.
 - Never block the chat waiting for a long render — start it, report the session, and move on.
 
+### Unattended runs on a server: three silent killers
+
+- **Parallel workers die on logout.** `future::multisession` workers are separate processes
+  that systemd kills when the SSH session ends, even inside a detached `screen`. Use forked
+  `future::multicore` workers (sdmTMBexperiments ≥ 0.1.9 does this for `n_workers > 1`; set it
+  yourself in project chunks that call `future::plan()`).
+- **Bias correction crashes without an error.** `get_index_split(bias_correct = TRUE)` on
+  ~450 000-row chunks ended the R session silently; the render just stopped. Keep chunks at
+  ~75 000 rows (`nsplit = NULL` in sdmTMBexperiments, or `ceiling(nrow(grid) / 75e3)`). To
+  debug a silent crash, move the computation into a standalone `Rscript` with per-model
+  `tryCatch()` and logging, run it in its own screen session, and fold it back afterwards.
+- **`LD_LIBRARY_PATH` is lost.** Non-interactive `ssh host cmd` and `screen` sessions can start
+  without the login shell's `LD_LIBRARY_PATH`, so `sf` cannot find `libgdal`. Launch through a
+  small wrapper script that exports the login shell's value before calling `Rscript`/`quarto`.
+
 ## 4. Figure and file-size hygiene
 
-- **Raster figures use `fig-format: jpeg`** (density maps, bathymetry). Vector for line plots.
-- Keep rendered **HTML as small as feasible**: prefer jpeg rasters, sensible `fig-dpi`
-  (~150–180 for screen), and avoid embedding huge point layers. Large length-group reports can
-  reach tens of MB — watch the output size.
+- **Per-chunk JPEG, not a global `fig-format: jpeg`.** Map chunks (`geom_raster()` over the
+  grid, dense bubble maps) get `#| dev: jpeg` and `#| dev-args: !expr list(quality = 85)`;
+  very tall multi-panel annual maps use `quality = 70` and `#| fig-dpi: 72`. Line plots, Q-Q
+  plots and scatter plots stay png, which keeps text and points sharp. On one benchmark report
+  this took a self-contained HTML from 70 MB to 32 MB.
+- **Find the heavy figures before compressing.** In the self-contained HTML, measure each
+  `data:image/(png|jpeg);base64,...` block (length × 3/4 ≈ bytes) and map it to the nearest
+  preceding `id="fig-..."` anchor.
+- Keep rendered **HTML as small as feasible**: sensible `fig-dpi` (~150–180 for screen), and
+  avoid embedding huge point layers. Large length-group reports can reach tens of MB.
+- **Brackets in captions break cross-references silently.** A `fig-cap` with length-interval
+  notation such as `(0,10]` stops pandoc-crossref from registering the figure id; the figure
+  renders, but `@fig-...` fails with only an "Unable to resolve crossref" log warning. Escape
+  the brackets (a small `esc_cap()` helper) and grep the render log for that warning.
+- **PDF output:** pdflatex has no Greek glyphs in text; write `$\rho$`, not ρ. Limit
+  multi-model figures to the products that matter in the PDF (a `fig_models()` helper that
+  returns all models for HTML and the first one or two for PDF).
+- **Optional sections need a fallback chunk.** Each `*-section.qmd` starts with an
+  unconditional chunk that defines the objects its inline R uses, so the document renders when
+  the section is switched off.
 - `docs/render.R` renders all documents and refreshes data; use it for a full rebuild, but
   the same review-then-screen-then-toggle discipline applies.

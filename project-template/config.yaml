@@ -26,6 +26,12 @@ USE_SPD: false                        # legacy SPD files? true for northern/offs
 INCLUDE_RUSSIAN: true                 # Russian data included by DEFAULT; set false to exclude
 FIRST_YEAR: 1981                      # earliest year to include
 MAX_COLLECT_ROWS: 2000000              # stop before collecting more candidate stations than this
+# Documented cruise exclusions. Use only when no general filtering rule removes an anomaly
+# (knowledge/influence-diagnostics.md). Cruise numbers are reused by vessels: name both.
+EXCLUDE_CRUISES: []
+#  - platformname: "<vessel name>"
+#    cruise: "<cruise number>"
+#    reason: "<one line, with a pointer to the influence section>"
 
 # --- Response & products ----------------------------------------------------------------
 RESPONSE: "biomass"                   # "biomass" (rho_biomass) or "abundance" (rho_abundance)
@@ -74,6 +80,8 @@ SELECTED_INDEX: "Total biomass"       # exact name in the report's index_product
 ASSESSMENT_INDEX_UNITS: "relative index units"
 ASSESSMENT_INDEX_TYPE: "survey biomass"
 ASSESSMENT_INDEX_TIMING: 0.5          # fraction of year; confirm against survey timing
+N_WORKERS: 1                          # parallel refits (influence, survey comparison); forked on macOS/Linux
+INFLUENCE_REGION_COL: null            # optional grid column for index_by_region() in the influence section
 
 # --- Paths (relative to project root) ---------------------------------------------------
 OUTPUT_DIR: "data/output"

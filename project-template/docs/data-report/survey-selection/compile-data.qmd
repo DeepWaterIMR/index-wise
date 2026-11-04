@@ -201,7 +201,7 @@ stnall |>
     !is.na(longitudestart),
     latitudestart > 0,
     gearcondition %in% accepted_gearcondition,
-    is.na(stationtype) | !stationtype %in% c("C", "2", "A", "E"),
+    is.na(stationtype) | stationtype %in% c("1", "3", "9", "13"), # keep-list: unflagged, regular and preselected stations
     distance >= 0.3,
     distance <= 5,
     dplyr::if_else(
@@ -224,7 +224,7 @@ stn_lazy <- stnall |>
     !is.na(distance), !is.na(latitudestart), !is.na(longitudestart),
     latitudestart > 0,
     gearcondition %in% accepted_gearcondition,
-    is.na(stationtype) | !stationtype %in% c("C", "2", "A", "E"),
+    is.na(stationtype) | stationtype %in% c("1", "3", "9", "13"), # keep-list: unflagged, regular and preselected stations
     distance >= 0.3, distance <= 5
     # is.na(gear) | !gear %in% obsolete_gear_codes, # add non-missing survey-specific obsolete gear codes
     # cruiseseries %in% cfg$SURVEYS             # restrict to the chosen surveys
@@ -259,6 +259,17 @@ if ("missionid" %in% names(stn)) {
 # Russian data are INCLUDED by default. To exclude (config INCLUDE_RUSSIAN: false):
 if (!isTRUE(cfg$INCLUDE_RUSSIAN))
   stn <- dplyr::filter(stn, !nation %in% c("140", "90"))
+
+# Documented cruise exclusions (config EXCLUDE_CRUISES), for anomalies that no general rule
+# removes (knowledge/influence-diagnostics.md). Cruise numbers are reused by different vessels,
+# so every entry names the platform and the cruise.
+excluded_cruises <- dplyr::bind_rows(lapply(cfg$EXCLUDE_CRUISES %||% list(), tibble::as_tibble))
+if (nrow(excluded_cruises) > 0) {
+  excluded_key <- paste(excluded_cruises$platformname, excluded_cruises$cruise)
+  n_before <- nrow(stn)
+  stn <- dplyr::filter(stn, !paste(platformname, cruise) %in% excluded_key)
+  message("EXCLUDE_CRUISES removed ", n_before - nrow(stn), " catchsample rows.")
+}
 ```
 
 ## Remove duplicates
@@ -284,12 +295,14 @@ stn <- dplyr::filter(stn, !haul_id %in% dupe_ids$haul_id)
 
 ## Optional: legacy SPD files
 
-Only for northern/offshore species (`USE_SPD: true`). Drop SPD years/series already in Biotic to avoid double counting; tag the source. Southern/coastal species: skip.
+Only for northern/offshore species (`USE_SPD: true`). Some SPD cruises were later entered into Biotic under other serial numbers and often under the `Other` cruise series, so the same haul appears twice. Match SPD and Biotic hauls by position and start time with `RstoxUtils::match_spd_biotic()` (default 1 km and 3 h), keep the Biotic copy, give it the SPD cruise series, and drop the SPD copies. Report how many hauls were matched per SPD cruise. Southern/coastal species: skip.
 
 ```{r spd, eval=params$recompile && isTRUE(cfg$USE_SPD)}
 # stn_spd <- RstoxUtils::processBioticFile(file.path(src_dir, "<spd-file>")) ...
-# stn <- dplyr::bind_rows(dplyr::mutate(stn, source = "NMD"),
-#                         dplyr::mutate(stn_spd, source = "SPD"))
+# stn_all <- dplyr::bind_rows(dplyr::mutate(stn, source = "NMD"),
+#                             dplyr::mutate(stn_spd, source = "SPD"))
+# spd_matches <- RstoxUtils::match_spd_biotic(stn_all)
+# stn <- RstoxUtils::drop_spd_duplicates(stn_all, spd_matches)
 ```
 
 ## True zeros and swept-area density

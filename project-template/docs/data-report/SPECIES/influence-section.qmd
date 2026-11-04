@@ -1,0 +1,98 @@
+<!-- Included by report.qmd. Shares its params. Which hauls and cruises drive the index?
+Workflow and decision policy: index-wise knowledge/influence-diagnostics.md. The refits are
+expensive (one per candidate), so results are cached in data/output/; delete the cache file to
+recompute. Run on a server with N_WORKERS > 1. -->
+
+```{r influence-fallback}
+#| echo: false
+# Defined unconditionally so inline R in this section resolves when the section is off.
+influence_flags <- tibble::tibble(id = character(), influence = numeric(), leverage = numeric())
+n_influence_candidates <- NA_integer_
+```
+
+```{r influence-compute, eval=params$include_influence}
+#| output: asis
+cat("## Influence of hauls and cruises\n\n")
+fit_total <- readRDS(file.path(out_dir, "model-fit-total.rds"))
+influence_cache <- file.path(out_dir, "influence-total.rds")
+
+if (file.exists(influence_cache)) {
+  influence <- readRDS(influence_cache)
+} else {
+  d <- fit_total$data
+  # Cruise numbers are reused by different vessels: identify cruises by platform + cruise
+  d$cruise_id <- paste(d$platformname, d$cruise)
+  d$density_obs <- if (identical(cfg$EFFORT, "offset")) d$value / d$swept_area else d$value
+  d$unit_effort <- 1
+  fit_total$data$cruise_id <- d$cruise_id
+
+  cruise_screen <- density_share(d, value_col = "density_obs", effort_col = "unit_effort",
+                                 group_col = "cruise_id", top_n = 3, min_share = 0.1)
+  haul_screen <- density_share(d, value_col = "density_obs", effort_col = "unit_effort",
+                               top_n = 2, min_share = 0.05)
+
+  influence <- list(
+    cruise_screen = cruise_screen,
+    haul_screen = haul_screen,
+    cruise = sdmTMB_leave_out(
+      fit_total, ids = unique(cruise_screen$cruise_id[cruise_screen$candidate]),
+      id_col = "cruise_id", newdata = grid, area = grid_cell_area_nmi2,
+      n_workers = cfg$N_WORKERS %||% 1
+    ),
+    haul = sdmTMB_leave_out(
+      fit_total, ids = unique(haul_screen$haul_id[haul_screen$candidate]),
+      id_col = "haul_id", newdata = grid, area = grid_cell_area_nmi2,
+      n_workers = cfg$N_WORKERS %||% 1
+    ),
+    region = if (!is.null(cfg$INFLUENCE_REGION_COL) &&
+                 cfg$INFLUENCE_REGION_COL %in% names(grid)) {
+      index_by_region(fit_total, grid, region_col = cfg$INFLUENCE_REGION_COL,
+                      area = grid_cell_area_nmi2)
+    }
+  )
+  saveRDS(influence, influence_cache)
+}
+
+influence_flags <- influence$cruise$influence |>
+  dplyr::filter(influence >= 0.1, leverage >= 2) |>
+  dplyr::select(id, n_removed, haul_share, influence, leverage, all_ok)
+n_influence_candidates <- nrow(influence$cruise$influence)
+```
+
+```{r}
+#| label: fig-influence-leverage
+#| fig-cap: "Leave-one-cruise-out influence on the total-biomass index against each cruise's share of the hauls in its year(s). Influence is one minus the ratio of the index without the cruise to the index with all data. The dotted line marks influence proportional to haul share; cruises above the dashed lines (influence ≥ 0.1, leverage ≥ 2) are labelled."
+#| eval: !expr params$include_influence
+plot(influence$cruise, type = "leverage")
+```
+
+```{r}
+#| label: fig-influence-ratio
+#| fig-cap: "Ratio of the total-biomass index without each flagged cruise to the index with all data."
+#| eval: !expr params$include_influence && nrow(influence_flags) > 0
+plot(influence$cruise, type = "ratio", ids = influence_flags$id)
+```
+
+```{r}
+#| label: fig-influence-region
+#| fig-cap: "Total-biomass index split by region of the prediction grid, as each region's index divided by its own mean."
+#| eval: !expr params$include_influence && !is.null(influence$region)
+plot(influence$region, type = "relative")
+```
+
+<!-- Report: `r n_influence_candidates` screened cruises; `r nrow(influence_flags)` flagged (@fig-influence-leverage). For each flagged cruise, say what it sampled that others did not (area, depth, gear, season) and whether the region split (@fig-influence-region) confirms a coverage effect. Then test general filtering rules against a named exclusion with sdmTMB_data_scenarios() and peak_ratio() before adding anything to EXCLUDE_CRUISES. Do not hard-wrap prose. -->
+
+```{r influence-scenarios, eval=FALSE}
+# Template: general rules first, a named exclusion last (knowledge/influence-diagnostics.md).
+scenarios <- sdmTMB_data_scenarios(
+  fit_total,
+  scenarios = list(
+    "Drop density > 99.9 %" = function(d) d$value <= stats::quantile(d$value, 0.999),
+    "Drop 'Other' cruises" = function(d) d$cruiseseries != "Other",
+    "Drop <cruise>" = function(d) paste(d$platformname, d$cruise) != "<platform> <cruise>"
+  ),
+  newdata = grid, area = grid_cell_area_nmi2, n_workers = cfg$N_WORKERS %||% 1
+)
+peak_ratio(scenarios, year = 2000)  # the anomalous year
+plot(scenarios, type = "ratio")
+```

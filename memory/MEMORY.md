@@ -8,3 +8,5 @@ those carry their own `memory/`). One line per file.
 - [conventions.md](conventions.md) — house rules for editing this repo.
 - [first-project-lessons.md](first-project-lessons.md) — reusable workflow, filtering, mapping,
   document-structure, and provenance lessons from the first complete project.
+- [second-project-lessons.md](second-project-lessons.md) — redfish benchmark: stationtype
+  keep-list, cruise identity, SPD duplicates, influence/leverage workflow, server render pitfalls.

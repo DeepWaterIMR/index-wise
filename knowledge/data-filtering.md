@@ -31,7 +31,7 @@ stn <- stnall |>
     !is.na(distance),
     latitudestart > 0,
     gearcondition %in% accepted_gearcondition,
-    is.na(stationtype) | !stationtype %in% c("C", "2", "A", "E"), # retain missing; drop calibration/duplicate/anchor/empty hauls
+    is.na(stationtype) | stationtype %in% c("1", "3", "9", "13"), # keep-list: unflagged, 24-h, regular and additional stations
     distance >= 0.3, distance <= 5,   # trawl haul length in nautical miles
     is.na(gear) | !gear %in% obsolete_gear_codes, # retain missing; drop obsolete/non-standard trawl types
     dplyr::if_else(
@@ -82,8 +82,7 @@ position, depth sequence, and comments support that interpretation.
   reference workflow retains codes 1 and 2, but this is not a universal ordinal cutoff. Decode
   observed codes and justify `accepted_gearcondition` from the survey protocol or a verified
   reference table. Code 2 may be retained for some surveys.
-- **`stationtype`** — `"C"`, `"2"`, `"A"`, `"E"` are calibration, duplicate, anchor-test, and
-  empty/aborted hauls. They are not standard fishing stations and must be excluded. Missing values are retained explicitly: this is essential because a lazy DuckDB filter translates a bare `!stationtype %in% ...` to SQL, where `NULL` values would otherwise be dropped.
+- **`stationtype`** — use a **keep-list**, not a drop-list: missing (an ordinary unflagged station, ~70 % of rows), `1` (part of a 24-hour station), `3` (gear trial that is also a regular fish station), `9` (regular fish station) and `13` (additional, preselected station). A drop-list of `2`, `A`, `C`, `E` (gear trial, closed-area documentation, special purpose, purse seine/blue whiting) lets the multi-codend codes `4`–`8` through: a multi-bag haul then enters as several hauls with partial catches (seen in a 1995 research cruise). Codes are decoded in BAIT `knowledge/quality-codes.md`; extend the keep-list only for a documented survey-specific reason. Missing values are retained explicitly because a lazy DuckDB filter translates `stationtype %in% ...` to SQL, where `NULL` values would otherwise be dropped.
 - **`samplequality`** — code 1 denotes deployment at a preselected position with normal gear
   operation. Code 2 denotes deployment on an acoustic registration or other information about
   fish, with normal gear operation when sensors were used. It is targeted sampling, not simply
@@ -97,6 +96,30 @@ position, depth sequence, and comments support that interpretation.
 
 Decode quality fields through BAIT's `knowledge/quality-codes.md`. Reference lists are
 extensible; never infer an unfamiliar numeric code from its order.
+
+### Cruise identity, legacy SPD duplicates and documented exclusions
+
+- **Cruise numbers are not unique.** The same cruise number has been used by two vessels in the
+  same year. Any cruise-level operation (exclusion, influence screen, relabelling) keys on
+  `platformname` (or `platform`) **and** `cruise`.
+- **SPD files and Biotic overlap.** Some legacy SPD cruises were later entered into Biotic under
+  other serial numbers, often as cruise series `Other`, so one tow appears twice (the same catch,
+  depth and density). Match by position and start time with `RstoxUtils::match_spd_biotic()`
+  (defaults ≤ 1 km and ≤ 3 h; SPD start times can be offset from NMD by about 2 h), keep the
+  Biotic copy, give it the SPD cruise series, and drop the matched SPD cruises with
+  `RstoxUtils::drop_spd_duplicates()`.
+- **Documented exclusions** go in `config.yaml` `EXCLUDE_CRUISES` (platform + cruise + reason)
+  and are applied in the compile step, never as an ad-hoc filter in a later chunk. Use them only
+  after the influence workflow (`influence-diagnostics.md`) shows that no general rule works.
+
+### Swept width and density columns
+
+- Record the swept width assumed for every gear and survey. Indices computed with another width
+  differ by a constant factor (25 m vs 80 m gives ≈ 3×); align widths before comparing with a
+  historic index.
+- When models use `EFFORT: offset`, the density column is not used by the model, but still check
+  `density == catch / swept_area` after compilation. A mismatch (seen in a length-group product)
+  reveals an allocation bug that will surface later in maps, screens and influence diagnostics.
 
 ### Russian data — INCLUDED by default
 

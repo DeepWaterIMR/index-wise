@@ -15,7 +15,7 @@ Content was **adapted** (not copied; data/paths stripped) from:
   logic (`docs/data/{Redfish bottom trawl, BioticExplorer_database, Compile_all_data}.Rmd`)
   and the Step 1–3 blueprint (`docs/SI files/SI-Text-{1,2,3}`). Critical filters:
   `gearcondition %in% 1:2`; `samplequality == 1` except coastal series `cruiseseriescode ==
-  "23"` → `1:2`; drop `stationtype` C/2/A/E; `distance` 0.3–5 nmi; duplicate removal;
+  "23"` → `1:2`; drop `stationtype` C/2/A/E (superseded 2026-11 by the keep-list missing/1/3/9/13 from the redfish benchmark); `distance` 0.3–5 nmi; duplicate removal;
   swept-area density with gear-specific 25 m / ~94 m widths in the historical redfish example;
   the current template default is a common 25 m width with `geartype` as a fixed effect.
 - **ref-assessment-index** `docs/benchmark/beaked/`. Step-4 final report + `*-section.qmd`

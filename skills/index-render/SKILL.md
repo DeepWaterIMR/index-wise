@@ -62,12 +62,17 @@ Then tell the user:
 ## Step 4 — Suggest a server for heavy jobs
 
 For big meshes, many length groups, CV, or bias correction, **offer to run the render on a
-compute server** to speed it up and free the user's machine.
+compute server** to speed it up and free the user's machine. On the server, use forked
+(`multicore`) parallel workers, keep `get_index_split()` chunks at ~75 000 rows, and launch
+through a wrapper that exports `LD_LIBRARY_PATH` (`knowledge/rendering.md`, "Unattended runs").
 
 ## Step 5 — After it finishes
 
 - Confirm the expected `data/output/` files were written.
-- Check the HTML size is reasonable (`fig-format: jpeg`, sensible dpi).
+- Check the HTML size is reasonable: per-chunk `dev: jpeg` on map chunks only (not a global
+  `fig-format: jpeg`), sensible dpi; see `knowledge/rendering.md` §4.
+- Grep the log for `Unable to resolve crossref` (bracketed captions) and for workers lost
+  mid-run.
 - Flip the compute toggles to `FALSE` for future re-renders.
 - Do **not** delete `.quarto/` to "force a clean build" — fix load paths instead.
 

@@ -51,7 +51,12 @@ toggle (default off), mirroring the benchmark:
 - `cross-validation-section.qmd` — mesh CV (`sdmTMB_mesh_cv`).
 - `survey-comparison-section.qmd` — per-survey indices vs the compiled index
   (`compare_surveys`): filter to one `cruiseseries`, build a survey-specific mesh and grid,
-  compute the index, compare (`plot(type = "index"|"scatter"|"spatial")`).
+  compute the index, compare (`plot(type = "index"|"scatter"|"spatial")`). Add
+  leave-one-survey-out (`sdmTMB_leave_out(id_col = "cruiseseries")`).
+- `influence-section.qmd` — which hauls and cruises drive the index: region split, density
+  screens, leave-one-out with leverage, and data-filter scenarios for any anomaly
+  (`knowledge/influence-diagnostics.md`). Results are cached before any exclusion; exclusions
+  go in `config.yaml` `EXCLUDE_CRUISES`.
 
 ## Annual update mode
 
@@ -88,8 +93,8 @@ benchmark documentation):
 
 This is the heaviest document (many indices × length groups × bias correction). **Code-review
 first**, render via `index-render` in a screen session with a log, **suggest a server**, and
-cache every product to `data/output/` so re-renders load. Keep the HTML small: `fig-format:
-jpeg`, sensible dpi.
+cache every product to `data/output/` so re-renders load. Keep the HTML small: per-chunk
+`dev: jpeg` on map chunks, png for line plots, sensible dpi (`knowledge/rendering.md` §4).
 
 ## Output
 

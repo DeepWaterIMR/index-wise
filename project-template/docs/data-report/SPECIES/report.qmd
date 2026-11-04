@@ -9,7 +9,7 @@ format:
     code-fold: true
     code-summary: "Show code"
     code-tools: true
-    fig-format: jpeg
+    fig-format: png
     fig-dpi: 160
     embed-resources: true
 params:
@@ -20,6 +20,7 @@ params:
   include_retro: false         # retrospective section
   include_cv: false            # mesh cross-validation section
   include_survey: false        # survey-comparison section
+  include_influence: false     # haul/cruise influence and leverage section
 execute:
   fig-width: 6.69
   warning: false
@@ -44,7 +45,8 @@ csl: ../../assets/ices_jms.csl
 <!-- Step 4: the final model report and the exported assessment index for {{SPECIES_NAME}}.
 Modelled on ref-assessment-index/docs/benchmark/beaked. Produces MULTIPLE indices (total
 biomass, over-X-cm biomass, length-group abundances) and, via the *-section.qmd includes,
-optional mesh / barrier / retro / CV / survey-comparison analyses (each behind a toggle). Set
+optional mesh / barrier / retro / CV / survey-comparison / influence analyses (each behind a
+toggle). Map chunks use `dev: jpeg`; line plots stay png. Set
 bias_correct: true for the final run. Do NOT hard-wrap prose. -->
 
 # Data
@@ -123,6 +125,8 @@ ggplot2::ggplot(index_total, ggplot2::aes(year, est)) +
 
 ```{r}
 #| label: fig-report-results
+#| dev: jpeg
+#| dev-args: !expr list(quality = 85)
 #| fig-cap: "Final-model diagnostics: fixed effects, annual prediction maps, spatiotemporal random fields, and residual quantiles."
 plot_fixed_effects(fit_total)
 plot_prediction_map(pred_total, crs = dt_crs, column = "est", type = "annual")
@@ -173,6 +177,7 @@ compute is guarded by the matching include_* toggle. -->
 {{< include retro-section.qmd >}}
 {{< include cross-validation-section.qmd >}}
 {{< include survey-comparison-section.qmd >}}
+{{< include influence-section.qmd >}}
 
 
 # Results and recommendations

@@ -68,7 +68,7 @@ conventions to every generated artifact; retain index-wise's scientific workflow
    catchparts and comments before aggregation.
 3. **Apply the station filter** from `knowledge/data-filtering.md`: the documented
    survey-specific `gearcondition` set, the conditional `samplequality` rule (coastal series
-   `cruiseseriescode == "23"` → `1:2`, else `1`), `stationtype` exclusions, `distance` 0.3–5
+   `cruiseseriescode == "23"` → `1:2`, else `1`), `stationtype` keep-list (missing, 1, 3, 9, 13), `distance` 0.3–5
    nmi, research/charter missions, and `startyear` window. Code 2 in `samplequality` means
    targeted sampling, not generic acceptable quality. Russian data **included by default**
    (opt-out only).
@@ -76,8 +76,12 @@ conventions to every generated artifact; retain index-wise's scientific workflow
    catch to the same unit, and left-join it so verified absences are preserved.
 5. **Remove duplicates** — flag haul ids where length sample exceeds catch; drop them; write the
    duplicate report to `ai/review/`.
-6. **Optional SPD files** — only if `USE_SPD: true` (northern/offshore species). Drop SPD
-   years/series already in Biotic; tag `source`. For southern/coastal species, skip SPD.
+6. **Optional SPD files** — only if `USE_SPD: true` (northern/offshore species). Tag `source`,
+   match SPD and Biotic hauls with `RstoxUtils::match_spd_biotic()` (≤ 1 km, ≤ 3 h), and drop
+   the duplicated SPD cruises with `RstoxUtils::drop_spd_duplicates()`, which gives the Biotic
+   copies the SPD cruise series. For southern/coastal species, skip SPD.
+6b. **Documented exclusions** — apply `config.yaml` `EXCLUDE_CRUISES` (platform + cruise).
+   Entries come only from the influence workflow (`knowledge/influence-diagnostics.md`).
 7. **Swept-area density** — apply the gear-width policy from `config.yaml` (normally a common
    25 m effective width) to compute `rho_biomass` / `rho_abundance`. Sum catch and swept area
    to the output unit before division. If a common width is used with multiple gear types,

@@ -22,7 +22,14 @@ library(sdmTMBexperiments)   # ATTACH (not just ::) — this attaches ggOceanMap
 - **Argument names mirror sdmTMB**: `newdata`, `mesh`, `time`, `bias_correct`, `level`,
   `area`; parallelism uses `n_workers` and `future_seed`.
 - Comparison functions return **S3 objects with `plot()` methods** (`type = "index"`,
-  `"spatial"`, `"scatter"`).
+  `"spatial"`, `"scatter"`). After `load()`ing a cached object in a fresh session, call
+  `loadNamespace("sdmTMBexperiments")` (or attach the package) first, or `plot()` falls back to
+  `plot.default` with an unhelpful error.
+- **Parallel refits** (`n_workers > 1`) use forked `multicore` workers on macOS/Linux (since
+  0.1.9), which survive an SSH logout inside `screen`; `multisession` workers do not.
+- **`nsplit = NULL`** (default since 0.1.9) chooses ~75 000 grid rows per split for
+  `get_index_split()`. Bias-corrected extraction on ~450 000-row chunks crashed the R session
+  with no R error.
 - Some functions need suggested packages: `concaveman` (survey regions), `blockCV`
   (`sdmTMB_mesh_cv`), `inlabru` (`plot_mesh`), `DHARMa`/`ggspatial` (`bubble_map`).
 
@@ -65,7 +72,17 @@ library(sdmTMBexperiments)   # ATTACH (not just ::) — this attaches ggOceanMap
 |---|---|
 | `compare_models(..., newdata, reference_model = 1)` | A set of fitted models — indices, per-cell prediction diffs vs a reference, sanity checks. Plot `type = "index"` or `"spatial"`. |
 | `compare_meshes(object, mesh_cutoffs, newdata)` | Index/prediction sensitivity to mesh cutoff (refits across cutoffs). |
-| `compare_surveys(data, compiled_index, surveys, newdata, ...)` | Survey-specific indices vs a compiled reference; builds per-survey grids from concave hulls. Plot `type = "index"`, `"scatter"`, `"spatial"`. |
+| `compare_surveys(data, compiled_index, surveys, newdata, ...)` | Survey-specific indices vs a compiled reference; builds per-survey grids from concave hulls. `survey_spec()` gives a survey its own series, settings, depth band and grid. Plot `type = "index"`, `"scatter"`, `"spatial"`, `"same_area"`. Pass `compiled_index` in the units `get_index_split()` returns for `newdata`/`area` (e.g. kg, not kt); a 1000× mismatch makes the reference line vanish, and 0.1.9 warns about it. |
+
+## Influence and data-filter scenarios (see `influence-diagnostics.md`)
+
+| Function | Purpose |
+|---|---|
+| `index_by_region(fit, newdata, region_col, area)` | Plug-in index split by a grid column: per-year value, share, ratio to the region's mean. Plot `type = "index"`, `"share"`, `"relative"`. |
+| `density_share(data, value_col, effort_col, group_col, top_n, min_share)` | Model-free share of each haul's (or cruise's) density in its year, its share of the year's hauls, and a `candidate` screen for leave-out refits. |
+| `sdmTMB_leave_out(fit, ids, id_col, newdata, area)` | Refit without each survey series, cruise or haul (same mesh, warm start, gap years as `extra_time`). Returns `influence`, `haul_share`, `leverage`. Plot `type = "index"`, `"ratio"`, `"leverage"`. |
+| `sdmTMB_data_scenarios(fit, scenarios, newdata, area)` | Refit under named data filters (rows dropped or values modified) or alternative grids. Plot `type = "index"`, `"ratio"`, `"scaled"`. |
+| `peak_ratio(x, year, neighbours)` | A year's index over the mean of its neighbours, per scenario or leave-out id. |
 
 ## Retrospective & cross-validation
 
@@ -84,8 +101,10 @@ library(sdmTMBexperiments)   # ATTACH (not just ::) — this attaches ggOceanMap
   `sdmTMB_retro`, `mohns_rho`. Use `compare_models` when you want per-cell *spatial*
   prediction differences between two or three finished fits — `sdmTMB_selection` is for
   ranking many candidates.
-- **Step 4 (report):** all of the above, plus `compare_surveys` for the survey-comparison
-  section and `plot_fixed_effects` / `plot_variance_partitioning` for the results.
+- **Step 4 (report):** all of the above, plus `compare_surveys` and
+  `sdmTMB_leave_out(id_col = "cruiseseries")` for the survey-comparison section, the influence
+  functions for the influence section, and `plot_fixed_effects` /
+  `plot_variance_partitioning` for the results.
 
 See the package's vignette (`vignette("sdmTMBexperiments")`) for an end-to-end example on the
 bundled `sebastes` data, and its `AGENTS.md`/`CLAUDE.md` for the full argument reference.
