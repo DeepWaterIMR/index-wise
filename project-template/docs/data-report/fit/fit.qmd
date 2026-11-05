@@ -49,6 +49,7 @@ Do NOT hard-wrap prose. -->
 ```{r setup}
 knitr::opts_knit$set(root.dir = here::here())
 source(here::here("R", "0_setup.R"))
+source(here::here("R", "report_helpers.R"))
 dt <- readRDS(file.path(out_dir, "compiled-data.rds"))
 ```
 
@@ -118,6 +119,8 @@ fit <- readRDS(file.path(out_dir, "model-fit-total.rds"))
 ```{r sanity}
 sdmTMB::sanity(fit)
 ```
+
+`r sanity_sentence(list("The first model" = fit))`
 
 If `sanity()` flags problems (large gradients, non-PD Hessian, range > domain), simplify — coarser mesh, drop a smooth, or change the spatiotemporal structure — rather than pressing on.
 

@@ -294,6 +294,11 @@ Practical notes:
   components mean different things (log group density and weight per group), and a spatial field
   that was estimable in one component of a standard delta model may collapse in the other. Re-run
   the random-field stage after changing family rather than carrying the old structure across.
+- **It is a candidate to test, not a default.** In one benchmark (total biomass, same data and
+  response, so AIC comparable) the Poisson-link delta-lognormal converged and passed `sanity()`
+  but was 502 AIC units worse than the standard delta-lognormal; the indices differed little
+  (median ratio 0.98, within ±9 % in the well-sampled years, larger in sparse early years), and
+  the fit took about 20 % longer. Report such a result and keep the better-fitting family.
 - When combining delta components in prediction code, use `est1 + est2` for the Poisson link
   and `plogis(est1) * exp(est2)` for a logit first component. `plogis()` on a Poisson-link
   `est1` gives a plausible-looking but meaningless map.

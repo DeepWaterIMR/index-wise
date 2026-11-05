@@ -98,6 +98,11 @@ Follow the log with:  tail -f logs/fit-*.log
   ~75 000 rows (`nsplit = NULL` in sdmTMBexperiments, or `ceiling(nrow(grid) / 75e3)`). To
   debug a silent crash, move the computation into a standalone `Rscript` with per-model
   `tryCatch()` and logging, run it in its own screen session, and fold it back afterwards.
+- **Bias-corrected indices take hours.** `get_index_split(nsplit = 12, bias_correct = TRUE)`
+  for nine models took 13.4 h single-threaded on one benchmark server. Plan it as an overnight
+  run, and have the chain script restore the compute toggles after the HTML render (for
+  example `git checkout -- <doc>.qmd` when the toggles were flipped by a `sed` in the script)
+  so a following PDF or Word render loads instead of recomputing.
 - **`LD_LIBRARY_PATH` is lost.** Non-interactive `ssh host cmd` and `screen` sessions can start
   without the login shell's `LD_LIBRARY_PATH`, so `sf` cannot find `libgdal`. Launch through a
   small wrapper script that exports the login shell's value before calling `Rscript`/`quarto`.
@@ -121,6 +126,16 @@ Follow the log with:  tail -f logs/fit-*.log
 - **PDF output:** pdflatex has no Greek glyphs in text; write `$\rho$`, not ρ. Limit
   multi-model figures to the products that matter in the PDF (a `fig_models()` helper that
   returns all models for HTML and the first one or two for PDF).
+- **Parameter tables: scientific notation for large values.** Near-zero variance terms (a
+  smooth's SD, `sigma_O`) in `tidy(fit, "ran_pars", conf.int = TRUE)` give upper bounds of `Inf`
+  or about 1e172. With `format.args = list(scientific = FALSE)` LaTeX prints a 173-digit number
+  and the longtable runs off the page. Format values ≥ 1e4 in scientific notation
+  (`format_par_value()` in `R/report_helpers.R`).
+- **Word output.** Table helpers should write pandoc pipe tables
+  (`knitr::kable(format = "pipe")`) for docx; flextable with a vector `digits` fails. Notes
+  meant for every non-HTML format use `content-visible unless-format="html"`, not
+  `when-format="pdf"`, and reduced-figure/table gates use `!knitr::is_html_output()`, not
+  `knitr::is_latex_output()`, so Word gets them too.
 - **Optional sections need a fallback chunk.** Each `*-section.qmd` starts with an
   unconditional chunk that defines the objects its inline R uses, so the document renders when
   the section is switched off.

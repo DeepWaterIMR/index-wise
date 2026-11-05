@@ -23,4 +23,4 @@ print(plot(sc, type = "index"))
 print(plot(sc, type = "scatter"))
 ```
 
-<!-- Describe the supported finding and refer to @fig-survey-comparison-section-survey-section. Confirm caption units, sample size, and interval definitions against the generated result. -->
+<!-- Base any "these surveys follow the compiled index" statement on the correlations, survey by survey; do not group a coastal or fjord survey with the shelf surveys. Describe the supported finding and refer to @fig-survey-comparison-section-survey-section. Confirm caption units, sample size, and interval definitions against the generated result. -->

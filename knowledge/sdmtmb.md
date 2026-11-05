@@ -72,6 +72,11 @@ fit <- sdmTMB::sdmTMB(
 sdmTMB::sanity(fit)   # ALWAYS check convergence, SE gradients, PD Hessian, range vs domain
 ```
 
+Report sanity results from the objects, not from memory: never hard-code "all models passed"
+in a template. Place a generated sentence after the sanity table (the template's
+`sanity_sentence()` in `R/report_helpers.R` gives the number passed and each failing model's
+checks in plain words).
+
 If `sanity()` flags problems (large gradients, non-positive-definite Hessian, range larger
 than the domain), the index is not trustworthy — simplify (drop a smooth, coarsen the mesh,
 change the spatiotemporal structure) rather than pressing on.

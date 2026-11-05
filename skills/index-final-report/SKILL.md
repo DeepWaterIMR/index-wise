@@ -75,8 +75,10 @@ benchmark documentation):
 - **Survey signal**: refit the selected product leaving out one survey series at a time, and fit
   the major series alone over their own footprint (start year: first with enough hauls).
   Compare mean-scaled indices by correlation, mean absolute relative difference and the terminal
-  year. If the dropped series is the prediction reference, move the reference to the series
-  with most positive hauls and say so.
+  year. State which survey indices follow the compiled index from those correlations, survey by
+  survey; do not group a coastal or fjord survey with the shelf surveys. If the dropped series
+  is the prediction reference, move the reference to the series with most positive hauls and
+  say so.
 - **Previous index**: compare with the index the assessment last read, by shape on a common
   scale; keep its source path in config.
 - **Record failed refits, do not stop.** A leave-one-out or single-series fit that does not
