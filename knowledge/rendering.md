@@ -137,12 +137,13 @@ Follow the log with:  tail -f logs/fit-*.log
   `when-format="pdf"`, and reduced-figure/table gates use `!knitr::is_html_output()`, not
   `knitr::is_latex_output()`, so Word gets them too.
 - **Word layout for an index working document.** The workflow QMDs are HTML; when a final report
-  also goes to Word, the generic Quarto Word mechanics belong to wise-writing's
-  `quarto-reporting` (`references/formal-reports.md`). The hooks an index report needs:
+  also goes to Word, follow "Word layout fixes" in wise-writing's `quarto-reporting`
+  (`references/formal-reports.md`). Copy its `scripts/docx_tidy.R`, `scripts/render_word.R` and
+  `scripts/make_word_reference.R` into the project's `R/`. The hooks an index report needs:
   - `columns: 10000` in the `docx:` format. Otherwise Pandoc fixes relative column widths for
     any pipe table with a row longer than 72 characters, and label columns shrink to one
     character.
-  - A post-render step on `word/document.xml` (xml2 + zip). It removes the one-cell layout
+  - A post-render step on `word/document.xml` (`docx_tidy()`; xml2 + zip). It removes the one-cell layout
     tables that Quarto wraps around each cross-referenced figure and table, which Word draws
     with dashed frames; a Lua filter cannot reach them. It also sets column widths from the cell
     text, fitted to the section's text width from the following `w:sectPr`. Keep captions,
@@ -153,8 +154,8 @@ Follow the log with:  tail -f logs/fit-*.log
   - For landscape tables, explicit `{=openxml}` section-break paragraphs with A4 `pgSz` and
     `pgMar`, before and after the table, beside the `{=latex}` landscape blocks. `::: landscape`
     leaves the preceding portrait section without a page size, so Word falls back to US Letter.
-  - A render wrapper (`render_word.R`: `quarto render --to docx`, then the post-render step), so
-    the docx is never made with plain `quarto render`.
+  - A render wrapper (`render_word.R`: `quarto render --to docx`, then `docx_tidy()`), so the
+    docx is never made with plain `quarto render`.
   - QA: LibreOffice's docx-to-PDF conversion can show PNG figures as blank even in unprocessed
     Quarto output. Check figures in Word before treating them as broken.
 - **Optional sections need a fallback chunk.** Each `*-section.qmd` starts with an
