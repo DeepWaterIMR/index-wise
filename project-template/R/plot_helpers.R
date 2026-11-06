@@ -18,6 +18,23 @@ cruise_series_colours <- function(levels = NULL) {
   pal[levels]
 }
 
+#' Add vertices along lon/lat polygon edges
+#'
+#' ICES boundaries follow parallels and meridians with few vertices; in a projected map a
+#' parallel drawn between two distant vertices becomes a straight chord. Segmenting in degree
+#' space (CRS temporarily removed, so no lwgeom is needed) keeps the edges on the parallels.
+#'
+#' @param x sf object in EPSG:4326.
+#' @param max_deg Maximum segment length in degrees.
+densify_lonlat <- function(x, max_deg = 0.1) {
+  crs <- sf::st_crs(x)
+  geom <- sf::st_geometry(x)
+  sf::st_crs(geom) <- NA
+  geom <- sf::st_segmentize(geom, dfMaxLength = max_deg)
+  sf::st_crs(geom) <- crs
+  sf::st_set_geometry(x, geom)
+}
+
 #' Fixed gear-type colours
 gear_colours <- function() {
   c(Shrimp = "#0072B2", Cod = "#D55E00", GOV = "#009E73", Other = "#7F7F7F")
@@ -58,6 +75,7 @@ read_stock_area <- function(cfg, crs = 3995) {
     sf::st_transform(crs)
   sf::st_read(here::here(cfg$ICES_AREAS_FILE), quiet = TRUE) |>
     dplyr::filter(.data$Major_FA == "27", .data$SubArea %in% cfg$STOCK_SUBAREAS) |>
+    densify_lonlat() |>
     sf::st_transform(crs) |>
     sf::st_make_valid() |>
     sf::st_union() |>

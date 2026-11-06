@@ -34,7 +34,7 @@ Setup chunks first (`root.dir` in its own chunk, then config/source), then:
 
 1. **Purpose** — two sentences: what is selected for which stock and why (`PURPOSE` in
    `config.yaml`); then the output and downstream use.
-2. **Data** — database update and extraction dates, then
+2. **Data** — database update and extraction dates (cite BioticExplorerServer), then
    - *Stock area*: text, then **one overview map**: the stock area (combined ICES subareas from
      `STOCK_SUBAREAS`, or the `REGION_FILE` polygon) with all quality-filtered positive
      bottom-trawl hauls of the species in the region given by `MAP_LIMITS`, coloured
@@ -42,9 +42,13 @@ Setup chunks first (`root.dir` in its own chunk, then config/source), then:
    - *Haul filter*: a table of every criterion with retained values and their meaning
      (decode quality codes from BAIT `quality-codes.md`), then the filter expression as a
      non-evaluated listing, then the stock-specific exceptions (e.g. CoastalS quality 2),
-     Russian data, and the removal counts.
+     Russian data, and the removal counts. Subsection *Tow distance and unspecified gear*:
+     distance histogram (all vs positive hauls, limits marked), catch and catch per nmi by
+     distance bin, positives removed by the unspecified-gear rule, and the decision whether the
+     generic 0.3–5 nmi limits fit the species.
    - *Surveys and cruise series*: the encountered-on-a-cruise rule, the cruise-series table, and
-     the list of surveys without a cruise-series code (`Other`).
+     the list of surveys grouped as `Other` with the short cruise-series name and code
+     (`survey_short_names` in `R/compile_functions.R`).
    - *Dataset overview*: one metric/value table.
 3. **Analysis** — *Survey catch and effort* (overview bars, annual bars), *Survey positions*
    (facet map with true zeros), *Gear* (box plot by gear + hauls by year and gear type; gear
@@ -62,9 +66,14 @@ Setup chunks first (`root.dir` in its own chunk, then config/source), then:
 - **Fixed colours** from `R/plot_helpers.R`: `cruise_series_colours()` (Okabe–Ito, same colour
   for a cruise series in every figure and stock) and `gear_colours()`. Order cruise series by
   first year with `order_cruise_series()`, `Other` last.
-- Overview maps: `ggOceanMaps::basemap(limits = MAP_LIMITS, bathy.style = "rcg")`, stock area
-  as a translucent blue polygon, `reorder_layers()` so land covers the polygon.
+- Overview maps: `ggOceanMaps::basemap(limits = MAP_LIMITS, bathy.style = "rcb", bathy.alpha =
+  0.35, land.col = "grey85")`, stock area as a translucent blue polygon densified in lon/lat
+  before projection (`densify_lonlat()`, so parallels such as 62°N stay curved),
+  `reorder_layers()` so land covers the polygon; points as filled circles with a thin black
+  border (inside orange, outside light blue).
 - Log axes use plain number labels (`scales::label_number()`), not `1e+02`.
+- Render with a UTF-8 locale (`render.sh` sets it); GDAL cannot open the decomposed-Unicode
+  project paths of macOS OneDrive folders otherwise.
 - `fig-cap: !expr` captions must be single-quoted YAML strings without apostrophes.
 - Shared code lives in `R/compile_functions.R` and `R/plot_helpers.R`; the documents call
   functions and show them in the appendix rather than repeating code.

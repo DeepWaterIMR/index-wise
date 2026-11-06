@@ -15,6 +15,15 @@ cruise_series_labels <- c(
   `26` = "Other", `31` = "Other"
 )
 
+# Short names of individual cruise series, used to identify surveys grouped as Other
+# (abbreviations from BAIT knowledge/cruise-series-nicknames where they exist).
+survey_short_names <- c(
+  `1` = "BlueWhitingS", `2` = "BSS-AugSep", `3` = "BSS-OctNov", `4` = "0-groupS",
+  `5` = "WinterS", `6` = "EcoS", `7` = "CodS", `13` = "SandeelS", `15` = "ShrimpS",
+  `16` = "EggaN", `17` = "NES", `19` = "HerringS", `23` = "CoastalS", `25` = "EggaS",
+  `26` = "FjordS", `31` = "CapelinS"
+)
+
 #' Cruise-series labels: config.yaml CRUISE_SERIES_LABELS when set, else the defaults
 series_labels <- function() {
   lab <- if (exists("cfg", inherits = TRUE)) cfg$CRUISE_SERIES_LABELS else NULL
@@ -28,8 +37,11 @@ series_labels <- function() {
 label_surveys <- function(x) {
   x |>
     dplyr::mutate(
+      # The database stores a missing cruise-series code as the string "NA" in some rows
+      cruiseseriescode = dplyr::na_if(.data$cruiseseriescode, "NA"),
       cruiseseries = dplyr::coalesce(
         unname(series_labels()[as.character(.data$cruiseseriescode)]), "Other"),
+      series_short = unname(survey_short_names[as.character(.data$cruiseseriescode)]),
       geartype = dplyr::case_when(
         grepl("GOV", .data$gearname) ~ "GOV",
         grepl("^32", .data$gear) ~ "Shrimp",
@@ -442,4 +454,40 @@ quality_code_table <- function(con) {
     dplyr::filter(reftable %in% c("gearcondition", "samplequality", "stationtype")) |>
     dplyr::select(reftable, code, shortname, description) |>
     dplyr::collect()
+}
+
+#' Tow-distance diagnostics: all valid hauls and target-positive hauls before the distance
+#' and unspecified-gear filters
+#'
+#' @param con DuckDB connection.
+#' @param cfg Project configuration (species merged).
+#' @param last_year Last year to include.
+#' @return Tibble, one row per haul: distance, gear, cruiseseriescode, target catch (kg).
+distance_diagnostics <- function(con, cfg, last_year) {
+  first_year <- as.integer(cfg$FIRST_YEAR)
+  base <- dplyr::tbl(con, "stnall") |>
+    dplyr::filter(
+      gearcategory == "Bottom trawls",
+      missiontypename %in% c("Forskningsfartøy", "Leiefartøy"),
+      startyear >= first_year, startyear <= last_year,
+      gearcondition %in% c("1", "2"),
+      is.na(stationtype) | stationtype %in% c("1", "3", "9", "13")
+    ) |>
+    area_filter_lazy(cfg)
+  hauls <- base |>
+    dplyr::distinct(missionid, serialnumber, cruiseseriescode, samplequality, gear,
+                    distance, icesarea, longitudestart, latitudestart) |>
+    dplyr::collect() |>
+    apply_samplequality() |>
+    dplyr::filter(in_stock_area(dplyr::pick(dplyr::everything()), cfg)) |>
+    dplyr::distinct(missionid, serialnumber, .keep_all = TRUE)
+  catch <- base |>
+    dplyr::filter(commonname %in% !!cfg$FILTER_SP) |>
+    dplyr::group_by(missionid, serialnumber) |>
+    dplyr::summarise(catch_kg = sum(catchweight, na.rm = TRUE), .groups = "drop") |>
+    dplyr::collect()
+  hauls |>
+    dplyr::left_join(catch, by = c("missionid", "serialnumber")) |>
+    dplyr::mutate(catch_kg = dplyr::coalesce(catch_kg, 0)) |>
+    dplyr::select(cruiseseriescode, gear, distance, catch_kg)
 }
