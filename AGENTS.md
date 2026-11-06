@@ -115,6 +115,7 @@ into `knowledge/`) before acting.
 Shared knowledge lives in `knowledge/`:
 
 - `workflow.md` — the four steps and the reference documents each is modelled on.
+- `data-documents.md` — **fixed structure** of the three Step 1 documents (`docs/data/<stock>-1-summary`, `-2-survey-selection`, `-3-data`): names, sections, figures, writing and colour rules.
 - `data-filtering.md` — **the critical filtering logic** (gear condition, sample quality,
   station type, duplicates, swept-area density). Reproduce it exactly.
 - `sdmtmb.md` — sdmTMB essentials (mesh, families, spatial/spatiotemporal, predict,

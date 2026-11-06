@@ -28,8 +28,9 @@ https://github.com/DeepWaterIMR/index-wise`).
    `gearcondition`, conditional `samplequality`, `stationtype`, duplicate diagnostics, true
    zeros, and swept-area density. Do not infer code meanings from their numeric order.
 4. **Start simple.** First model has no length groups and no temperature term.
-5. **Step 1 roles are distinct.** `compile-data.qmd` is survey selection and coverage;
-   `<species>-<region>-data-report.qmd` is the compiled station/response report and owns length
+5. **Step 1 documents have a fixed structure** (index-wise `knowledge/data-documents.md`).
+   `{{STOCK_SLUG}}-2-survey-selection.qmd` is survey selection and coverage;
+   `{{STOCK_SLUG}}-3-data.qmd` is the compiled station/response report and owns length
    products and diagnostics. Do not duplicate length-allocation material in survey selection.
 6. **Document provenance is explicit.** Keep the `published-title: "Version"` date label and the
    index-wise/researcher-supervised-AI provenance statement in every main report; add project-specific authors and affiliations in their YAML headers.
@@ -41,7 +42,7 @@ https://github.com/DeepWaterIMR/index-wise`).
 
 | Step | Document(s) | index-wise skill |
 |---|---|---|
-| 1. Compile & report data | `docs/data-report/survey-selection/compile-data.qmd`, `docs/data-report/data-overview/{{SPECIES_SLUG}}-{{REGION_SLUG}}-data-report.qmd` | `index-compile-data` |
+| 1. Compile & report data | `docs/data/{{STOCK_SLUG}}-2-survey-selection.qmd`, `docs/data/{{STOCK_SLUG}}-3-data.qmd`; summary `docs/data/{{STOCK_SLUG}}-1-summary.qmd` | `index-compile-data` |
 | 2. Fit first model | `docs/data-report/fit/fit.qmd` | `index-fit-model` |
 | 3. Validate / select | `docs/data-report/validation/validate.qmd` | `index-validate-model` |
 | 4. Final report + export | `docs/data-report/{{SPECIES_SLUG}}/report.qmd` (+ `*-section.qmd`) | `index-final-report` |

@@ -7,6 +7,10 @@
 SPECIES_NAME:  "{{SPECIES_NAME}}"     # display name, e.g. "Beaked redfish"
 SPECIES_SLUG:  "{{SPECIES_SLUG}}"     # kebab-case slug for folders/files, e.g. "snabeluer"
 SPECIES_LATIN: "{{SPECIES_LATIN}}"    # binomial, e.g. "Sebastes mentella"
+STOCK_SLUG:    "{{STOCK_SLUG}}"       # file prefix of the docs/data documents; default SPECIES_SLUG
+STOCK_CODE:    null                   # ICES stock code, e.g. "reb.27.1-2"
+AREA_LABEL:    "{{AREA_LABEL}}"       # area in document titles, e.g. "ICES 1–2" or "N62"
+PURPOSE: null                         # one sentence: why the index is made (benchmark, assessment)
 
 # Human metadata uses wise-writing's AUTHORS/AFFILIATIONS schema.
 # Supply accountable human names and matching affiliation IDs before scaffolding.
@@ -26,6 +30,8 @@ USE_SPD: false                        # legacy SPD files? true for northern/offs
 INCLUDE_RUSSIAN: true                 # Russian data included by DEFAULT; set false to exclude
 FIRST_YEAR: 1981                      # earliest year to include
 MAX_COLLECT_ROWS: 2000000              # stop before collecting more candidate stations than this
+LENGTH_LIMITS: [5, 200]               # plausible length range (cm); length records outside are removed
+CRUISE_SERIES_LABELS: null            # optional map code -> label; defaults in R/compile_functions.R
 # Documented cruise exclusions. Use only when no general filtering rule removes an anomaly
 # (knowledge/influence-diagnostics.md). Cruise numbers are reused by vessels: name both.
 EXCLUDE_CRUISES: []
@@ -48,6 +54,11 @@ REGION: "ALL"                         # feature/layer name used by a multi-regio
 REGION_SLUG: "all"                    # filename-safe region identifier, e.g. N62 or S62
 REGION_FILE: "data/source/prediction_region.gpkg"
 REGION_LAYER: "prediction_region"
+# Stock area for survey selection: ICES subareas (tested on the icesarea code) or, when
+# empty, the REGION_FILE polygon (ACQUISITION_REGION_LAYER if set).
+STOCK_SUBAREAS: []                    # e.g. ["1", "2"]
+ICES_AREAS_FILE: "data/source/ICES_Areas/ICES_Areas_20211101.shp"  # needed with STOCK_SUBAREAS
+MAP_LIMITS: [-15, 60, 57, 81]         # lon/lat limits of the overview map in the survey-selection document
 # Optional broader acquisition polygon and station partition. A Step 1 document can set
 # ACQUISITION_REGION to a reporting feature (for example NS) while retaining REGION as the
 # later model domain (for example S62), then set ADD_REGION_IDENTIFIER to true.

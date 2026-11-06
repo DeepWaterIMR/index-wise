@@ -45,7 +45,9 @@ every answer for `ai/memory/scaffold-interview.md`.
    length; IID + year fixed effect for an index feeding SPiCT, which smooths the series
    itself). If the answer is SPiCT, tell the user this now.
 7. **Years** — first year to include (default `> 1980`).
-8. **Domain** — study area / prediction region, CRS (EPSG), grid cell size (km), mesh cutoff
+8. **Stock and domain** — stock code and slug (`STOCK_SLUG`, prefix of the `docs/data/`
+   documents), stock area as ICES subareas (`STOCK_SUBAREAS`) or a polygon, the purpose sentence
+   (`PURPOSE`), study area / prediction region, CRS (EPSG), grid cell size (km), mesh cutoff
    (km), barrier mesh yes/no. GIS polygons are **user-supplied** and go in the project's
    `data/source/` — never in the template.
 9. **Russian data** — included by default; ask only if they want to exclude it.

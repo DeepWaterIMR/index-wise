@@ -44,8 +44,8 @@ conventions to every generated artifact; retain index-wise's scientific workflow
    extraction inside `filter()` does not translate to DuckDB), and `count()` before every
    `collect()` against `MAX_COLLECT_ROWS`.
 
-1. **Adapt the survey-selection document** `docs/data-report/survey-selection/compile-data.qmd` for this species and
-   region: set
+1. **Adapt the survey-selection document** `docs/data/<stock>-2-survey-selection.qmd` for this species and
+   stock area: set
    `filter_sp` and the survey list from `config.yaml`. Read `stnall` (stations) and `indall`
    (individual/length) from the Biotic database via BAIT.
    Keep the nomenclature explicit: a **survey** is one cruise, whereas a **cruise series** is
@@ -95,46 +95,35 @@ conventions to every generated artifact; retain index-wise's scientific workflow
    subdirectories such as `data/output/s62/` are acceptable when two acquisition datasets share
    one project. Never create `docs/data/output/` or any other document-local output directory.
 
-## Data report
+## Documents
 
-Generate `docs/data-report/data-overview/<slug>-<region>-data-report.qmd`: station maps (ggOceanMaps), station counts
-by year/depth, response-variable distributions, trawl-parameter summaries (distance, duration,
-door spread, wire ratio), and the length–weight / length-group allocation. Use
-`fig-format: jpeg` for rasters; keep the HTML small. (For background material, see the lookup
-table in `knowledge/workflow.md`.)
+The data step has three documents per stock in `docs/data/` with a **fixed structure**:
+`<stock>-1-summary.qmd`, `<stock>-2-survey-selection.qmd` and `<stock>-3-data.qmd`. Read
+`knowledge/data-documents.md` and keep its file names, section headings, figures, tables and
+writing rules; adapt only the content. The shared code is in `R/compile_functions.R`
+(compilation, stock-area rule, length–weight, fishable/length products) and
+`R/plot_helpers.R` (fixed colours, stock-area polygon); call these rather than writing new
+code in the documents.
 
-For a prediction-region overview map, query quality-filtered positive target hauls across the full
-study extent so split-region maps retain observations from neighbouring domains (for example, the
-North Sea and Barents Sea). Calculate the prediction-region and observation bounding boxes in a
-map display CRS (`MAP_CRS`, default Arctic LAEA EPSG:3995), convert each bounding box to corner
-points, and pass their concatenation as `data` to `ggOceanMaps::basemap()`. This avoids distorted
-geographic bounding boxes and lets the basemap derive a stable extent; use `expand.factor = 1.1`
-and `coord_sf(expand = FALSE)` to keep the window tidy. The optional `MAP_SHAPEFILES` setting
-controls the basemap shapefile set (default `Arctic`). Use `bathy.style = "rbg"`; before adding a
-manually filled polygon layer and `scale_fill_manual()`, call `ggnewscale::new_scale_fill()` so
-the polygon scale does not overwrite the bathymetry scale.
+- `<stock>-2-survey-selection.qmd` runs the compilation and documents the stock-area map,
+  haul filter (criteria table and filter listing), surveys and cruise series, catch and effort,
+  positions, gear, timing, gross-error screening and other data types. No prediction-region map
+  here; the prediction region belongs to the fit document.
+- `<stock>-3-data.qmd` is the compiled-data report: final station map, effort through time,
+  depth and response distributions, trawl parameters, length products and diagnostics. Begin it
+  with a dynamic **Data collation** explanation covering station-level and individual-level
+  data, then describe the length-group calculation explicitly: keep total biomass tied to
+  station catch weight; use observed or estimated individual weight multiplied by
+  superindividual representation only for the size-specific products, then group into length
+  shares and rescale to station total biomass. Record individual-level summary metadata in the
+  compiler diagnostics so the report has no hard-coded values.
+- `<stock>-1-summary.qmd` holds the abstract (placeholder until Step 4), purpose, document
+  list, AI statement and the central data table; model and index sections are filled in at the
+  end of the workflow.
 
-The two Step 1 documents have distinct roles and should not duplicate figures:
-
-- `compile-data.qmd` is survey selection and coverage: survey names/codes, total catch and
-  occurrence, survey positions, gear overview/table, timing, filtering decisions, and a
-  filtering-script appendix.
-- `<slug>-<region>-data-report.qmd` is the compiled-data overview: final station map, effort
-  through time, depth and response distributions, continuous effort checks, length products,
-  and diagnostics. Begin this document with a dynamic **Data collation** explanation covering
-  station-level and individual-level data, then describe the length-group calculation explicitly:
-  Keep total biomass directly tied to station catch weight; use observed or estimated individual
-  weight multiplied by superindividual representation only for the size-specific products, then
-  group into length shares and rescale to station total biomass. Include a schematic of the actual
-  data flow; omit SPD branches when `USE_SPD: false`.
-  Record individual-level summary metadata (length-record count, station count, and observed
-  individual-weight count) in compiler diagnostics so the report can describe the dataset without
-  hard-coded values or exposing raw individual records.
-
-Every figure and table must have a caption. Use stable `fig-cap`/`tbl-cap` chunk metadata or an
-explicit table caption, with explicit Quarto labels and cross-reference settings so captions
-render as numbered Figures/Tables; keep the region identifier in the data-overview filename for split
-N62/S62 (or equivalent) projects.
+Every figure and table has a caption and a preceding sentence that refers to it. Use
+`fig-format: jpeg`; keep the HTML small. (For background material, see the lookup table in
+`knowledge/workflow.md`.)
 
 ## Before rendering
 

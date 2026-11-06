@@ -1,10 +1,10 @@
 ---
-title: "{{SPECIES_NAME}} — {{REGION_SLUG}} data overview"
-subtitle: "Step 2 of 2 · data overview"
+title: "{{SPECIES_NAME}} — {{AREA_LABEL}} data"
+subtitle: "Step 2 of 2 · data report"
 format:
   html:
     toc: true
-    toc-title: "{{SPECIES_NAME}} — {{REGION_SLUG}} data overview"
+    toc-title: "{{SPECIES_NAME}} — {{AREA_LABEL}} data"
     code-fold: true
     code-summary: "Show code"
     code-tools: true
@@ -27,9 +27,9 @@ date-format: "YYYY-MM-DD"
 published-title: "Version"
 lang: en-US
 bibliography:
-  - ../../assets/references.bib
-  - ../../assets/{{SPECIES_SLUG}}-{{REGION_SLUG}}-data-report-software.bib
-csl: ../../assets/ices_jms.csl
+  - ../assets/references.bib
+  - ../assets/{{STOCK_SLUG}}-3-data-software.bib
+csl: ../assets/ices_jms.csl
 ---
 
 # Purpose
@@ -38,7 +38,7 @@ csl: ../../assets/ices_jms.csl
 
 
 <!-- This document is the compiled-data overview. Survey selection, survey positions, gear,
-timing, and filtering belong in compile-data.qmd. Keep the region in the filename when a
+timing, and filtering belong in {{STOCK_SLUG}}-2-survey-selection.qmd. Keep the region in the filename when a
 project has separate N62/S62 (or equivalent) documents. Every figure and table must have a
 caption; avoid duplicating figures between the two Step 1 documents. -->
 
@@ -122,7 +122,7 @@ knitr::kable(
       `Positive stations` = format(sum(rho_biomass > 0, na.rm = TRUE), big.mark = " "),
       `Zero stations (%)` = round(100 * mean(rho_biomass == 0, na.rm = TRUE), 1)
     ),
-  caption = "Overview of the compiled {{SPECIES_NAME}} {{REGION_SLUG}} station dataset."
+  caption = "Overview of the compiled {{SPECIES_NAME}} {{AREA_LABEL}} station dataset."
 )
 ```
 
@@ -149,7 +149,7 @@ knitr::kable(
 ## Station positions
 
 ```{r station-map}
-#| fig-cap: "Final retained station positions in the {{REGION_SLUG}} prediction region. Points distinguish true-zero and positive target-species hauls."
+#| fig-cap: "Final retained station positions in the {{AREA_LABEL}} prediction region. Points distinguish true-zero and positive target-species hauls."
 sp <- dt |> dplyr::filter(!is.na(longitudestart), !is.na(latitudestart))
 ggOceanMaps::basemap(data = sp, bathymetry = TRUE, bathy.style = "rbg") +
   ggspatial::geom_spatial_point(
@@ -187,7 +187,7 @@ dt |>
 
 ```{r}
 #| label: fig-data-report-depth
-#| fig-cap: "Distribution of recorded bottom depth in the compiled {{REGION_SLUG}} station dataset."
+#| fig-cap: "Distribution of recorded bottom depth in the compiled {{AREA_LABEL}} station dataset."
 dplyr::filter(dt, is.finite(depth)) |>
   ggplot2::ggplot(ggplot2::aes(depth)) +
   ggplot2::geom_histogram(bins = 40, fill = "grey45", colour = "white") +
@@ -230,7 +230,7 @@ If the project has length-based products, adapt this section to the compiled len
 
 ```{r, eval=FALSE}
 #| label: fig-data-report-length
-#| fig-cap: "Length-group allocation of positive station biomass in the {{REGION_SLUG}} dataset."
+#| fig-cap: "Length-group allocation of positive station biomass in the {{AREA_LABEL}} dataset."
 # ldist <- readRDS(file.path(out_dir, "length-data.rds"))
 # ggFishPlots::plot_lw(ldist, length = "length", weight = "weight")
 ```
@@ -273,7 +273,7 @@ source(here::here("R", "report_helpers.R"))
 # Add every additional package that influenced this report, including optional packages.
 report_software(
   c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "sdmTMB", "sdmTMBexperiments", "knitr"),
-  here::here("docs", "assets", "{{SPECIES_SLUG}}-{{REGION_SLUG}}-data-report-software.bib")
+  here::here("docs", "assets", "{{STOCK_SLUG}}-3-data-software.bib")
 )
 ```
 

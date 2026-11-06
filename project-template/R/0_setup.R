@@ -48,7 +48,7 @@ packages <- c(
 #   sdmTMBextra  BARRIER: true (barrier mesh)
 #   blockCV      the spatial block cross-validation in validate.qmd
 #   ggFishPlots  the length-weight figure in the data report
-#   RstoxUtils   reading SPD files in compile-data.qmd
+#   RstoxUtils   reading SPD files in <stock>-2-survey-selection.qmd
 #   future       parallel backends, if a document sets one up
 # Call ensure_packages("blockCV") in the chunk that needs one.
 optional_packages <- c(
