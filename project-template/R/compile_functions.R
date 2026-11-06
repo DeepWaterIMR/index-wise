@@ -491,3 +491,23 @@ distance_diagnostics <- function(con, cfg, last_year) {
     dplyr::mutate(catch_kg = dplyr::coalesce(catch_kg, 0)) |>
     dplyr::select(cruiseseriescode, gear, distance, catch_kg)
 }
+
+#' Survey label for the Other-survey table
+#'
+#' Short cruise-series name and code when the survey has a code; otherwise the survey name
+#' from `SURVEY_NAMES` in `config.yaml` (keyed by cruise number); otherwise "–".
+#'
+#' @param code Cruise-series code.
+#' @param short Short cruise-series name (`series_short`).
+#' @param cruise Cruise number.
+#' @param cfg Project configuration.
+survey_label <- function(code, short, cruise, cfg) {
+  code <- dplyr::na_if(as.character(code), "NA")
+  named <- unlist(cfg$SURVEY_NAMES)
+  by_cruise <- if (length(named)) unname(named[as.character(cruise)]) else NA_character_
+  dplyr::case_when(
+    !is.na(code) ~ paste0(dplyr::coalesce(short, "?"), " (", code, ")"),
+    !is.na(by_cruise) ~ by_cruise,
+    TRUE ~ "–"
+  )
+}

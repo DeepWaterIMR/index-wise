@@ -31,7 +31,8 @@ INCLUDE_RUSSIAN: true                 # Russian data included by DEFAULT; set fa
 FIRST_YEAR: 1981                      # earliest year to include
 MAX_COLLECT_ROWS: 2000000              # stop before collecting more candidate stations than this
 LENGTH_LIMITS: [5, 200]               # plausible length range (cm); length records outside are removed
-CRUISE_SERIES_LABELS: null            # optional map code -> label; defaults in R/compile_functions.R
+CRUISE_SERIES_LABELS: null
+SURVEY_NAMES: null                    # optional names of surveys without a cruise-series code, keyed by cruise number            # optional map code -> label; defaults in R/compile_functions.R
 # Documented cruise exclusions. Use only when no general filtering rule removes an anomaly
 # (knowledge/influence-diagnostics.md). Cruise numbers are reused by vessels: name both.
 EXCLUDE_CRUISES: []

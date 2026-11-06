@@ -143,10 +143,7 @@ The station and catch data were read from a local copy of the IMR Biotic databas
 
 The stock is defined by `r area_label`. The overview map shows all quality-filtered research bottom-trawl hauls with `r sp` in the Northeast Atlantic, coloured by whether the haul lies inside the stock area (@fig-stock-area). Hauls outside the stock area belong to neighbouring stocks and are not used. Of the `r n_fmt(nrow(compile_metadata$positive_observations))` positive hauls on the map, `r n_fmt(sum(compile_metadata$positive_observations$inside))` lie inside `r area_label`.
 
-```{r}
-#| label: fig-stock-area
-#| fig-height: 6
-#| fig-cap: !expr 'paste0(area_label, " (blue) and quality-filtered research bottom-trawl hauls with ", sp, " in the Northeast Atlantic, ", cfg$FIRST_YEAR, "–", max(dt$year), ". Orange: inside the stock area; light blue: outside. Hauls without ", sp, " are not shown.")'
+```{r stock-area-map}
 stock_area <- read_stock_area(cfg)
 obs <- compile_metadata$positive_observations |>
   dplyr::mutate(Location = factor(dplyr::if_else(inside, inside_label, "Outside"),
@@ -154,10 +151,12 @@ obs <- compile_metadata$positive_observations |>
   dplyr::arrange(Location)
 lim <- unlist(cfg$MAP_LIMITS)
 
-p <- ggOceanMaps::basemap(limits = lim, bathymetry = TRUE, bathy.style = "rcb",
-                          bathy.alpha = 0.35, land.col = "grey85",
-                          land.border.col = "grey60", legends = FALSE, base_size = 9,
-                          rotate = TRUE) +
+base_area <- ggOceanMaps::basemap(limits = lim, bathymetry = TRUE, bathy.style = "rcb",
+                                  bathy.alpha = 0.35, land.col = "grey85",
+                                  land.border.col = "grey60", legends = FALSE,
+                                  base_size = 9, rotate = TRUE)
+area_map_height <- map_fig_height(base_area, extra = 0.7) # before geom_sf() resets limits
+p_area <- base_area +
   ggplot2::geom_sf(data = stock_area, fill = "#0072B2", alpha = 0.15, colour = "#0072B2",
                    linewidth = 0.6) +
   ggnewscale::new_scale_fill() +
@@ -170,7 +169,12 @@ p <- ggOceanMaps::basemap(limits = lim, bathymetry = TRUE, bathy.style = "rcb",
                              name = NULL) +
   ggplot2::guides(fill = ggplot2::guide_legend(override.aes = list(size = 3))) +
   ggplot2::theme(legend.position = "bottom")
-ggOceanMaps::reorder_layers(p)
+```
+
+```{r, fig.height = area_map_height}
+#| label: fig-stock-area
+#| fig-cap: !expr 'paste0(area_label, " (blue) and quality-filtered research bottom-trawl hauls with ", sp, " in the Northeast Atlantic, ", cfg$FIRST_YEAR, "–", max(dt$year), ". Orange: inside the stock area; light blue: outside. Hauls without ", sp, " are not shown.")'
+ggOceanMaps::reorder_layers(p_area)
 ```
 
 ## Haul filter {#sec-haul-filter}
@@ -281,10 +285,11 @@ The rule selected `r included_surveys` surveys and `r n_fmt(nrow(dt))` hauls (@t
 dt |>
   dplyr::group_by(`Cruise series` = cruiseseries) |>
   dplyr::summarise(
-    Code = paste(sort(unique(stats::na.omit(cruiseseriescode))), collapse = ", "),
+    Code = {codes <- unique(stats::na.omit(dplyr::na_if(cruiseseriescode, "NA")))
+            paste(codes[order(as.numeric(sub(",.*", "", codes)))], collapse = ", ")},
     Surveys = dplyr::n_distinct(missionid),
     `First year` = min(year), `Last year` = max(year),
-    Months = paste(sort(unique(month)), collapse = ", "),
+    Months = format_months(month),
     Hauls = dplyr::n(),
     `Positive hauls` = sum(biomass > 0),
     `Catch (kg)` = round(sum(biomass)),
@@ -302,14 +307,12 @@ Surveys grouped as `Other` either have no cruise-series code or belong to cruise
 dt |>
   dplyr::filter(cruiseseries == "Other") |>
   dplyr::group_by(Year = year, Vessel = platformname, Cruise = cruise,
-                  Series = dplyr::if_else(is.na(cruiseseriescode) | cruiseseriescode == "NA", "–",
-                                          paste0(dplyr::coalesce(series_short, "?"),
-                                                 " (", cruiseseriescode, ")"))) |>
-  dplyr::summarise(Months = paste(sort(unique(month)), collapse = ", "),
+                  Series = survey_label(cruiseseriescode, series_short, cruise, cfg)) |>
+  dplyr::summarise(Months = format_months(month),
                    Gear = paste(sort(unique(geartype)), collapse = ", "),
                    Hauls = dplyr::n(), `Positive hauls` = sum(biomass > 0),
                    .groups = "drop") |>
-  knitr::kable(caption = "Included surveys grouped as Other. Series gives the short name and code of the cruise series; – means no cruise-series code.")
+  knitr::kable(caption = "Included surveys grouped as Other. Series gives the short name and code of the cruise series, or the survey name from SURVEY_NAMES in config.yaml for surveys without a code; – means neither is known.")
 ```
 
 ## Dataset overview
@@ -320,14 +323,15 @@ dt |>
 #| label: tbl-data-overview
 tibble::tibble(
   Metric = c("Database last updated", "Data extracted", "Latest haul",
-             "Retained hauls", paste0("Hauls with ", sp), "True-zero hauls",
-             "Included surveys", "Cruise series", "Years",
+             "Retained hauls", paste0("Hauls with ", sp), "True-zero hauls (zero fraction)",
+             "Included surveys", "Cruise series", "Years", "Number of years",
              "Removed: length sample exceeds catch", "Removed: catch weight missing"),
   Value = c(compile_metadata$db_updated, compile_metadata$data_downloaded_at_label,
             paste0(format(latest$station_date), " (", latest$cruiseseries, ")"),
-            n_fmt(nrow(dt)), n_fmt(sum(dt$biomass > 0)), n_fmt(sum(dt$biomass == 0)),
+            n_fmt(nrow(dt)), n_fmt(sum(dt$biomass > 0)),
+            paste0(n_fmt(sum(dt$biomass == 0)), " (", sprintf("%.1f", 100 * mean(dt$biomass == 0)), " %)"),
             included_surveys, dplyr::n_distinct(dt$cruiseseries),
-            paste0(min(dt$year), "–", max(dt$year)),
+            paste0(min(dt$year), "–", max(dt$year)), dplyr::n_distinct(dt$year),
             compile_metadata$n_duplicates, compile_metadata$n_incomplete)
 ) |>
   knitr::kable(caption = paste0("Overview of the compiled ", sp, " dataset."))
@@ -387,20 +391,27 @@ cowplot::plot_grid(p1, p2, ncol = 1, labels = "AUTO", rel_heights = c(4, 5.2))
 
 The cruise series cover overlapping but different parts of the stock area, and positive hauls are a spatially clustered subset of the effort in every series (@fig-survey-positions).
 
-```{r}
-#| label: fig-survey-positions
-#| fig-height: 8
-#| fig-cap: !expr 'paste0("Retained hauls by cruise series. Grey: hauls without ", sp, " (true zeros); orange: hauls with ", sp, ".")'
-ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 8, rotate = TRUE,
-                     expand.factor = 1) +
+```{r survey-positions-map}
+n_series <- dplyr::n_distinct(dt$cruiseseries)
+p_pos <- ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 8, rotate = TRUE,
+                              expand.factor = 1, land.col = "grey85",
+                              land.border.col = "grey60") +
   ggspatial::geom_spatial_point(data = dplyr::filter(dt, biomass == 0),
-    aes(longitudestart, latitudestart), colour = "grey55", size = 0.15, alpha = 0.4,
+    aes(longitudestart, latitudestart), colour = "grey40", size = 0.15, alpha = 0.5,
     crs = 4326) +
   ggspatial::geom_spatial_point(data = dplyr::filter(dt, biomass > 0),
     aes(longitudestart, latitudestart), colour = "#D55E00", size = 0.5, crs = 4326) +
   facet_wrap(~cruiseseries, ncol = 3) +
   theme(axis.title = element_blank(), axis.text = element_blank(),
         axis.ticks = element_blank())
+positions_map_height <- map_fig_height(p_pos, ncol = 3, nrow = ceiling(n_series / 3),
+                                       extra = 0.3 * ceiling(n_series / 3), side = 0.3)
+```
+
+```{r, fig.height = positions_map_height}
+#| label: fig-survey-positions
+#| fig-cap: !expr 'paste0("Retained hauls by cruise series. Grey: hauls without ", sp, " (true zeros); orange: hauls with ", sp, ".")'
+p_pos
 ```
 
 ## Gear
@@ -454,25 +465,16 @@ dt |>
 
 ## Survey timing
 
+```{r timing-height}
+timing_height <- round(0.2 * dplyr::n_distinct(dt$year) + 1.2, 1)
+```
+
 The cruise series occupy characteristic and largely stable parts of the year, so season is partly confounded with cruise series (@fig-survey-timing). Month is therefore included as a smooth term in the models, and the survey effect is examined in the model fits.
 
-```{r}
+```{r, fig.height = timing_height}
 #| label: fig-survey-timing
-#| fig-height: 7
-#| fig-cap: "Timing of the included surveys. Segments span the first to last retained haul of each survey."
-timing <- dt |>
-  dplyr::group_by(year, missionid, cruiseseries) |>
-  dplyr::summarise(first = min(yday), last = max(yday), .groups = "drop") |>
-  dplyr::mutate(first = as.Date("2020-01-01") + first - 1,
-                last = as.Date("2020-01-01") + last - 1)
-ggplot(timing, aes(x = first, xend = last, y = year, yend = year, colour = cruiseseries)) +
-  geom_segment(linewidth = 1.6) +
-  scale_colour_manual(values = cs_cols) +
-  scale_x_date(date_labels = "%b", date_breaks = "1 month",
-               limits = as.Date(c("2020-01-01", "2020-12-31"))) +
-  scale_y_reverse(breaks = seq(1980, 2030, 5)) +
-  labs(x = "Month", y = "Year", colour = "Cruise series") +
-  theme(panel.grid.minor = element_blank())
+#| fig-cap: "Timing of the included surveys, newest year at the top. Segments span the first to last retained haul of each survey; cruise series are offset slightly within a year. Hover over a segment for the survey details."
+plot_survey_timing(dt, cs_cols, interactive = TRUE, height = timing_height)
 ```
 
 ## Gross-error screening
@@ -533,7 +535,7 @@ report_software(
 )
 ```
 
-This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. The authors designed the study, specified and checked the analyses, and reviewed, edited and approved the AI-assisted content, for which they take full responsibility. This version has not yet been reviewed by the authors.
+This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. The authors designed the study, specified and checked the analyses, and reviewed, edited and approved the AI-assisted content, for which they take full responsibility.
 
 # References {.unnumbered}
 

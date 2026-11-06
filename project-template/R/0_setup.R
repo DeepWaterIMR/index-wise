@@ -56,7 +56,8 @@ optional_packages <- c(
   blockCV = NA,
   ggFishPlots = "DeepWaterIMR/ggFishPlots",
   RstoxUtils = "DeepWaterIMR/RstoxUtils",
-  future = NA
+  future = NA,
+  plotly = NA      # interactive survey-timing figure (static fallback without it)
 )
 
 # Set R_INDEX_INSTALL_MISSING=true only after package installation has been authorized.

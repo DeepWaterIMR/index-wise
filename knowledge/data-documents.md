@@ -48,11 +48,15 @@ Setup chunks first (`root.dir` in its own chunk, then config/source), then:
      generic 0.3–5 nmi limits fit the species.
    - *Surveys and cruise series*: the encountered-on-a-cruise rule, the cruise-series table, and
      the list of surveys grouped as `Other` with the short cruise-series name and code
-     (`survey_short_names` in `R/compile_functions.R`).
-   - *Dataset overview*: one metric/value table.
+     (`survey_short_names` in `R/compile_functions.R`; uncoded surveys named through
+     `SURVEY_NAMES` in `config.yaml`, via `survey_label()`).
+   - Month columns use ranges (`format_months()`: "1–3", "2–6, 8–12").
+   - *Dataset overview*: one metric/value table including number of years and true-zero
+     hauls with the zero fraction in parentheses.
 3. **Analysis** — *Survey catch and effort* (overview bars, annual bars), *Survey positions*
-   (facet map with true zeros), *Gear* (box plot by gear + hauls by year and gear type; gear
-   table with mean [min–max]), *Survey timing*, *Gross-error screening* (table), *Other data in
+   (facet map with true zeros, grey land without bathymetry), *Gear* (box plot by gear + hauls by year and gear type; gear
+   table with mean [min–max]), *Survey timing* (`plot_survey_timing()`: interactive plotly, newest year on top, one label
+   per year, cruise series dodged within a year, transparent segments), *Gross-error screening* (table), *Other data in
    the database* (counts by mission type and gear; no positions).
 4. **Results and recommendations** — *Ready for downstream use*, *Provisional*, *To decide*.
 5. **Software and reproducibility**, AI statement, References, script appendix.
@@ -71,6 +75,10 @@ Setup chunks first (`root.dir` in its own chunk, then config/source), then:
   before projection (`densify_lonlat()`, so parallels such as 62°N stay curved),
   `reorder_layers()` so land covers the polygon; points as filled circles with a thin black
   border (inside orange, outside light blue).
+- Maps have no empty space above or below: compute the height with `map_fig_height()` from
+  the bare `basemap()` (before `geom_sf()`, which resets the limits) and pass it as the knitr
+  option `fig.height = <variable>` in the chunk header (a Quarto `fig-height: !expr` does not
+  work here).
 - Log axes use plain number labels (`scales::label_number()`), not `1e+02`.
 - Render with a UTF-8 locale (`render.sh` sets it); GDAL cannot open the decomposed-Unicode
   project paths of macOS OneDrive folders otherwise.
