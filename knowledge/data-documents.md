@@ -55,8 +55,10 @@ Setup chunks first (`root.dir` in its own chunk, then config/source), then:
      hauls with the zero fraction in parentheses.
 3. **Analysis** — *Survey catch and effort* (overview bars, annual bars), *Survey positions*
    (facet map with true zeros, grey land without bathymetry), *Gear* (box plot by gear + hauls by year and gear type; gear
-   table with mean [min–max]), *Survey timing* (`plot_survey_timing()`: interactive plotly, newest year on top, one label
-   per year, cruise series dodged within a year, transparent segments), *Gross-error screening* (table), *Other data in
+   table with mean [min–max]), *Survey timing* (`plot_survey_timing()`: static figure, newest year on top, one label per
+   year, cruise series dodged within a year, transparent segments; `interactive = TRUE` gives
+   a plotly widget for data documents, but it adds about 3.8 MB and its container height
+   still needs work in Quarto), *Gross-error screening* (table), *Other data in
    the database* (counts by mission type and gear; no positions).
 4. **Results and recommendations** — *Ready for downstream use*, *Provisional*, *To decide*.
 5. **Software and reproducibility**, AI statement, References, script appendix.

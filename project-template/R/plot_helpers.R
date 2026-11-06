@@ -119,7 +119,9 @@ map_fig_height <- function(p, width = 6.69, ncol = 1, nrow = 1, extra = 0.6, sid
 #' One segment per survey from its first to last retained haul (day of year), newest year at
 #' the top, one axis label per year. Cruise series are dodged slightly within a year so that
 #' simultaneous surveys remain visible. With `interactive = TRUE` the figure is returned as a
-#' plotly widget with survey details in the tooltip.
+#' plotly widget with survey details in the tooltip (about 3.8 MB added to a self-contained
+#' HTML; the container height still needs work in Quarto, see ref-assessment-index
+#' docs/data/Compile_all_data.Rmd for a working R Markdown setup).
 #'
 #' @param dt Station data with `year`, `yday`, `missionid`, `cruiseseries`, `platformname`,
 #'   `cruise`, `geartype`.
@@ -127,7 +129,7 @@ map_fig_height <- function(p, width = 6.69, ncol = 1, nrow = 1, extra = 0.6, sid
 #' @param interactive Return a plotly widget?
 #' @param height Figure height in inches (used for the plotly widget).
 #' @return ggplot or plotly object.
-plot_survey_timing <- function(dt, colours, interactive = TRUE, height = 8) {
+plot_survey_timing <- function(dt, colours, interactive = FALSE, height = 8) {
   series <- levels(factor(dt$cruiseseries))
   k <- length(series)
   step <- if (k > 1) 0.7 / (k - 1) else 0
@@ -157,6 +159,11 @@ plot_survey_timing <- function(dt, colours, interactive = TRUE, height = 8) {
     ggplot2::theme(panel.grid.minor = ggplot2::element_blank(),
                    axis.text.y = ggplot2::element_text(size = 7))
   if (interactive && requireNamespace("plotly", quietly = TRUE)) {
-    plotly::ggplotly(p, tooltip = "text", height = height * 96)
+    # The widget container must have the same height as the plotly layout; otherwise
+    # knitr's default container height crops the figure and the plot covers the caption.
+    w <- plotly::ggplotly(p, tooltip = "text", height = round(height * 96))
+    w$height <- round(height * 96)
+    w$sizingPolicy$knitr$figure <- TRUE
+    w
   } else p
 }

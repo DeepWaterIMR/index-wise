@@ -473,8 +473,8 @@ The cruise series occupy characteristic and largely stable parts of the year, so
 
 ```{r, fig.height = timing_height}
 #| label: fig-survey-timing
-#| fig-cap: "Timing of the included surveys, newest year at the top. Segments span the first to last retained haul of each survey; cruise series are offset slightly within a year. Hover over a segment for the survey details."
-plot_survey_timing(dt, cs_cols, interactive = TRUE, height = timing_height)
+#| fig-cap: "Timing of the included surveys, newest year at the top. Segments span the first to last retained haul of each survey; cruise series are offset slightly within a year."
+plot_survey_timing(dt, cs_cols)
 ```
 
 ## Gross-error screening
