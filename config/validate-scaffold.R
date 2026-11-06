@@ -56,7 +56,7 @@ stopifnot(file.exists(file.path(target, ".here")),
           yaml::read_yaml(file.path(target, "VERSION"), eval.expr = FALSE)$version == "0.1.0")
 qmds <- list.files(file.path(target, "docs"), "\\.qmd$", recursive = TRUE, full.names = TRUE)
 main <- qmds[!grepl("-section.qmd$", qmds)]
-stopifnot(length(main) == 5L)
+stopifnot(length(main) == 6L)
 for (path in qmds) {
   text <- readLines(path, warn = FALSE)
   stopifnot(!any(grepl("\\{\\{(SPECIES|REGION|AUTHORS|AFFILIATIONS)", text)))
