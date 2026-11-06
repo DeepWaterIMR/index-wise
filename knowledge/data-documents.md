@@ -15,6 +15,32 @@ species slug; for split domains, e.g. `atlantic-halibut-n62`).
 The number in the file name is the reading order. Model documents (fit, validation, final
 report) follow under `docs/data-report/`.
 
+## `<stock>-3-data.qmd`
+
+Explains and shows the station-based and length-based data that enter the sdmTMB models; it
+does not repeat survey selection (stock area, filter, surveys, gear tables, timing).
+
+1. **Purpose** — what the compiled data contain and which responses (total biomass and the
+   length-based product, e.g. fishable biomass ≥ `OVER_CM`) are fit to be modelled.
+2. **Data** — *Data collation* with a Mermaid flowchart (stnall → haul roster with true zeros →
+   total biomass; indall → raised lengths → weight at length → length share); *Station-level
+   data* (catch summed over catch samples, density formula with `GEAR_WIDTH`); *Individual-level
+   data* (cm conversion, `LENGTH_LIMITS`, raising factor n/m); *Length-based data* (share
+   formula, predicted weight at length, imputation hierarchy for positive hauls without lengths).
+3. **Analysis**
+   - *Dataset overview*: metric table (station and individual level) and responses by cruise
+     series (positive %, median positive density, total catch, length-product share).
+   - *Station-level data*: density map of both products (zeros as grey crosses, positives sized
+     and coloured by density; height from `map_fig_height()`); annual share of positive hauls and
+     mean density with 95 % CI; depth (scaled depth distribution of all vs positive hauls, x-axis
+     to the 99.5 % depth quantile; density vs depth with loess); season and gear (density by
+     month with counts in the axis labels; by gear type within cruise series with counts below
+     the boxes).
+   - *Length-based data*: length–weight fit; raised length distributions by cruise series with
+     the threshold; annual median and 10–90 % length; source of the length share by cruise series
+     and annual share of the catch above the threshold; consistency-check table.
+4. **Results and recommendations**, software, AI statement, references, script appendix.
+
 ## `<stock>-1-summary.qmd`
 
 1. **Abstract** (unnumbered, ≤ 300 words): whole routine and results. Placeholder until the
