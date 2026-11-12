@@ -28,10 +28,15 @@ conventions to every generated artifact; retain index-wise's scientific workflow
    - Total biomass (`spatiotemporal = "ar1"`, no year effect).
    - Over-X-cm biomass (threshold from `config.yaml`).
    - Length-group abundance indices (breaks from `config.yaml`).
+   - Size-, sex- or maturity-class indices, as separate fits or one stacked class model
+     (`knowledge/model-selection.md` *Stacked class models*; state whether the classes share
+     their spatial fields).
    - The **assessment-selected index** — `iid` + `year` as a fixed effect when it feeds SPiCT
      or another state-space model, so the series is not smoothed twice
      (`knowledge/model-selection.md`). Use `get_index_split()` to compute many indices
      efficiently.
+   Compute every index with `predict_index()` (offset 0, fitted years, cell area), so all
+   products share the effort convention.
 2. **Results** — fixed-effect estimates/tables (`plot_fixed_effects()`), predicted density maps
    (`plot_prediction_map()`), random fields, residual Q-Q, variance partitioning, and
    simulation-based diagnostics.
@@ -53,6 +58,12 @@ toggle (default off), mirroring the benchmark:
   (`compare_surveys`): filter to one `cruiseseries`, build a survey-specific mesh and grid,
   compute the index, compare (`plot(type = "index"|"scatter"|"spatial")`). Add
   leave-one-survey-out (`sdmTMB_leave_out(id_col = "cruiseseries")`).
+- `bridging-section.qmd` — the new index against the previous assessment's published index
+  (`PREVIOUS_INDEX_FILE`, in index years), both rescaled to their overlap mean; years beyond
+  `REVISION_TOLERANCE` are flagged and each needs an explanation.
+- `robustness-section.qmd` — whole-station subsampling, start-year peels, the terminal year
+  without `LATE_COMPONENTS`, and down-weighted years (`ROBUSTNESS`). Diagnostics only; a
+  barrier mesh is not rebuilt in these refits.
 - `influence-section.qmd` — which hauls and cruises drive the index: region split, density
   screens, leave-one-out with leverage, and data-filter scenarios for any anomaly
   (`knowledge/influence-diagnostics.md`). Results are cached before any exclusion; exclusions

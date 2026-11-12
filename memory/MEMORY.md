@@ -10,3 +10,5 @@ those carry their own `memory/`). One line per file.
   document-structure, and provenance lessons from the first complete project.
 - [second-project-lessons.md](second-project-lessons.md) — redfish benchmark: stationtype
   keep-list, cruise identity, SPD duplicates, influence/leverage workflow, server render pitfalls.
+- [cpue-lessons.md](cpue-lessons.md) — design of the commercial CPUE layer and the practices it
+  was distilled from.

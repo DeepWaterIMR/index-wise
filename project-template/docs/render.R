@@ -11,6 +11,8 @@
 #   Rscript docs/render.R            # render everything
 #   Rscript docs/render.R data       # render only the data documents
 #   Rscript docs/render.R fit        # etc.
+#   Rscript docs/render.R cpue       # the commercial CPUE document (also in "all" when its
+#                                    # logbook extract, config CPUE: file, exists)
 
 args  <- commandArgs(trailingOnly = TRUE)
 stage <- if (length(args)) args[[1]] else "all"
@@ -20,7 +22,10 @@ if (!requireNamespace("quarto", quietly = TRUE))
 if (!requireNamespace("yaml", quietly = TRUE))
   stop("The 'yaml' package is required: install.packages('yaml')")
 
-cfg  <- yaml::read_yaml("config.yaml", eval.expr = FALSE)
+# Read as UTF-8 bytes so Norwegian species names (å/æ/ø) parse regardless of R locale.
+cfg_txt <- readChar("config.yaml", file.info("config.yaml")$size, useBytes = TRUE)
+Encoding(cfg_txt) <- "UTF-8"
+cfg  <- yaml::yaml.load(cfg_txt, eval.expr = FALSE)
 slug <- cfg$SPECIES_SLUG
 stock <- if (!is.null(cfg$STOCK_SLUG)) cfg$STOCK_SLUG else slug
 
@@ -39,5 +44,8 @@ if (stage %in% c("all", "data")) {
 if (stage %in% c("all", "fit"))      render("docs/data-report/fit/fit.qmd")
 if (stage %in% c("all", "validate")) render("docs/data-report/validation/validate.qmd")
 if (stage %in% c("all", "report"))   render(file.path("docs", "data-report", slug, "report.qmd"))
+cpue_file <- cfg$CPUE$file
+if (identical(stage, "cpue") || (identical(stage, "all") && !is.null(cpue_file) && file.exists(cpue_file)))
+  render("docs/data-report/cpue/cpue.qmd")
 
 message("Done: ", stage)

@@ -17,6 +17,7 @@ params:
   run_cv: false             # cross-validate the AIC shortlist (SLOW: k fits per candidate)
   run_family: true          # stage 3 — family
   run_spatiotemporal: true  # stage 4 — spatiotemporal structure
+  run_survey_field: false   # sensitivity — survey-specific spatial deviation field
   run_mesh: false           # stage 5 — mesh resolution (slow)
   run_mesh_cv: false        # spatial block CV across mesh cutoffs (slow; needs blockCV)
   run_retro: false          # retrospective (slow)
@@ -58,13 +59,13 @@ resumes. Improve this document directly as the routine matures. Do NOT hard-wrap
 knitr::opts_knit$set(root.dir = here::here())
 source(here::here("R", "0_setup.R"))
 
+# Same modelling frame as Step 2: index year, response and offset follow config.yaml.
 dt <- readRDS(file.path(out_dir, "compiled-data.rds")) |>
-  dplyr::rename(lon = longitudestart, lat = latitudestart, year = startyear) |>
-  dplyr::mutate(value = .data[[response_col]], month = as.integer(month),
-                log_swept_area = log(swept_area)) |>   # used only when EFFORT is "offset"
-  dplyr::filter(!is.na(value))
-dt <- sdmTMB::add_utm_columns(dt, ll_names = c("lon", "lat"), utm_crs = dt_crs)
-dt$fyear <- factor(dt$year)   # for the "year as a fixed effect" candidates
+  prepare_model_data(cfg)
+# The year fixed effect is a precomputed factor, never factor(year) in a formula: with
+# extra_time, an inline factor gains levels for the missing years and the model is not
+# identifiable (sdmTMB issue #320).
+dt$fyear <- factor(dt$year)
 
 grid <- readRDS(file.path(out_dir, "prediction-grid.rds"))
 grid$log_swept_area <- 0      # predict a density: one unit of swept area
@@ -251,18 +252,20 @@ and `lfo = TRUE` scores prediction of unseen *years*, which is the question an a
 
 ## Stage 3 — Family
 
-Same formula, same fields, same records: only the likelihood differs, so AIC is comparable across these rows.
+Same formula, same fields, same records: only the likelihood differs, so AIC is comparable across these rows. With `EFFORT: "offset"` the Poisson-link delta families are added; there and in Tweedie the offset also reaches the probability of a zero catch, whereas a standard delta family applies it to the positive component only. When this index replaces an existing one, the existing index's family must be among the candidates, so the bridging comparison can separate a change of family from a change of data.
 
 ```{r, eval=params$run_family}
 #| label: tbl-validate-family
-sel_family <- run_stage(
-  list(
-    "Delta-lognormal" = list(family = sdmTMB::delta_lognormal()),
-    "Delta-gamma"     = list(family = sdmTMB::delta_gamma()),
-    "Tweedie"         = list(family = sdmTMB::tweedie())
-  ),
-  "family"
+family_candidates <- list(
+  "Delta-lognormal" = list(family = sdmTMB::delta_lognormal()),
+  "Delta-gamma"     = list(family = sdmTMB::delta_gamma()),
+  "Tweedie"         = list(family = sdmTMB::tweedie())
 )
+if (identical(effort_mode(cfg), "offset")) family_candidates <- c(family_candidates, list(
+  "Delta-lognormal, Poisson link" = list(family = sdmTMB::delta_lognormal(type = "poisson-link")),
+  "Delta-gamma, Poisson link"     = list(family = sdmTMB::delta_gamma(type = "poisson-link"))
+))
+sel_family <- run_stage(family_candidates, "family")
 selection_kable(sel_family, "Model families, same formula and same spatiotemporal structure.")
 ```
 
@@ -299,11 +302,16 @@ sel_st <- run_stage(
       spatiotemporal = "iid",
       formula = stats::as.formula(paste("value ~ 0 + fyear +",
                                         paste(full_terms, collapse = " + ")))
+    ),
+    "AR1 + year effect" = list(
+      spatiotemporal = "ar1",
+      formula = stats::as.formula(paste("value ~ 0 + fyear +",
+                                        paste(full_terms, collapse = " + ")))
     )
   ),
   "spatiotemporal"
 )
-selection_kable(sel_st, "Spatiotemporal random-field structures. The last row deliberately changes two things at once - the structure and the year effect - because that pairing is the assessment-index configuration; read it against IID rather than against the others.")
+selection_kable(sel_st, "Spatiotemporal random-field structures. The year-effect rows deliberately change two things at once - the structure and the year effect - because those pairings are the assessment-index configurations; read IID + year against IID and AR1 + year against AR1.")
 ```
 
 <!-- Describe the supported finding and refer to @tbl-validate-spatiotemporal. Confirm caption units, sample size, and interval definitions against the generated result. -->
@@ -319,8 +327,36 @@ plot(sel_st, type = "index", newdata = grid)
 
 ::: {.callout-important}
 ## The assessment constrains this choice, not only the fit
-Total and length-group indices use `spatiotemporal = "ar1"` with **no** year fixed effect. The assessment-selected index (here: `r cfg$ASSESSMENT_MODEL`) uses `iid` with **year as a fixed effect** when that model is state-space, as SPiCT is: SPiCT separates process from observation error itself, and an `ar1` field would smooth the series twice, autocorrelate its observation errors and understate its uncertainty. If the table prefers `ar1` for the assessment index, say so and carry `iid` anyway — with the reason stated. Confirm with the user which product the assessment consumes.
+Total and length-group indices use `spatiotemporal = "ar1"` with **no** year fixed effect. The assessment-selected index (here: `r cfg$ASSESSMENT_MODEL`) uses `iid` with **year as a fixed effect** when that model is state-space, as SPiCT is: SPiCT separates process from observation error itself, and an `ar1` field would smooth the series twice, autocorrelate its observation errors and understate its uncertainty. A third configuration, a year effect **with** an AR1 field, keeps the annual mean free and correlates only the spatial deviations between years; it is the incumbent in several existing survey indices, so include it when bridging from one. If the table prefers `ar1` for the assessment index, say so and carry `iid` anyway — with the reason stated. Confirm with the user which product the assessment consumes.
 :::
+
+## Survey-specific spatial deviation (sensitivity)
+
+When surveys from different seasons are combined (`SURVEY_EFFECT: true`), the stock may be distributed differently in each. A spatially varying field per non-reference survey lets each survey deviate from the shared spatial pattern; the `fsurvey` fixed effect must stay in the formula, because the deviation field has mean zero and cannot carry the average catchability difference. Like the barrier mesh, this is a sensitivity on the selected structure, not a ranking candidate: adopt it only if it changes the index or is clearly preferred.
+
+```{r, eval=params$run_survey_field && isTRUE(cfg$SURVEY_EFFECT)}
+#| label: fig-validate-survey-field
+#| fig-cap: "Index with and without survey-specific spatial deviation fields."
+ref_survey <- as.character(grid$fsurvey[1])
+dev_levels <- setdiff(levels(dt_sel$fsurvey), ref_survey)
+dev_cols <- paste0("svc_", make.names(dev_levels))
+for (i in seq_along(dev_levels)) {
+  dt_sel[[dev_cols[i]]] <- as.numeric(dt_sel$fsurvey == dev_levels[i])
+  grid[[dev_cols[i]]] <- 0   # the prediction is for the reference survey
+}
+fit_shared <- do.call(sdmTMB::sdmTMB, c(
+  sel_args[c("data", "mesh", "formula", "family", "time", "spatial", "spatiotemporal")],
+  sel_args[intersect(c("extra_time", "offset"), names(sel_args))]
+))
+fit_dev <- update(fit_shared, spatial_varying = stats::as.formula(
+  paste("~ 0 +", paste(dev_cols, collapse = " + "))))
+cmp_survey <- compare_models(fit_shared, fit_dev, newdata = grid, reference_model = 1)
+print(plot(cmp_survey, type = "index"))
+```
+
+<!-- Describe the supported finding and refer to @fig-validate-survey-field. State the AIC difference read from the fits and whether the field is carried forward. -->
+
+When the surveys are kept as **separate seasonal indices** rather than one combined index, predict the same fit once per reference survey and state which one the assessment consumes.
 
 ## Stage 5 — Mesh resolution
 
@@ -362,8 +398,7 @@ mesh_ref <- paste0(min(mesh_cutoffs), " km")
 mesh_index <- dplyr::bind_rows(lapply(names(sel_mesh$fits), function(nm) {
   f <- sel_mesh$fits[[nm]]
   if (is.null(f)) return(NULL)
-  p <- predict(f, newdata = grid, return_tmb_object = TRUE)
-  dplyr::mutate(sdmTMB::get_index(p, area = grid_cell_area_nmi2, bias_correct = FALSE), model = nm)
+  dplyr::mutate(predict_index(f, grid, area = grid_cell_area_nmi2, bias_correct = FALSE), model = nm)
 }))
 mesh_last_year <- max(mesh_index$year)
 
@@ -563,6 +598,13 @@ AI-assisted drafting and analysis require researcher review. The responsible aut
 #| lst-cap: "Complete shared package, configuration, and model setup."
 #| code-fold: true
 #| code-summary: "Show setup script"
+```
+
+```{r index-helpers-appendix, code = readLines(here::here("R", "index_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-index-helpers
+#| lst-cap: "Complete effort, index-year, reference, balance, bridging and robustness helpers."
+#| code-fold: true
+#| code-summary: "Show index helpers"
 ```
 
 ```{r helpers-appendix, code = readLines(here::here("R", "report_helpers.R")), eval = FALSE, echo = TRUE}

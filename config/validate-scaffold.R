@@ -1,6 +1,13 @@
 # Synthetic contract checks. Run from the index-wise repository root.
 # Optional --render verifies a lightweight report, never the survey/model pipeline.
 source("scaffold.R")
+
+# Rscript can run under the C locale, where yaml::read_yaml()/write_yaml() and readLines()
+# mangle the non-ASCII names in the fixtures. Read YAML with scaffold.R's .read_yaml_utf8(),
+# write UTF-8 bytes back, and mark text read from generated files as UTF-8.
+write_yaml_utf8 <- function(x, path) {
+  writeBin(charToRaw(enc2utf8(yaml::as.yaml(x))), path)
+}
 workspace <- Sys.getenv("INDEX_TEMPLATE_TEST_DIR", unset = tempfile("index-scaffold-"))
 dir.create(workspace)
 # Test the canonical config and legacy fallback under an isolated temporary home.
@@ -25,13 +32,13 @@ unlink(c(file.path(workspace, ".index-wise", "config.json"),
          file.path(workspace, ".index-template", "config.json")))
 stopifnot(normalizePath(.find_template()) == normalizePath("project-template"))
 if (is.na(old_home)) Sys.unsetenv("HOME") else Sys.setenv(HOME = old_home)
-cfg <- yaml::read_yaml("examples/redfish/config.yaml", eval.expr = FALSE)
-cfg$AUTHORS <- list(list(name = 'Test: Åuthor "One"', affiliation = "test"),
+cfg <- .read_yaml_utf8("examples/redfish/config.yaml")   # locale-independent (scaffold.R)
+cfg$AUTHORS <- list(list(name = "Test: \u00c5uthor \"One\"", affiliation = "test"),
                     list(name = "Second Author", affiliation = c("test", "other")))
 cfg$AFFILIATIONS <- list(list(id = "test", name = "Synthetic Institute"),
                          list(id = "other", name = "Other Institute"))
 config_file <- file.path(workspace, "config.yaml")
-yaml::write_yaml(cfg, config_file)
+write_yaml_utf8(cfg, config_file)
 # With no saved config, scaffold_index() must still source the template in the current repo.
 Sys.setenv(HOME = workspace)
 scaffold_index(config_file, file.path(workspace, "default-template-project"), dry = TRUE)
@@ -53,12 +60,12 @@ stopifnot(all(dir.exists(file.path(target, c("ai/memory", "ai/tests", "ai/review
   "R", "docs/assets", "docs/data-report", "figures", "config", "logs")))))
 stopifnot(!any(file.exists(file.path(target, c("memory", "review", "R/00_setup.R")))))
 stopifnot(file.exists(file.path(target, ".here")),
-          yaml::read_yaml(file.path(target, "VERSION"), eval.expr = FALSE)$version == "0.1.0")
+          .read_yaml_utf8(file.path(target, "VERSION"))$version == "0.1.0")
 qmds <- list.files(file.path(target, "docs"), "\\.qmd$", recursive = TRUE, full.names = TRUE)
 main <- qmds[!grepl("-section.qmd$", qmds)]
-stopifnot(length(main) == 6L)
+stopifnot(length(main) == 8L)   # three data documents, fishable length, fit, validate, report, CPUE
 for (path in qmds) {
-  text <- readLines(path, warn = FALSE)
+  text <- readLines(path, warn = FALSE, encoding = "UTF-8")
   stopifnot(!any(grepl("\\{\\{(SPECIES|REGION|AUTHORS|AFFILIATIONS)", text)))
   # Parse every R chunk without evaluating analysis or installing packages.
   in_r <- FALSE
@@ -99,7 +106,7 @@ for (path in list.files(file.path(target, "R"), "\\.R$", full.names = TRUE)) par
 invisible(parse(file.path(target, "docs/render.R")))
 # Bad metadata must fail before creating a destination, including in dry-run mode.
 cfg$AUTHORS[[1]]$affiliation <- "missing"
-yaml::write_yaml(cfg, config_file)
+write_yaml_utf8(cfg, config_file)
 bad <- try(scaffold_index(config_file, file.path(workspace, "invalid"),
                           template = "project-template"), silent = TRUE)
 stopifnot(inherits(bad, "try-error"), !dir.exists(file.path(workspace, "invalid")))

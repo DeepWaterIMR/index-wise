@@ -110,7 +110,12 @@ into `knowledge/`) before acting.
 | **Step 2** — fit the first feasible model                    | `skills/index-fit-model/SKILL.md` |
 | **Step 3** — validate / select the model                     | `skills/index-validate-model/SKILL.md` |
 | **Step 4** — final report + extensions, export the index     | `skills/index-final-report/SKILL.md` |
+| **CPUE** — prepare logbook / sales-note records              | `skills/index-cpue-data/SKILL.md` |
+| **CPUE** — standardise (glmmTMB, mgcv, sdmTMB) and export    | `skills/index-cpue-model/SKILL.md` |
 | Render long Quarto docs (screen session, logs, toggles)      | `skills/index-render/SKILL.md` |
+
+A commercial CPUE index is a separate, optional track beside the survey workflow: its data come
+from logbooks or sales notes, not from Biotic, and they are confidential at the record level.
 
 Shared knowledge lives in `knowledge/`:
 
@@ -124,6 +129,10 @@ Shared knowledge lives in `knowledge/`:
 - `model-selection.md` — **the comparability contract** for Step 3: identical records, when
   AIC is and is not comparable, per-observation hold-out likelihood, the selection stages,
   AIC-then-CV cost control, and how to report a carried-forward model that is not the winner.
+- `cpue.md` — commercial catch-and-effort data: sources, why CPUE is not abundance
+  (hyperstability, creep, targeting, management), record preparation.
+- `cpue-models.md` — CPUE standardisation with glmmTMB, mgcv and sdmTMB: effort, reference
+  conditions, prediction domain, within-year correlation, sensitivity, handoff.
 - `assessment-index-handoff.md` — the versioned format that passes the selected index to
   spict-wise and gadget-wise.
 - `packages.md` — the package ecosystem and install lines.

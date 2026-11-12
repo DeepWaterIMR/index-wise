@@ -83,15 +83,24 @@ conventions to every generated artifact; retain index-wise's scientific workflow
 6b. **Documented exclusions** — apply `config.yaml` `EXCLUDE_CRUISES` (platform + cruise).
    Entries come only from the influence workflow (`knowledge/influence-diagnostics.md`).
 7. **Swept-area density** — apply the gear-width policy from `config.yaml` (normally a common
-   25 m effective width) to compute `rho_biomass` / `rho_abundance`. Sum catch and swept area
-   to the output unit before division. If a common width is used with multiple gear types,
-   retain `geartype` as a fixed effect in the model.
-8. **Depth** — fill missing/invalid depths from GEBCO (`ggOceanMaps::get_depth()`).
-9. **Length data** — fit length–weight (`ggFishPlots::plot_lw()`) and allocate catches to
+   25 m effective width) to compute `swept_area` with `swept_area_nmi2()` and
+   `rho_biomass` / `rho_abundance`. Keep `swept_area` in the output (`EFFORT: offset` and the
+   Step 2 scale check use it). Sum catch and swept area to the output unit before division. If
+   a common width is used with multiple gear types, retain `geartype` as a fixed effect.
+8. **Index year** — add `index_year` from `startyear` and `month` (`index_year()`, config
+   `INDEX_YEAR_START_MONTH`/`INDEX_YEAR_LABEL`); keep `startyear` as the calendar year. See
+   `knowledge/data-filtering.md` *Index year*.
+9. **Depth** — fill missing/invalid depths from GEBCO (`ggOceanMaps::get_depth()`).
+10. **Catchability covariates** — `add_response_and_covariates()` adds `hour` (UTC) for every
+    haul and `sun_altitude` (`suncalc`) when `CATCHABILITY_TERMS` includes it.
+11. **Length data** — fit length–weight (`ggFishPlots::plot_lw()`) and allocate catches to
    length groups if the project needs length-based products. Raise observations within
    catchsample with a numeric `catchcount / lengthsamplecount` representation factor; do not
-   round and expand rows unless a downstream method requires integer rows.
-10. **Save** the compiled dataset to the root-level `data/output/` (gitignored). Region-specific
+   round and expand rows unless a downstream method requires integer rows. Record
+   `n_measured` per haul. **A positive haul without measured individuals is never zero in the
+   class products**: `add_fishable_biomass()` imputes its share hierarchically and flags it in
+   `fishable_imputed` (`knowledge/data-filtering.md` *Individual data: missing is not zero*).
+12. **Save** the compiled dataset to the root-level `data/output/` (gitignored). Region-specific
    subdirectories such as `data/output/s62/` are acceptable when two acquisition datasets share
    one project. Never create `docs/data/output/` or any other document-local output directory.
 
@@ -120,6 +129,11 @@ code in the documents.
 - `<stock>-1-summary.qmd` holds the abstract (placeholder until Step 4), purpose, document
   list, AI statement and the central data table; model and index sections are filled in at the
   end of the workflow.
+
+In `<stock>-3-data.qmd`, also show the index-year mapping, the survey × year and gear × year
+balance (`design_balance()`; a flagged level needs a decision before modelling) and the
+terminal-year counts of `LATE_COMPONENTS`. Catchability covariates (`hour`, and `sun_altitude`
+when `CATCHABILITY_TERMS` asks for it) are added by `add_response_and_covariates()`.
 
 Every figure and table has a caption and a preceding sentence that refers to it. Use
 `fig-format: jpeg`; keep the HTML small. (For background material, see the lookup table in

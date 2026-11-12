@@ -130,3 +130,28 @@ interval that disappears when the spatiotemporal field is switched off. The grid
 **fixed across years** (or the index confounds area with density) *and* **supported in every
 year** (or the model is extrapolating); a coverage threshold is how you get both. This is an
 option, not a default — apply it when the station map shows the footprint moving.
+
+The grid's depth range is part of the domain. Extract depth per cell and then trim to
+`MIN_DEPTH`–`MAX_DEPTH`; never assign depths by nearest neighbour from a bathymetry already
+filtered to a depth band (out-of-band cells inherit the band edge instead of being removed).
+Report how many cells lie outside the depth range of the data (`depth_extrapolation()`).
+
+## An area entering the survey mid-series
+
+When the survey starts covering a new area (a fjord, a shelf extension, a new stratum), the
+domain cannot simply grow from that year: a domain that changes between years confounds area
+with abundance. Before changing the domain, fit and compare three variants:
+
+1. **Without the new area** — data and prediction domain as before (the reference).
+2. **Fit with, predict without** — the new stations inform the fields and the depth response,
+   but the index still integrates the old domain. A large change here means the new data
+   alter the model, not only the domain.
+3. **Fit with, predict the merged domain** — for the whole series, accepting that the new area
+   is extrapolated in the years before it was sampled; or from the first covered year only, as
+   a separate series.
+
+Compare the indices (`compare_models()`, and the bridging section against the previous
+assessment). Adopt the merged domain only if variant 3 is supported in every year it covers;
+otherwise keep variant 2 and report the new area separately. Record the decision and the first
+covered year in `ai/memory/`; update `regions.gpkg` under a new filename (the existing
+GeoPackage is never overwritten).

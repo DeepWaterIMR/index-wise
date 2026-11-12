@@ -44,6 +44,10 @@ Before opening a PR:
 2. Confirm every `SKILL.md` has valid frontmatter and its `knowledge/` links resolve.
 3. Dry-run the scaffold against `examples/redfish/config.yaml` and confirm no `{{...}}`
    placeholder remains in the generated project.
+4. Run `Rscript config/test-index-helpers.R`. Its model-based checks (effort conventions, the
+   index scale check, station subsampling) run when sdmTMB is installed.
+5. Run `Rscript config/test-cpue-helpers.R` (mgcv; glmmTMB checks when installed), and after
+   changes to the CPUE helpers also `Rscript examples/snowcrab-ers-cpue/snowcrab_ers_cpue.R`.
 
 ## Version stamping
 

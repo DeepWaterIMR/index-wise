@@ -15,6 +15,8 @@
 │   ├── 0_setup.R         # Packages, config, theme and model helpers
 │   ├── compile_functions.R # Step 1 compilation: filters, stock area, true zeros, length products
 │   ├── plot_helpers.R    # Fixed cruise-series/gear colours, stock-area polygon
+│   ├── index_helpers.R   # Effort, index year, references, balance, bridging, robustness
+│   ├── cpue_helpers.R    # Commercial CPUE records, indices, diagnostics, bootstrap
 │   └── report_helpers.R  # Narrative software citations from citation()
 ├── docs/
 │   ├── render.R         # Stage-aware HTML rendering
@@ -26,6 +28,7 @@
 │   └── data-report/
 │       ├── fit/fit.qmd
 │       ├── validation/validate.qmd
+│       ├── cpue/cpue.qmd # optional commercial CPUE index (config CPUE:)
 │       └── <species>/   # report.qmd and optional *-section.qmd includes
 ├── data/
 │   ├── source/          # Local source data and supplied GIS polygons; ignored
@@ -72,6 +75,17 @@ the method. All documents and their rendered outputs stay under `docs/`.
 `RESPONSE` (`biomass`/`abundance`), `LENGTH_GROUPS`, `OVER_CM` threshold, `ASSESSMENT_MODEL`,
 `FIRST_YEAR`, `CRS` (EPSG), `GRID_KM`, `MESH_CUTOFF_KM`, `BARRIER` (true/false), `GEAR_WIDTH`
 (`per_gear`/set value), `INCLUDE_RUSSIAN` (default true), `SELECTED_INDEX`.
+
+Effort, time step and catchability: `EFFORT` (`density`/`offset`), `INDEX_YEAR_START_MONTH`
+and `INDEX_YEAR_LABEL` (`start`/`end`), `SURVEY_EFFECT`, `REFERENCE_SURVEY`,
+`CATCHABILITY_TERMS`, `CATCHABILITY_REFERENCE`, `MIN_DEPTH`. Bridging and robustness:
+`LATE_COMPONENTS` (`{column, values}`), `PREVIOUS_INDEX_FILE`, `REVISION_TOLERANCE`, and
+`ROBUSTNESS` (`subsample_props`, `subsample_reps`, `start_year_peels`, `downweight_years`,
+`downweight_value`). Each has a default in `R/index_helpers.R` or the documents, so older
+configs keep working. The optional `CPUE:` block configures the commercial CPUE document: the
+local extract (`file`, `landings_file`), `source`, `unit`, plausible `ranges`, core-fleet
+thresholds, `effort_treatment`, `engine` (glmmTMB/mgcv/sdmTMB), mesh and grid, the prediction
+`reference`, `final_month` and `bootstrap_n`.
 For split domains also set `REGION`, `REGION_SLUG`, `REGION_FILE`, and `REGION_LAYER`. For
 high-latitude overview maps, optionally set `MAP_CRS` (default EPSG:3995, Arctic LAEA) and
 `MAP_SHAPEFILES` (default `Arctic`).

@@ -241,12 +241,12 @@ compile_species_stations <- function(con, cfg, last_year) {
 #' @param stations Output `stations` from [compile_species_stations()].
 #' @param cfg Project configuration.
 #' @return Stations with `swept_area` (nmi²), `rho_biomass` (kg nmi⁻²), `rho_abundance`
-#'   (n nmi⁻²), `year`, `month`, `depth` and depth diagnostics.
+#'   (n nmi⁻²), `year`, `month`, `index_year`, `hour`, `depth` and depth diagnostics.
 add_response_and_covariates <- function(stations, cfg) {
   out <- stations |>
     dplyr::mutate(
       gear_width = as.numeric(cfg$GEAR_WIDTH),
-      swept_area = distance * (gear_width / 1852),
+      swept_area = swept_area_nmi2(distance, gear_width), # the one conversion (index_helpers.R)
       rho_biomass = biomass / swept_area,
       rho_abundance = count / swept_area,
       start_time = as.POSIXct(stationstartdate, tz = "UTC"),
@@ -255,7 +255,12 @@ add_response_and_covariates <- function(stations, cfg) {
                                          start_time, units = "mins")),
       year = as.integer(startyear),
       month = as.integer(format(start_time, "%m")),
+      # Index year (config INDEX_YEAR_START_MONTH/LABEL); `year` stays the calendar year.
+      index_year = index_year(year, month, cfg$INDEX_YEAR_START_MONTH %||% 1L,
+                              cfg$INDEX_YEAR_LABEL %||% "start"),
       yday = as.integer(format(start_time, "%j")),
+      # Haul start time in UTC, a catchability covariate (CATCHABILITY_TERMS: hour).
+      hour = as.numeric(format(start_time, "%H")) + as.numeric(format(start_time, "%M")) / 60,
       depth_recorded = dplyr::coalesce(bottomdepthmean, bottomdepthstart, bottomdepthstop)
     )
   gebco <- ggOceanMaps::get_depth(
@@ -269,7 +274,25 @@ add_response_and_covariates <- function(stations, cfg) {
                                     "GEBCO", "recorded"),
       depth = dplyr::if_else(depth_source == "GEBCO", depth_gebco, depth_recorded),
       depth_ratio = depth_recorded / depth_gebco
-    )
+    ) |>
+    add_sun_altitude(cfg)
+}
+
+#' Sun altitude at the haul position, only when CATCHABILITY_TERMS includes it
+#'
+#' At high latitudes, where polar day and night decouple light from clock time, the sun's
+#' altitude (degrees above the horizon) is a better proxy for diel catchability than `hour`.
+#'
+#' @param out Stations with `start_time`, `latitudestart` and `longitudestart`.
+#' @param cfg Project configuration.
+#' @return `out`, with `sun_altitude` when requested.
+add_sun_altitude <- function(out, cfg) {
+  if (!"sun_altitude" %in% unlist(cfg$CATCHABILITY_TERMS)) return(out)
+  ensure_packages("suncalc")   # installed on demand; see R/0_setup.R
+  sun <- suncalc::getSunlightPosition(
+    data = data.frame(date = out$start_time, lat = out$latitudestart, lon = out$longitudestart)
+  )
+  dplyr::mutate(out, sun_altitude = sun$altitude * 180 / pi)
 }
 
 #' Individual length records of the target species for retained hauls

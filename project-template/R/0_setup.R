@@ -49,12 +49,18 @@ packages <- c(
 #   sdmTMBextra  BARRIER: true (barrier mesh)
 #   blockCV      the spatial block cross-validation in validate.qmd
 #   RstoxUtils   reading SPD files in <stock>-2-survey-selection.qmd
+#   suncalc      sun altitude as a catchability covariate (CATCHABILITY_TERMS: sun_altitude)
+#   glmmTMB      CPUE GLMMs in cpue.qmd (CPUE: engine: glmmTMB); mgcv ships with R
+#   DHARMa       grouped residual dispersion in cpue.qmd
 #   future       parallel backends, if a document sets one up
 # Call ensure_packages("blockCV") in the chunk that needs one.
 optional_packages <- c(
   sdmTMBextra = "pbs-assess/sdmTMBextra",
   blockCV = NA,
   RstoxUtils = "DeepWaterIMR/RstoxUtils",
+  suncalc = NA,
+  glmmTMB = NA,
+  DHARMa = NA,
   future = NA,
   plotly = NA      # interactive survey-timing figure (static fallback without it)
 )
@@ -112,6 +118,11 @@ for (.nm in c("OVER_CM", "GEAR_WIDTH", "GRID_KM", "MESH_CUTOFF_KM", "MAX_DEPTH",
 }
 rm(.nm)
 
+# Effort, index-year, prediction-reference, balance, bridging and robustness helpers.
+source(here::here("R", "index_helpers.R"))
+# Commercial CPUE helpers (docs/data-report/cpue).
+source(here::here("R", "cpue_helpers.R"))
+
 # Derived convenience values.
 dt_crs         <- cfg$CRS
 grid_side_size <- cfg$GRID_KM                       # km
@@ -123,16 +134,14 @@ grid_cell_area_nmi2 <- (cfg$GRID_KM / 1.852)^2      # nmi^2 per cell (for get_in
 # Pass the offset to sdmTMB() and sdmTMB_cv() as that column NAME, never as a vector (the CV
 # folds must subset it) and never as an explicit NULL (sdmTMB_cv() rejects it): use
 # `offset = model_offset` in sdmTMB(), and `args$offset <- model_offset` in argument lists.
-effort_model <- cfg$EFFORT %||% "density"
-if (!effort_model %in% c("density", "offset"))
-  stop("EFFORT in config.yaml must be \"density\" or \"offset\", not: ", effort_model)
+effort_model <- effort_mode(cfg)   # validates EFFORT (R/index_helpers.R)
 model_quantity <- if (identical(cfg$RESPONSE, "abundance")) "abundance" else "biomass"
 response_col <- if (identical(effort_model, "offset")) {
   if (identical(model_quantity, "abundance")) "count" else "biomass"
 } else {
   paste0("rho_", model_quantity)
 }
-model_offset <- if (identical(effort_model, "offset")) "log_swept_area" else NULL
+model_offset <- offset_column(cfg)
 
 # Poisson-link delta families use the `type = "poisson-link"` argument (the
 # delta_poisson_link_*() constructors are deprecated). Their first link is "log", not "logit":
@@ -187,14 +196,20 @@ smooth_term <- function(var, data = NULL, k = 10) {
 # The fixed-effect terms this project's config implies, sized to `data` when it is given.
 # geartype stays in when there is >1 major gear type OR a single set gear width is used (so the
 # model absorbs the gear-width difference). Temperature is off by default (INCLUDE_TEMPERATURE).
+# SURVEY_EFFECT adds a cruise-series catchability factor (`fsurvey`); CATCHABILITY_TERMS adds a
+# smooth per catchability covariate (e.g. hour, sun_altitude), predicted at a reference value.
 model_terms <- function(cfg, has_multiple_gears = TRUE, data = NULL) {
+  several_surveys <- is.null(data) || !"fsurvey" %in% names(data) ||
+    dplyr::n_distinct(data$fsurvey) > 1
   c(
     if (has_multiple_gears || !identical(cfg$GEAR_WIDTH, "per_gear")) "geartype",
+    if (isTRUE(cfg$SURVEY_EFFECT) && several_surveys) "fsurvey",
     # A month smooth with very uneven seasonal coverage can collapse (SD at 0, NaN SEs on every
     # fixed effect, NaN index limits); INCLUDE_MONTH: false drops it.
     if (isTRUE(cfg$INCLUDE_MONTH %||% TRUE)) smooth_term("month", data),
     smooth_term("depth", data),
-    if (isTRUE(cfg$INCLUDE_TEMPERATURE)) smooth_term("temperature", data)
+    if (isTRUE(cfg$INCLUDE_TEMPERATURE)) smooth_term("temperature", data),
+    unlist(lapply(unlist(cfg$CATCHABILITY_TERMS), smooth_term, data = data))
   )
 }
 

@@ -13,11 +13,12 @@ a prediction grid to get a total. The building blocks:
 - **Response** — the default benchmark uses swept-area density (`rho_biomass` in kg·nmi⁻², or
   `rho_abundance` in n·nmi⁻²). A valid alternative is raw catch weight/count with a log swept-area
   **offset** supplied through `sdmTMB(..., offset = ...)`; state the choice in the data report.
-  In the installed sdmTMB API, an offset in a delta family applies to the positive component only.
-  If sampled area should also affect occurrence probability, use a Poisson-link delta family
-  (`delta_lognormal(type = "poisson-link")`), in which the offset enters both components; see
-  `model-selection.md` for why it is preferred when it fits and converges, and for the Jacobian
-  correction needed to compare density-response and offset candidates.
+  `config.yaml` `EFFORT` selects it (`"density"` or `"offset"`); see *Effort and the index scale*
+  below. In the installed sdmTMB API, an offset in a delta family applies to the positive
+  component only. If sampled area should also affect occurrence probability, use a Poisson-link
+  delta family (`delta_lognormal(type = "poisson-link")`), in which the offset enters both
+  components, or Tweedie; see `model-selection.md` for when each is preferred, and for the
+  Jacobian correction needed to compare density-response and offset candidates.
 - **Fixed effects** — `~ 0 + geartype + s(month) + s(depth)`. The `0 +` drops the global
   intercept so each `geartype` level is estimated directly; `s()` are penalised smooths
   (mgcv-style) for seasonal and depth effects. **No temperature term by default.**
@@ -27,7 +28,47 @@ a prediction grid to get a total. The building blocks:
 - **Family** — `delta_lognormal()` (a hurdle: binomial presence × lognormal positive
   density). Alternatives: `delta_gamma()`, `tweedie()`, and the Poisson-link variants
   `delta_lognormal(type = "poisson-link")` / `delta_gamma(type = "poisson-link")` with a
-  swept-area offset.
+  swept-area offset. Tweedie with an offset is a valid baseline: its single linear predictor
+  carries the offset into both the zero probability and the positive mean.
+- **Time step** — `time = "year"` is the **index year**, which equals the calendar year unless
+  `INDEX_YEAR_START_MONTH` says otherwise (a season spanning New Year, or an autumn survey
+  combined with the following winter survey). `prepare_model_data()` builds it and keeps
+  `calendar_year` beside it; see `data-filtering.md`.
+
+## Effort and the index scale
+
+One convention, whatever the family:
+
+1. **Swept area once, in nmi²**: `swept_area_nmi2(distance_nmi, width_m)` =
+   `distance × width / 1852`. Never combine a width in km with a km²→nmi² factor; that is
+   wrong by a constant (≈0.54) and invisible in a relative index.
+2. **Fit**: `EFFORT: "density"` → response `catch / swept_area`, no offset. `EFFORT: "offset"` →
+   response `catch`, `offset = "log_swept_area"` passed as a **column name** (it stays aligned
+   with the rows through `selection_frame()`, `update()` and subsampling).
+3. **Predict at offset 0** — one unit of swept area — on the grid. The prediction is then a
+   density per nmi² for both conventions. `predict_index()` does this explicitly; in sdmTMB
+   ≥ 1.2.0, `predict()` on `newdata` also defaults to offset 0. Do not predict "catch per mean
+   tow" and divide afterwards: forgetting the division by tow distance is the commonest error.
+4. **Integrate with the grid cell area** in nmi² (`(GRID_KM / 1.852)^2`), taken from the grid
+   constructor, never from polygon area ÷ point count.
+5. **Check the scale** with `check_index_scale(..., fit = fit)`. The *unit ratio* — model
+   density at the sampled hauls (offset 0) over observed density — does not depend on coverage;
+   a median outside 1/1.5–1.5 points to a wrong swept-area unit or an offset on the wrong
+   scale. The *design ratio* — index over mean observed density × grid area — is context:
+   coverage differences move it legitimately, and only an order-of-magnitude departure suggests
+   a misplaced cell area or tow-distance division. Neither check catches a constant error
+   smaller than its tolerance, which is why points 1–4 are written once in the helpers.
+
+## Catchability covariates
+
+Covariates that change catch rate without changing abundance — time of day or sun altitude for
+species that migrate vertically, a survey/season factor — enter the formula
+(`CATCHABILITY_TERMS`, `SURVEY_EFFECT`) and are **predicted at a stated reference**
+(`CATCHABILITY_REFERENCE`, `REFERENCE_SURVEY`): daylight, a mid-day hour, the most-sampled
+survey. The reference sets the index level, not its shape. Use `sun_altitude` rather than
+clock `hour` at high latitudes, where polar day and night decouple light from time; a cyclic
+`s(hour, bs = "cc")` needs `knots = list(hour = c(0, 24))`. Treat them as fixed-effect
+candidates in Step 3, not defaults.
 
 ## Coordinates — kilometres
 
@@ -92,11 +133,15 @@ grid   <- sdmTMBexperiments::make_prediction_grid(region, resolution = grid_side
                                                   max_depth = 1400)
 grid   <- tidyr::crossing(grid, year = sort(unique(dt$year)))
 grid$geartype <- "Shrimp"; grid$month <- 8L   # reference levels
+grid   <- add_reference_levels(grid, dt, cfg)  # survey and catchability references
 
-pred  <- predict(fit, newdata = grid, return_tmb_object = TRUE)
-index <- sdmTMB::get_index(pred, bias_correct = TRUE, area = grid_cell_area_nmi2)
+index <- predict_index(fit, grid, area = grid_cell_area_nmi2, bias_correct = TRUE)
 # index: year, est, lwr, upr, se, log_est, se (on the response scale after bias correction)
 ```
+
+`predict_index()` (project `R/index_helpers.R`) predicts at offset 0 on the fitted years and
+calls `get_index()`; with sdmTMB ≥ 1.2.0 it uses `get_index(fit, newdata = )`, since
+`predict(return_tmb_object = TRUE)` is deprecated there.
 
 - **`area`** scales cell density to cell total; use the grid cell area in the response's area
   unit (e.g. `(grid_side_size / 1.852)^2` nmi² for 10 km cells).
@@ -119,7 +164,16 @@ index <- sdmTMB::get_index(pred, bias_correct = TRUE, area = grid_cell_area_nmi2
 - **Keep true zeros** — the binomial part needs absences.
 - **AR1 vs IID + year effect** — an index for SPiCT or another state-space assessment must not
   be temporally smoothed: use `spatiotemporal = "iid"` with `year` as a fixed effect, and no
-  `s(year)` or `time_varying`. See `model-selection.md`, *The assessment constraint*.
+  `s(year)` or `time_varying`. See `model-selection.md`, *The assessment constraint*. A year
+  effect **with** an AR1 field is a third configuration (see `model-selection.md`).
+- **A year factor must be a precomputed column** (`fyear`), never `factor(year)` in the
+  formula. With `extra_time`, an inline factor gains levels for the missing years and the model
+  is not identifiable (sdmTMB issue #320).
+- **Trim the grid by depth after extracting depth per cell.** Matching cells to a bathymetry
+  that was first filtered to a depth band by nearest neighbour gives out-of-band cells the
+  band edge's depth instead of removing them. Extract per cell, then keep
+  `MIN_DEPTH ≤ depth ≤ MAX_DEPTH`, and report cells outside the depth range of the data
+  (`depth_extrapolation()`): the depth smooth extrapolates there.
 - Bias correction and `simulate()` are slow; cache model outputs to `data/output` and toggle
   refits off on re-render (`rendering.md`).
 - **Report the mesh's real vertex count**, read from the object (`mesh$mesh$n`), not the cutoff

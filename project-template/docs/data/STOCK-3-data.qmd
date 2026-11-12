@@ -385,6 +385,74 @@ p_b <- ggplot(pos, aes(cruiseseries, rho_biomass, fill = geartype)) +
 cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v")
 ```
 
+### Index year and design balance
+
+The model's time step is the **index year** (`INDEX_YEAR_START_MONTH` = `r cfg$INDEX_YEAR_START_MONTH %||% 1`, labelled by the calendar year it `r cfg$INDEX_YEAR_LABEL %||% "start"`s). When surveys from several seasons are combined, every survey of one season must fall in the intended index year; @tbl-index-year shows how calendar months map to index years for each cruise series.
+
+```{r}
+#| label: tbl-index-year
+if (!"index_year" %in% names(dt)) {   # data compiled before index years were added
+  dt$index_year <- index_year(dt$year, dt$month, cfg$INDEX_YEAR_START_MONTH %||% 1L,
+                              cfg$INDEX_YEAR_LABEL %||% "start")
+}
+knitr::kable(
+  dt |>
+    dplyr::group_by(cruiseseries) |>
+    dplyr::summarise(
+      months = paste(sort(unique(month)), collapse = ", "),
+      calendar_years = paste0(min(year), "–", max(year)),
+      index_years = paste0(min(index_year), "–", max(index_year)),
+      shifted_hauls = sum(index_year != year),
+      .groups = "drop"
+    ),
+  caption = "Survey months, calendar years and index years by cruise series. Shifted hauls are assigned to an index year other than their calendar year."
+)
+```
+
+A cruise series or gear whose share of the hauls swings between years is confounded with the year effect: its catchability difference is then estimated from few years and can be read as a trend. @tbl-design-balance flags factor levels whose annual share ranges over more than 0.5, and @fig-design-balance shows the gear shares.
+
+```{r}
+#| label: tbl-design-balance
+balance <- lapply(intersect(c("cruiseseries", "geartype"), names(dt)), function(v) {
+  b <- design_balance(dt, v, time_col = "index_year")
+  dplyr::mutate(b$shift, factor = v, level = as.character(.data[[v]]), .before = 1) |>
+    dplyr::select(-dplyr::all_of(v))
+})
+knitr::kable(
+  dplyr::bind_rows(balance),
+  digits = 2,
+  caption = "Annual haul share by cruise series and gear type: years present, minimum and maximum share, and whether the share range exceeds 0.5."
+)
+```
+
+```{r}
+#| label: fig-design-balance
+#| fig-cap: "Share of retained hauls by gear type in each index year."
+design_balance(dt, "geartype", time_col = "index_year")$counts |>
+  ggplot(aes(index_year, share, fill = geartype)) +
+  geom_col() +
+  scale_fill_manual(values = gear_colours()) +
+  labs(x = "Index year", y = "Share of hauls", fill = "Gear type")
+```
+
+<!-- Describe the supported finding. A flagged level needs a decision before modelling: drop it, model it, or justify the confounding. -->
+
+### Terminal-year completeness
+
+Some data typically arrive after the assessment (for example one nation's or one vessel's hauls). Set `LATE_COMPONENTS` in `config.yaml` to the compiled-data column and values concerned; @tbl-late-components then shows their haul counts in recent index years, so an incomplete terminal year is visible. The robustness section of the final report refits the index without them in the terminal year.
+
+```{r, eval=!is.null(cfg$LATE_COMPONENTS)}
+#| label: tbl-late-components
+late_col <- cfg$LATE_COMPONENTS$column
+recent <- dplyr::filter(dt, index_year > max(index_year) - 5)
+knitr::kable(
+  as.data.frame.matrix(table(recent$index_year,
+                             ifelse(recent[[late_col]] %in% cfg$LATE_COMPONENTS$values,
+                                    "late component", "other"))),
+  caption = "Retained hauls in the last five index years from the components that usually arrive late."
+)
+```
+
 ## Length-based data
 
 ### Length–weight relationship
@@ -522,7 +590,7 @@ This document and the associated analyses were created with researcher-supervise
 
 # Appendix: analysis scripts {.appendix}
 
-The data are compiled by the survey-selection document with the functions in `R/compile_functions.R` (@lst-compile-functions); the figures use `R/plot_helpers.R` (@lst-plot-helpers).
+The data are compiled by the survey-selection document with the functions in `R/compile_functions.R` (@lst-compile-functions); the figures use `R/plot_helpers.R` (@lst-plot-helpers), and the index-year and design-balance tables use `R/index_helpers.R` (@lst-index-helpers).
 
 ```{r compile-appendix, code = readLines(here::here("R", "compile_functions.R")), eval = FALSE, echo = TRUE}
 #| lst-label: lst-compile-functions
@@ -536,4 +604,11 @@ The data are compiled by the survey-selection document with the functions in `R/
 #| lst-cap: "Plot helpers."
 #| code-fold: true
 #| code-summary: "Show plot helpers"
+```
+
+```{r index-helpers-appendix, code = readLines(here::here("R", "index_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-index-helpers
+#| lst-cap: "Effort, index-year, reference, balance, bridging and robustness helpers."
+#| code-fold: true
+#| code-summary: "Show index helpers"
 ```

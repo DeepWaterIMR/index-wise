@@ -1,0 +1,35 @@
+<!-- Included by report.qmd. Shares its params. Comparison of the new index with the previous
+assessment's published index (config PREVIOUS_INDEX_FILE: csv or rds with year and est, in
+index years). Both series are rescaled to their mean over the overlapping years, so the
+comparison is of shape, not level. A revision larger than REVISION_TOLERANCE is a finding to
+explain (new data, late vessels, filters, model change), not an error to tune away. -->
+
+```{r, eval=params$include_bridging && !is.null(cfg$PREVIOUS_INDEX_FILE)}
+#| label: fig-bridging-section-previous-index
+#| fig-cap: "New and previous assessment index, each rescaled to its mean over the overlapping years. Points mark years whose relative change exceeds the revision tolerance."
+#| output: asis
+cat("## Comparison with the previous assessment index\n\n")
+index_total <- readRDS(file.path(out_dir, "index-total.rds"))
+previous_path <- here::here(cfg$PREVIOUS_INDEX_FILE)
+previous <- if (grepl("\\.rds$", previous_path)) readRDS(previous_path) else
+  utils::read.csv(previous_path)
+bridge <- compare_with_previous(index_total, previous,
+                                tolerance = cfg$REVISION_TOLERANCE %||% 0.2)
+saveRDS(bridge, file.path(out_dir, "bridging.rds"))
+
+bridge_long <- tidyr::pivot_longer(bridge$table, c("new", "previous"),
+                                   names_to = "series", values_to = "relative")
+print(
+  ggplot2::ggplot(bridge_long, ggplot2::aes(year, relative, colour = series)) +
+    ggplot2::geom_line() +
+    ggplot2::geom_point(data = dplyr::filter(bridge_long, flagged, series == "new"), size = 2) +
+    ggplot2::labs(x = "Index year", y = "Index relative to overlap mean", colour = NULL)
+)
+cat("\nMedian absolute relative change:", sprintf("%.1f %%", 100 * bridge$median_abs_change),
+    "\n\nTerminal overlapping year:", sprintf("%+.1f %%", 100 * bridge$terminal_change),
+    "\n\nYears beyond the tolerance:",
+    if (length(bridge$flagged_years)) paste(bridge$flagged_years, collapse = ", ") else "none",
+    "\n")
+```
+
+<!-- Describe the supported finding and refer to @fig-bridging-section-previous-index. Explain every flagged year: which data or model change moved it. -->

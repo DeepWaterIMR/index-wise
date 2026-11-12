@@ -38,7 +38,9 @@ ok(all(abs(res$rho_biomass_fishable - res$biomass_fishable / res$swept_area) < 1
 
 # --- 2. Real data --------------------------------------------------------------------------
 for (sp in "stock") {
-  cfg <- yaml::read_yaml("config.yaml")
+  cfg_txt <- readChar("config.yaml", file.info("config.yaml")$size, useBytes = TRUE)
+  Encoding(cfg_txt) <- "UTF-8"   # UTF-8 regardless of the R locale
+  cfg <- yaml::yaml.load(cfg_txt, eval.expr = FALSE)
   out <- cfg$OUTPUT_DIR %||% "data/output"
   dt <- readRDS(file.path(out, "compiled-data.rds"))
   ln <- readRDS(file.path(out, "length-data.rds"))

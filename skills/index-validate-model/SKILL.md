@@ -36,18 +36,25 @@ first:
    the finest mesh** (report whether every finer cutoff is too) in the terminal year,
    over the last five years (the mesh Δρ, after Mohn's rho) and over the whole series. Show the
    four-panel selection figure (ΔELPD, Δρ, fit time, index); ELPD is supporting, not decisive.
-2. **Random-field structure** — spatial field on/off per component, `ar1`/`rw`/`iid`. Remember
-   the assessment use-case: total/length indices → `ar1` with no year effect; the
-   assessment-selected index for SPiCT → `iid` + `year` as a fixed effect, because SPiCT
-   smooths the series itself (`knowledge/model-selection.md`, *The assessment constraint*). If
-   CV prefers `ar1`, report it and carry `iid`. Confirm with the user which the assessment
-   consumes.
-3. **Barrier and anisotropy** — sensitivity of the index to each, on the selected mesh.
-4. **Fixed effects** — the full model, each term dropped in turn, candidate additions. Survey ×
-   gear is usually not estimable; flag misrecorded gear in the data report.
+2. **Random-field structure** — spatial field on/off per component, `ar1`/`rw`/`iid`, and the
+   year-effect pairings (`iid` + year, `ar1` + year). Remember the assessment use-case:
+   total/length indices → `ar1` with no year effect; the assessment-selected index for SPiCT →
+   `iid` + `year` as a fixed effect, because SPiCT smooths the series itself
+   (`knowledge/model-selection.md`, *The assessment constraint*). If CV prefers `ar1`, report
+   it and carry `iid`. A year effect with `ar1` is a third option, common in existing indices.
+   Confirm with the user which the assessment consumes.
+3. **Barrier, anisotropy and survey fields** — sensitivity of the index to each, on the
+   selected mesh. With combined seasons, also the survey-specific spatial deviation field
+   (`run_survey_field`; `knowledge/model-selection.md` *Combining surveys and seasons*).
+4. **Fixed effects** — the full model, each term dropped in turn, candidate additions
+   (catchability covariates such as `hour`/`sun_altitude`). Survey × gear is usually not
+   estimable; read the survey × year and gear × year balance in the data report first, and flag
+   misrecorded gear there.
 5. **Family re-check** — the Step 3a winner against its runners-up with the selected structure.
    Prefer a Poisson-link delta family with a swept-area offset when it fits at least as well
-   and converges. Candidates on different response scales need the Jacobian correction.
+   and converges; Tweedie with an offset is the other coherent-effort baseline. When replacing
+   an existing index, include its family. Candidates on different response scales need the
+   Jacobian correction.
 6. **Grid resolution** — after the fit: the coarsest grid whose index matches the finer ones.
 
 AIC ranks every ladder; cross-validate a shortlist only. Residuals (DHARMa), retrospectives,

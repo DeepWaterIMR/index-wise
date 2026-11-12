@@ -172,8 +172,16 @@ the comparison is three models (isotropic, anisotropic, barrier), not a 2 × 2.
   more likely a recording error than a design feature, and must be flagged there.
 - **Drop a design term the data do not need.** If removing the series term does not worsen the
   selection metric, drop it: one factor fewer is one reference level fewer to defend.
-- **Choose the prediction reference explicitly** (series, gear, month). It sets the index level,
-  not its shape, but it must be a level with good coverage in the data.
+- **Choose the prediction reference explicitly** (series, gear, month, catchability covariates).
+  It sets the index level, not its shape, but it must be a level with good coverage in the data.
+- **Check balance over time, not only the series × gear cross-table.** A gear or survey whose
+  share of hauls swings between years is confounded with the year effect: its catchability is
+  estimated from a few years and the shift can be read as a trend. The data report's
+  `design_balance()` tables flag such levels; decide before fitting whether to drop, model or
+  accept them.
+- **Catchability covariates** (time of day, sun altitude; `CATCHABILITY_TERMS`) are candidates
+  in this stage like any other term. Add them where the species is known to migrate vertically,
+  keep them only if they earn their place, and predict at the configured reference.
 - **Depth limits.** Limit the prediction grid at a depth comfortably beyond the deepest positive
   catch. If the depth smooth falls to negligible density before that limit, the limit does not
   affect the index; check this rather than assume it.
@@ -221,7 +229,15 @@ not criteria for choosing between candidates:
   only as good as the model behind it, and for these models it is not always trustworthy. Use it
   to describe the final index, not to choose it.
 - **Agreement with an existing assessment index.** A plausibility check on shape; reproducing the
-  old index is not the goal.
+  old index is not the goal. The final report's bridging section (`bridging-section.qmd`)
+  rescales both series to their overlap mean and flags years that moved more than
+  `REVISION_TOLERANCE` (default 20 %); every flagged year needs an explanation (new data, late
+  components, filters, family, domain), not a model change.
+- **Robustness to the data** (`robustness-section.qmd`): whole-station subsampling within years,
+  start-year peels, the terminal year without components that usually arrive late
+  (`LATE_COMPONENTS`), and down-weighting a year with a known problem. Subsample stations, not
+  rows: in a stacked class model a row is one class at one station. Down-weighting is a
+  sensitivity with a recorded reason, never a way to tune the index.
 
 ## Comparing candidates fitted to different response scales
 
@@ -283,6 +299,15 @@ cross-validated ELPD, then corrected AIC) **and converges with the structure eve
 needs.** The reason is structural, not only statistical: it is the only delta parameterisation in
 which the effort model is coherent for the zeros. Its extra structure makes convergence the
 binding constraint, so it is not preferred if it fails `sanity()` where a standard delta passes.
+
+**Tweedie with an offset is coherent too.** It has one linear predictor, so the offset scales
+the mean $\mu_i = \exp(\log A_i + \eta_i)$, and the probability of a zero,
+$P(Y_i = 0) = \exp\{-\mu_i^{2-p} / [\phi(2-p)]\}$, falls as swept area grows. It is therefore a
+valid baseline beside the Poisson-link delta families, and it is the family of many existing
+survey indices. **When a new index replaces an existing one, include the existing index's
+family among the candidates**, so the bridging comparison (Step 4) can separate a change of
+family from a change of data or domain. Tweedie's single linear predictor is also its limit:
+covariates cannot act differently on occurrence and on positive catch.
 
 Practical notes:
 
@@ -398,6 +423,16 @@ missing year) rather than returning to `ar1`. For an assessment model that is no
 (e.g. gadget3), the same independence argument applies to its likelihood, so prefer `iid` + year
 there too; confirm with the assessment lead.
 
+A third configuration is common in existing survey indices: **a year fixed effect with an AR1
+field**. The year effect leaves the annual mean free, as in `iid` + year, while the AR1 field
+correlates only the spatial deviations from one year to the next, which helps a sparsely sampled
+year borrow its spatial pattern from its neighbours. The annual mean is not smoothed, so it
+meets the assessment constraint; the cost is a parameter per year and an AR1 correlation that
+can approach 1 when the year effect absorbs the common signal. Validate it beside the other
+two (`validate.qmd` stage 4: "AR1 + year effect", read against "AR1"), and include it whenever
+the index replaces one that used it. Build the year factor as a column (`fyear`), never as
+`factor(year)` in the formula, when `extra_time` is used.
+
 ## When the carried-forward model is not the winner
 
 This is common and legitimate: comparability across documents, an assessment requirement, or a
@@ -416,6 +451,58 @@ meant, and it is negative by construction whichever way the comparison actually 
 applies to correlation matrices and any other lookup in a rendered document: index by name, and
 guard the lookup so a candidate that failed to fit produces a dash in a sentence rather than an
 error at the end of a long render.
+
+## Combining surveys and seasons
+
+Surveys run in different seasons (an autumn ecosystem survey and a winter survey, say) can be
+combined into one index or kept as separate seasonal indices. Settle four things, in order, and
+record each in `ai/memory/`:
+
+1. **The index year.** Decide which surveys share a time step and set
+   `INDEX_YEAR_START_MONTH` / `INDEX_YEAR_LABEL` (`data-filtering.md`). The data report's
+   index-year table shows the mapping; `ASSESSMENT_INDEX_TIMING` is a fraction of that year.
+2. **Catchability.** Surveys differ in gear rigging, timing and behaviour of the stock, so give
+   them a fixed catchability factor (`SURVEY_EFFECT: true` → `fsurvey`) and predict at a stated
+   `REFERENCE_SURVEY`. It identifies only from years and areas the surveys share; read the
+   `design_balance()` tables first.
+3. **Spatial pattern.** If the stock is distributed differently in the two seasons, a
+   survey-specific spatial deviation field lets each survey depart from the shared pattern:
+   numeric indicator columns for the non-reference surveys in `spatial_varying`, **with the
+   `fsurvey` fixed effect kept in the formula**. The deviation field has mean zero; without the
+   fixed effect, the average catchability difference is forced into a penalised field. A factor
+   in `spatial_varying` behaves differently between sdmTMB versions (the intercept column is
+   now dropped automatically), which is why the template builds indicator columns. Treat the
+   field as a sensitivity (`validate.qmd`, `run_survey_field`), like the barrier mesh.
+4. **One index or two.** A combined index predicts at the reference survey. Separate seasonal
+   indices predict the same fit once per survey and are separate assessment inputs with their
+   own timing; never average them into one series after the fact.
+
+## Stacked class models
+
+Size-, sex- or maturity-class products (legal-size males, mature females, length groups) can be
+fitted one class at a time, or as **one stacked model**: one row per station and class, the
+response the class's catch, class-specific smooths (`s(depth, by = fclass)`) and class-specific
+year effects (`time_varying = ~ 0 + fclass` with `time_varying_type = "rw0"`, or `fyear:fclass`).
+It borrows strength between classes and gives all products one structure, which helps sparse
+classes converge.
+
+Its assumption is easy to miss: **the spatial and spatiotemporal fields are shared by all
+classes**, so all classes are assumed to have the same spatial pattern, varying only in level
+and depth response. That is doubtful for sexually or ontogenetically segregating species.
+Alternatives, in increasing cost:
+
+- class-specific spatial fields: `spatial_varying = ~ 0 + fclass` with `spatial = "off"` (each
+  level then has its own field; leaving `spatial = "on"` duplicates the intercept field);
+- separate fits per class (the index-wise default for length groups, `get_index_split()`);
+- a multivariate model with correlated class fields, e.g.
+  [tinyVAST](https://github.com/vast-lib/tinyVAST) or spatioTemporalIndices
+  ([Breivik et al. 2021](https://nr.no/en/publication/1927756)), for abundance-at-length.
+
+Build the stacked frame by expanding **every retained station** to every class with zeros for
+absent classes. A positive station without individual data is never zero in any class: it
+carries its imputed, flagged shares or is dropped from the class model (`data-filtering.md`). Compare a stacked
+model with separate fits on the index each produces; they are fitted to different response
+data, so AIC does not compare them.
 
 ## Caching and resumability
 
@@ -457,6 +544,9 @@ paragraph is what a reviewer reads.
 - Mohn, R. 1999. The retrospective problem in sequential population analysis: an investigation
   using cod fishery and simulated data. ICES Journal of Marine Science, 56: 473–488.
   <https://doi.org/10.1006/jmsc.1999.0481>
+- Breivik, O. N., *et al.* 2021. Predicting
+  abundance indices in areas without coverage with a latent spatio-temporal Gaussian model.
+  ICES Journal of Marine Science, 78: 2031–2042. <https://nr.no/en/publication/1927756>
 - Thorson, J. T. 2018. Three problems with the conventional delta-model for biomass sampling
   data, and a computationally efficient alternative. Canadian Journal of Fisheries and Aquatic
   Sciences, 75: 1369–1382. <https://doi.org/10.1139/cjfas-2017-0266>
