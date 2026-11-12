@@ -227,27 +227,22 @@ Mixing the two conventions puts a setting one year off without any error.
 
 Size-, sex-, maturity- and length-based products split a station's catch using its measured
 individuals. A positive station **without** measured individuals has an unknown split. It stays
-in the total product and is **missing** from the class products. Zero-filling it is the common
-error: a join of length groups onto stations followed by `tidyr::complete(fill = 0)` or
+in the total product and must never be a zero in the class products. Zero-filling it is the
+common error: a join of length groups onto stations followed by `tidyr::complete(fill = 0)` or
 `replace_na(share, 0)` silently turns such stations into zeros at every length, and biases the
 class indices low in years with incomplete sampling.
 
 1. Record `n_measured` (measured target individuals per haul, 0 when none) in Step 1.
 2. Report per index year the share of positive hauls and of catch without measurements
-   (`length_coverage()`; data-report table).
-3. Then either drop those hauls from the class products only, or impute their class shares
-   from a pooled distribution (same index year and stratum, else same year, else all years) and
-   flag them:
-
-   ```r
-   pooled <- shares |>                       # shares: haul_id, class, share (measured hauls)
-     dplyr::left_join(dplyr::select(dt, haul_id, year, stratum), by = "haul_id") |>
-     dplyr::group_by(year, stratum, class) |>
-     dplyr::summarise(w = sum(share), .groups = "drop_last") |>
-     dplyr::mutate(pooled_share = w / sum(w)) |>
-     dplyr::ungroup()
-   # class_source: "measured" | "imputed" | "no catch" — keep it in the compiled class data.
-   ```
+   (`length_coverage()`); `<stock>-3-data.qmd` shows the source of each haul's share in its
+   *Fishable share and length coverage* figure.
+3. **Template default: impute and flag.** `add_fishable_biomass()` in
+   `R/compile_functions.R` gives an unmeasured positive haul the biomass-weighted mean share of
+   the same survey, else of the same cruise series and year, else of the cruise series, and
+   records the source in `fishable_imputed` (`measured`, `survey mean`, `series-year mean`,
+   `series mean`, `none`). Use the same hierarchy and flag for any other class product. The
+   alternative, when imputed hauls carry much of the catch, is to drop those hauls from the
+   class products only (never from the total), and say so in the data report.
 
 4. Raise measured individuals to the catch (`catchcount / lengthsamplecount`); summing the
    measured individuals is correct only when every individual was measured.

@@ -91,15 +91,15 @@ conventions to every generated artifact; retain index-wise's scientific workflow
    `INDEX_YEAR_START_MONTH`/`INDEX_YEAR_LABEL`); keep `startyear` as the calendar year. See
    `knowledge/data-filtering.md` *Index year*.
 9. **Depth** — fill missing/invalid depths from GEBCO (`ggOceanMaps::get_depth()`).
-10. **Catchability covariates** — only if `CATCHABILITY_TERMS` is set: `hour` (UTC) and/or
-    `sun_altitude` (`suncalc`) per haul.
+10. **Catchability covariates** — `add_response_and_covariates()` adds `hour` (UTC) for every
+    haul and `sun_altitude` (`suncalc`) when `CATCHABILITY_TERMS` includes it.
 11. **Length data** — fit length–weight (`ggFishPlots::plot_lw()`) and allocate catches to
    length groups if the project needs length-based products. Raise observations within
    catchsample with a numeric `catchcount / lengthsamplecount` representation factor; do not
    round and expand rows unless a downstream method requires integer rows. Record
-   `n_measured` per haul. **A positive haul without measured individuals is missing from the
-   class products, never zero** — drop it there or impute pooled shares and flag it
-   (`knowledge/data-filtering.md` *Individual data: missing is not zero*).
+   `n_measured` per haul. **A positive haul without measured individuals is never zero in the
+   class products**: `add_fishable_biomass()` imputes its share hierarchically and flags it in
+   `fishable_imputed` (`knowledge/data-filtering.md` *Individual data: missing is not zero*).
 12. **Save** the compiled dataset to the root-level `data/output/` (gitignored). Region-specific
    subdirectories such as `data/output/s62/` are acceptable when two acquisition datasets share
    one project. Never create `docs/data/output/` or any other document-local output directory.

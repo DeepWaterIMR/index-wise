@@ -183,8 +183,9 @@ design_balance <- function(dt, factor_col, time_col = "year", shift_threshold = 
 }
 
 # Positive hauls without individual (length) data, per year. Such hauls stay in the total
-# product and are MISSING from size-, sex- or length-specific products: never zero. `measured_col`
-# counts the measured target individuals per haul (0 when none).
+# product and are never zero in size-, sex- or length-specific products: their shares are imputed
+# and flagged (add_fishable_biomass()) or they are dropped there. `measured_col` counts the
+# measured target individuals per haul (0 when none).
 length_coverage <- function(dt, measured_col = "n_measured", catch_col = "biomass",
                             time_col = "year") {
   if (!measured_col %in% names(dt))

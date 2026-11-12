@@ -22,7 +22,10 @@ if (!requireNamespace("quarto", quietly = TRUE))
 if (!requireNamespace("yaml", quietly = TRUE))
   stop("The 'yaml' package is required: install.packages('yaml')")
 
-cfg  <- yaml::read_yaml("config.yaml", eval.expr = FALSE)
+# Read as UTF-8 bytes so Norwegian species names (å/æ/ø) parse regardless of R locale.
+cfg_txt <- readChar("config.yaml", file.info("config.yaml")$size, useBytes = TRUE)
+Encoding(cfg_txt) <- "UTF-8"
+cfg  <- yaml::yaml.load(cfg_txt, eval.expr = FALSE)
 slug <- cfg$SPECIES_SLUG
 stock <- if (!is.null(cfg$STOCK_SLUG)) cfg$STOCK_SLUG else slug
 

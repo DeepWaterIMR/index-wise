@@ -499,8 +499,8 @@ Alternatives, in increasing cost:
   ([Breivik et al. 2021](https://nr.no/en/publication/1927756)), for abundance-at-length.
 
 Build the stacked frame by expanding **every retained station** to every class with zeros for
-absent classes, but only where the station's individuals were measured: a positive station
-without individual data is missing from all classes (`data-filtering.md`). Compare a stacked
+absent classes. A positive station without individual data is never zero in any class: it
+carries its imputed, flagged shares or is dropped from the class model (`data-filtering.md`). Compare a stacked
 model with separate fits on the index each produces; they are fitted to different response
 data, so AIC does not compare them.
 
