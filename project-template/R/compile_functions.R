@@ -313,7 +313,9 @@ collect_lengths <- function(con, cfg, stations) {
     dplyr::mutate(haul_id = paste(missionid, serialnumber, sep = "_")) |>
     dplyr::filter(haul_id %in% haul_ids) |>
     dplyr::mutate(
-      length_cm = length * 100,
+      # Biotic lengths are in metres; round away the floating-point error of the conversion
+      # (0.58 * 100 = 57.999...), which otherwise drops fish to the bin below in floor() or cut().
+      length_cm = round(length * 100, 6),
       weight_kg = individualweight,
       raising = dplyr::if_else(!is.na(catchcount) & !is.na(lengthsamplecount) &
                                  lengthsamplecount > 0, catchcount / lengthsamplecount, 1)

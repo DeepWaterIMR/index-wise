@@ -25,7 +25,7 @@ collect_commercial_lengths <- function(con, cfg, gear_category = "Hooks",
     dplyr::select(year = startyear, length, icesarea, longitudestart, latitudestart) |>
     dplyr::collect() |>
     dplyr::filter(in_stock_area(dplyr::pick(dplyr::everything()), cfg)) |>
-    dplyr::transmute(year, length_cm = floor(length * 100))
+    dplyr::transmute(year, length_cm = floor(round(length * 100, 6)))  # round: 0.58 * 100 = 57.999...
 }
 
 #' Fishable-length threshold from a length distribution
