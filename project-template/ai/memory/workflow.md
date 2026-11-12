@@ -11,8 +11,9 @@ metadata:
 
 Update as steps complete. See the index-wise `workflow.md` knowledge file for detail.
 
-- [ ] **Step 1 — Compile & report data** (`docs/data-report/`). `compile-data.qmd` is the survey-selection
-  document; `<species>-<region>-data-report.qmd` is the compiled-data overview. Survey list, filters applied,
+- [ ] **Step 1 — Compile & report data** (`docs/data/`). `<stock>-2-survey-selection.qmd` selects the surveys
+  and compiles the data; `<stock>-3-data.qmd` reports the compiled data; `<stock>-1-summary.qmd`
+  summarises the whole calculation (structure: index-wise `knowledge/data-documents.md`). Survey list, filters applied,
   duplicates found, SPD used?  _<notes>_
 
 Survey qualification is mission-level: build the qualifying `missionid` set from positive target

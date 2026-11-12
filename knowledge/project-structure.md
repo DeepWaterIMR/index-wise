@@ -13,15 +13,19 @@
 ├── .gitignore
 ├── R/
 │   ├── 0_setup.R         # Packages, config, theme and model helpers
+│   ├── compile_functions.R # Step 1 compilation: filters, stock area, true zeros, length products
+│   ├── plot_helpers.R    # Fixed cruise-series/gear colours, stock-area polygon
 │   ├── index_helpers.R   # Effort, index year, references, balance, bridging, robustness
 │   ├── cpue_helpers.R    # Commercial CPUE records, indices, diagnostics, bootstrap
 │   └── report_helpers.R  # Narrative software citations from citation()
 ├── docs/
 │   ├── render.R         # Stage-aware HTML rendering
 │   ├── assets/          # references.bib, ICES JMS CSL, included static assets
+│   ├── data/            # Fixed data documents (knowledge/data-documents.md)
+│   │   ├── <stock>-1-summary.qmd
+│   │   ├── <stock>-2-survey-selection.qmd
+│   │   └── <stock>-3-data.qmd
 │   └── data-report/
-│       ├── survey-selection/compile-data.qmd
-│       ├── data-overview/<species>-<region>-data-report.qmd
 │       ├── fit/fit.qmd
 │       ├── validation/validate.qmd
 │       ├── cpue/cpue.qmd # optional commercial CPUE index (config CPUE:)
@@ -55,15 +59,18 @@ the method. All documents and their rendered outputs stay under `docs/`.
 - **Outputs cache to `data/output/`.** Expensive fits, prediction grids, predictions, and
   indices are saved there so re-renders load instead of recomputing (toggle-controlled — see
   `rendering.md`).
-- **Regions belong in data-document filenames.** Set `REGION_SLUG` in `config.yaml`; the
-  scaffold stamps it into `<species>-<region>-data-report.qmd`. This keeps split N62/S62
-  projects and their rendered outputs unambiguous.
+- **The stock names the data documents.** `STOCK_SLUG` (default: species slug, plus the
+  region slug for split domains, e.g. `atlantic-halibut-n62`) prefixes `docs/data/<stock>-*.qmd`.
+  This keeps split N62/S62 projects and their rendered outputs unambiguous.
 - **Project memory lives in `ai/memory/`.** Agents read `ai/memory/MEMORY.md` first and write new
   memory files there — not in the agent's local per-machine memory.
 
 ## `config.yaml` fields (stamped by `scaffold.R`)
 
-`SPECIES_NAME` (display), `SPECIES_SLUG` (folder/file slug), `SPECIES_LATIN`, `FILTER_SP`
+`SPECIES_NAME` (display), `SPECIES_SLUG` (folder/file slug), `SPECIES_LATIN`, `STOCK_SLUG`
+(data-document prefix), `STOCK_CODE`, `AREA_LABEL` (area in titles), `PURPOSE` (one sentence),
+`STOCK_SUBAREAS` + `ICES_AREAS_FILE` (ICES-area stock definition; empty → `REGION_FILE` polygon),
+`MAP_LIMITS`, `LENGTH_LIMITS`, `CRUISE_SERIES_LABELS`, `FILTER_SP`
 (Norwegian commonname value(s)), `SURVEYS` (cruise-series labels to include), `USE_SPD` (true/false),
 `RESPONSE` (`biomass`/`abundance`), `LENGTH_GROUPS`, `OVER_CM` threshold, `ASSESSMENT_MODEL`,
 `FIRST_YEAR`, `CRS` (EPSG), `GRID_KM`, `MESH_CUTOFF_KM`, `BARRIER` (true/false), `GEAR_WIDTH`

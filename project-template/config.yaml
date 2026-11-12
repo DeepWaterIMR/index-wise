@@ -7,6 +7,10 @@
 SPECIES_NAME:  "{{SPECIES_NAME}}"     # display name, e.g. "Beaked redfish"
 SPECIES_SLUG:  "{{SPECIES_SLUG}}"     # kebab-case slug for folders/files, e.g. "snabeluer"
 SPECIES_LATIN: "{{SPECIES_LATIN}}"    # binomial, e.g. "Sebastes mentella"
+STOCK_SLUG:    "{{STOCK_SLUG}}"       # file prefix of the docs/data documents; default SPECIES_SLUG
+STOCK_CODE:    null                   # ICES stock code, e.g. "reb.27.1-2"
+AREA_LABEL:    "{{AREA_LABEL}}"       # area in document titles, e.g. "ICES 1–2" or "N62"
+PURPOSE: null                         # one sentence: why the index is made (benchmark, assessment)
 
 # Human metadata uses wise-writing's AUTHORS/AFFILIATIONS schema.
 # Supply accountable human names and matching affiliation IDs before scaffolding.
@@ -25,6 +29,19 @@ SURVEYS:                              # cruise-series labels (groups of surveys)
 USE_SPD: false                        # legacy SPD files? true for northern/offshore; false for southern/coastal
 INCLUDE_RUSSIAN: true                 # Russian data included by DEFAULT; set false to exclude
 FIRST_YEAR: 1981                      # earliest year to include
+LAST_YEAR: null                       # last year to include; null = the year before the current year
+MAX_COLLECT_ROWS: 2000000              # stop before collecting more candidate stations than this
+LENGTH_LIMITS: [5, 200]               # plausible length range (cm); length records outside are removed
+FISHABLE_GEAR: "Hooks"                # Biotic gear category of the commercial catches used for the fishable length (docs/background)
+LW_OUTLIER_SD: 4                      # length-weight records with |standardised residual| above this are outliers
+CRUISE_SERIES_LABELS: null
+SURVEY_NAMES: null                    # optional names of surveys without a cruise-series code, keyed by cruise number            # optional map code -> label; defaults in R/compile_functions.R
+# Documented cruise exclusions. Use only when no general filtering rule removes an anomaly
+# (knowledge/influence-diagnostics.md). Cruise numbers are reused by vessels: name both.
+EXCLUDE_CRUISES: []
+#  - platformname: "<vessel name>"
+#    cruise: "<cruise number>"
+#    reason: "<one line, with a pointer to the influence section>"
 
 # --- Response & products ----------------------------------------------------------------
 RESPONSE: "biomass"                   # "biomass" (rho_biomass) or "abundance" (rho_abundance)
@@ -36,11 +53,7 @@ LENGTH_GROUPS: ["(0,10]", "(10,15]", "(15,20]", "(20,25]", "(25,30]", "(30,40]",
 # when more than one major gear type is represented.
 GEAR_WIDTH: 25
 
-# --- Effort and index year --------------------------------------------------------------
-# "density": response = catch / swept area, no offset.
-# "offset":  response = catch, offset = log(swept area in nmi^2); predictions at offset 0 are
-#            densities. Tweedie and Poisson-link delta families let the offset reach the zeros.
-EFFORT: "density"
+# --- Index year (EFFORT is set under Model) ---------------------------------------------
 # Month the index year begins (1 = calendar year). With 7, a July-June season is one index
 # year, labelled by the calendar year it starts ("start") or ends ("end"). Set this whenever
 # surveys from different seasons are combined, and match ASSESSMENT_INDEX_TIMING to it.
@@ -58,6 +71,14 @@ REGION: "ALL"                         # feature/layer name used by a multi-regio
 REGION_SLUG: "all"                    # filename-safe region identifier, e.g. N62 or S62
 REGION_FILE: "data/source/prediction_region.gpkg"
 REGION_LAYER: "prediction_region"
+PREDICTION_REGION_FILE: null          # built by docs/data/<stock>-3-data.qmd; default data/source/<stock>-prediction-region.gpkg
+REGION_BUFFER_KM: 25                  # buffer around the hull of positive hauls (prediction region)
+REGION_CONCAVITY: 0.1                 # sf::st_concave_hull ratio for the prediction region
+# Stock area for survey selection: ICES subareas (tested on the icesarea code) or, when
+# empty, the REGION_FILE polygon (ACQUISITION_REGION_LAYER if set).
+STOCK_SUBAREAS: []                    # e.g. ["1", "2"]
+ICES_AREAS_FILE: "data/source/ICES_Areas/ICES_Areas_20211101.shp"  # needed with STOCK_SUBAREAS
+MAP_LIMITS: [-15, 60, 57, 81]         # lon/lat limits of the overview map in the survey-selection document
 # Optional broader acquisition polygon and station partition. A Step 1 document can set
 # ACQUISITION_REGION to a reporting feature (for example NS) while retaining REGION as the
 # later model domain (for example S62), then set ADD_REGION_IDENTIFIER to true.
@@ -76,14 +97,23 @@ MAX_DEPTH: 1400                       # deepest grid cell to keep (m)
 MIN_DEPTH: null                       # shallowest grid cell to keep (m); null = no minimum
 
 # --- Model ------------------------------------------------------------------------------
-FAMILY: "delta_lognormal"             # delta_lognormal | delta_gamma | tweedie
+# EFFORT: "density" models swept-area density; "offset" models raw catch with a log swept-area
+# offset. Under a standard delta-lognormal/gamma the two are the same model (log-likelihoods
+# differ by a constant Jacobian, so never compare their AICs); under Tweedie they differ. The
+# offset reaches the occurrence component only in a Poisson-link delta family.
+EFFORT: "density"                     # density | offset
+FAMILY: "delta_lognormal"             # delta_lognormal | delta_gamma | delta_lognormal_poisson_link | delta_gamma_poisson_link | tweedie
+SPATIAL: "on"                         # one value, or one per delta component, e.g. ["on", "off"]
 SPATIOTEMPORAL: "ar1"                 # ar1 | iid | rw | off
+INCLUDE_MONTH: true                   # month smooth; switch off if it collapses (uneven seasons)
 INCLUDE_TEMPERATURE: false            # temperature smooth is OFF by default
 ASSESSMENT_MODEL: "SPiCT"             # what consumes the selected index
 SELECTED_INDEX: "Total biomass"       # exact name in the report's index_products list
 ASSESSMENT_INDEX_UNITS: "relative index units"
 ASSESSMENT_INDEX_TYPE: "survey biomass"
 ASSESSMENT_INDEX_TIMING: 0.5          # fraction of the INDEX year; confirm against survey timing
+N_WORKERS: 1                          # parallel refits (influence, survey comparison); forked on macOS/Linux
+INFLUENCE_REGION_COL: null            # optional grid column for index_by_region() in the influence section
 
 # --- Late data, bridging and robustness -------------------------------------------------
 # Data that usually arrive after the assessment (e.g. one nation's or vessel's hauls), as a

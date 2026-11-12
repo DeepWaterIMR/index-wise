@@ -1,0 +1,614 @@
+---
+title: "{{SPECIES_NAME}} — {{AREA_LABEL}} data"
+subtitle: "Step 2 of 2 · data report"
+author: {{AUTHORS_YAML}}
+affiliations: {{AFFILIATIONS_YAML}}
+date: today
+date-format: "YYYY-MM-DD"
+published-title: "Version"
+lang: en-US
+bibliography:
+  - ../assets/references.bib
+  - ../assets/{{STOCK_SLUG}}-3-data-software.bib
+csl: ../assets/ices_jms.csl
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "{{SPECIES_NAME}} — {{AREA_LABEL}} data"
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+    fig-format: jpeg
+    fig-dpi: 160
+    fig-width: 6.69
+    fig-height: 5
+    embed-resources: true
+crossref:
+  fig-title: "Figure"
+  tbl-title: "Table"
+  lst-title: "Code"
+  fig-prefix: "Figure"
+  tbl-prefix: "Table"
+  lst-prefix: "Code"
+execute:
+  warning: false
+  message: false
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup}
+knitr::opts_knit$set(root.dir = here::here())
+```
+
+```{r config}
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "compile_functions.R"))
+source(here::here("R", "plot_helpers.R"))
+
+stock <- cfg$STOCK_SLUG %||% cfg$SPECIES_SLUG
+sp <- tolower(cfg$SPECIES_NAME)
+area_label <- if (length(cfg$STOCK_SUBAREAS)) {
+  paste("ICES subareas", paste(unlist(cfg$STOCK_SUBAREAS), collapse = " and "))
+} else cfg$REGION
+over_cm <- cfg$OVER_CM
+fish_label <- paste0("Fishable (≥ ", over_cm, " cm)")
+n_fmt <- function(x) format(x, big.mark = " ")
+
+dt <- readRDS(file.path(out_dir, "compiled-data.rds"))
+lengths <- readRDS(file.path(out_dir, "length-data.rds"))
+compile_metadata <- readRDS(file.path(out_dir, "compile-metadata.rds"))
+dt$cruiseseries <- order_cruise_series(dt$cruiseseries, dt$year)
+cs_cols <- cruise_series_colours(levels(dt$cruiseseries))
+lengths <- lengths |>
+  dplyr::left_join(dplyr::select(dt, haul_id, year, cruiseseries, geartype), by = "haul_id")
+lw <- compile_metadata$lw
+pos <- dplyr::filter(dt, biomass > 0)
+
+# Long format of the two biomass products for figures
+products <- dplyr::bind_rows(
+  dplyr::transmute(dt, haul_id, year, month, depth, geartype, cruiseseries,
+                   longitudestart, latitudestart, product = "Total",
+                   biomass, density = rho_biomass),
+  dplyr::transmute(dt, haul_id, year, month, depth, geartype, cruiseseries,
+                   longitudestart, latitudestart, product = fish_label,
+                   biomass = biomass_fishable, density = rho_biomass_fishable)
+) |>
+  dplyr::mutate(product = factor(product, levels = c("Total", fish_label)))
+prod_cols <- stats::setNames(c("#0072B2", "#D55E00"), levels(products$product))
+```
+
+# Purpose
+
+This document describes the compiled IMR bottom-trawl data for the `r sp` (*`r cfg$SPECIES_LATIN`*) survey indices in `r area_label` (stock `r cfg$STOCK_CODE`). It explains and shows the two kinds of data that enter the spatiotemporal sdmTMB models [@Vihtakari2026]: the station-based catches, which give total biomass, and the length measurements, which divide each catch into fishable (≥ `r over_cm` cm) and smaller fish.
+
+The input is the compiled dataset written by the survey-selection document ([`r stock`-2-survey-selection](`r stock`-2-survey-selection.html)), which documents the stock area, haul filter, surveys, gear and timing; those are not repeated here. The output is a judgement of whether the total-biomass and fishable-biomass responses are fit to be modelled, and where their coverage is thin.
+
+# Data
+
+## Data collation
+
+The data flow is shown in @fig-data-flow. Station-level catches give the complete haul roster with true zeros and the total-biomass response. Individual length measurements are used only to divide each positive catch into the fishable and non-fishable parts; they do not change the total.
+
+```{mermaid}
+%%| label: fig-data-flow
+%%| fig-cap: "Data flow from the IMR Biotic database to the two model responses. Station catches give total biomass directly; individual lengths, converted to weight with the length–weight relationship, give the fishable share of each catch."
+flowchart LR
+  A["IMR Biotic database<br/>(BioticExplorerServer)"] --> B["Station catches<br/>stnall"]
+  A --> C["Individual lengths<br/>indall"]
+  B --> D["Haul filter and<br/>survey selection"]
+  D --> E["Haul roster with<br/>true zeros"]
+  E --> F["Total biomass<br/>per haul"]
+  C --> G["Raised length<br/>distribution per haul"]
+  G --> H["Weight-at-length<br/>(length–weight fit)"]
+  H --> I["Fishable share<br/>of haul biomass"]
+  F --> J["Total biomass density"]
+  F --> K["Fishable biomass density"]
+  I --> K
+```
+
+### Station-level data
+
+The station-level dataset has one row per retained bottom-trawl haul. The `r sp` catch weight (`biomass`, kg) is summed over the catch samples of a haul, and hauls without `r sp` in an included survey are true zeros. Swept-area biomass density is
+
+$$
+\rho = \frac{B}{d \times w / 1852},
+$$
+
+where $B$ is the catch weight (kg), $d$ the towed distance (nmi) and $w = `r cfg$GEAR_WIDTH`$ m the common effective trawl width, giving density in kg/nmi². The model response has not been decided yet (catch weight with swept area as an offset, or density); this report uses swept-area biomass density throughout. Gear type is a fixed effect in the models.
+
+### Individual-level data
+
+The individual-level dataset contains the `r sp` length records from the retained hauls. Lengths are converted from metres to centimetres, and records outside `r compile_metadata$length_limits[1]`–`r compile_metadata$length_limits[2]` cm are removed as gross errors (`r compile_metadata$n_length_outliers` records). When a catch sample contains $m$ measured fish and a catch of $n$ fish, each measured fish represents $n/m$ fish (the raising factor); without a count the factor is one.
+
+## Length-based data
+
+Individual weight is predicted for every measured fish from the length–weight relationship $W = aL^b$ fitted to the survey fish with recorded weight (@fig-length-weight), so that measured and unmeasured weights are treated alike. For fish $i$ in a haul with raising factor $s_i$ and predicted weight $w_i$, the fishable share of the haul biomass is
+
+$$
+p = \frac{\sum_{i:\,L_i \ge `r over_cm`} s_i w_i}{\sum_i s_i w_i},
+$$
+
+and the fishable biomass is $B_f = pB$, with density $\rho_f = B_f / (d \times w / 1852)$. The fishable part therefore never exceeds the total, and the length data only redistribute the recorded catch. The derivation of the threshold `r over_cm` cm is documented in [`r stock`-fishable-length](../background/stock-background/`r stock`-fishable-length.html).
+
+Positive hauls without length measurements receive the biomass-weighted mean fishable share of the same survey, or, if no fish were measured in that survey, of the same cruise series and year, or of the cruise series. Zero hauls are zero for both products. Because the share is applied to the recorded catch weight, a survey that weighed the catch but did not measure the fish still contributes fishable biomass; it is not turned into a false zero, which would bias the fishable index downwards. The calculation is done by `add_fishable_biomass()` in `R/compile_functions.R` (@lst-compile-functions) when the survey-selection document compiles the data, and it is verified against hand-calculated cases and an independent recomputation in `ai/tests/test-fishable-biomass.R`.
+
+# Analysis
+
+## Dataset overview
+
+The station-level dataset contains `r n_fmt(nrow(dt))` hauls from `r min(dt$year)`–`r max(dt$year)`, of which `r n_fmt(nrow(pos))` caught `r sp` and `r n_fmt(sum(dt$biomass_fishable > 0))` caught fishable `r sp`. The individual-level dataset contains `r n_fmt(nrow(lengths))` length records from `r n_fmt(dplyr::n_distinct(lengths$haul_id))` hauls (@tbl-overview). The cruise series differ in the share of positive hauls, in density and in the fishable share of the catch (@tbl-response-by-series).
+
+```{r}
+#| label: tbl-overview
+tibble::tibble(
+  Metric = c("Hauls", paste0("Hauls with ", sp), paste0("Hauls with fishable ", sp),
+             "Zero fraction, total (%)", "Zero fraction, fishable (%)",
+             "Length records", "Hauls with length records",
+             "Length records with recorded weight",
+             paste0("Positive hauls with fishable share from survey or series mean")),
+  Value = c(n_fmt(nrow(dt)), n_fmt(nrow(pos)), n_fmt(sum(dt$biomass_fishable > 0)),
+            sprintf("%.1f", 100 * mean(dt$biomass == 0)),
+            sprintf("%.1f", 100 * mean(dt$biomass_fishable == 0)),
+            n_fmt(nrow(lengths)), n_fmt(dplyr::n_distinct(lengths$haul_id)),
+            n_fmt(sum(!is.na(lengths$weight_kg))),
+            n_fmt(sum(pos$fishable_imputed %in% c("survey mean", "series-year mean", "series mean"))))
+) |>
+  knitr::kable(caption = paste0("Overview of the station-level and individual-level ", sp, " data."))
+```
+
+```{r}
+#| label: tbl-response-by-series
+dt |>
+  dplyr::group_by(`Cruise series` = cruiseseries) |>
+  dplyr::summarise(
+    Hauls = dplyr::n(),
+    `Positive (%)` = round(100 * mean(biomass > 0), 1),
+    `Fishable positive (%)` = round(100 * mean(biomass_fishable > 0), 1),
+    `Median positive density (kg/nmi²)` = round(stats::median(rho_biomass[biomass > 0]), 1),
+    `Total catch (kg)` = round(sum(biomass)),
+    `Fishable share (%)` = round(100 * sum(biomass_fishable) / sum(biomass), 1),
+    .groups = "drop"
+  ) |>
+  knitr::kable(caption = paste0("Station-level responses by cruise series. Density is swept-area biomass density in hauls with ", sp, "; fishable share is the fishable part of the total catch."))
+```
+
+### Response distribution
+
+The response is zero-inflated and right-skewed (@fig-response-dist): most hauls are zeros, and the positive densities span several orders of magnitude. This shape is what delta (hurdle) model families describe with separate occurrence and positive-density components.
+
+```{r}
+#| label: fig-response-dist
+#| fig-height: 3.5
+#| fig-cap: !expr 'paste0("Distribution of swept-area biomass density of total and fishable ", sp, " in positive hauls (logarithmic x-axis). The share of zero hauls is given in each panel.")'
+zero_lab <- products |>
+  dplyr::group_by(product) |>
+  dplyr::summarise(label = paste0("Zeros: ", sprintf("%.1f", 100 * mean(density == 0)), " %\nPositive: ",
+                                  n_fmt(sum(density > 0))), .groups = "drop")
+products |>
+  dplyr::filter(density > 0) |>
+  ggplot(aes(density, fill = product)) +
+  geom_histogram(bins = 40, colour = NA) +
+  geom_text(data = zero_lab, aes(x = Inf, y = Inf, label = label), inherit.aes = FALSE,
+            hjust = 1.05, vjust = 1.3, size = 2.8) +
+  scale_x_log10(labels = scales::label_number(drop0trailing = TRUE)) +
+  scale_fill_manual(values = prod_cols, guide = "none") +
+  facet_wrap(~product) +
+  labs(x = "Density (kg/nmi²)", y = "Hauls")
+```
+
+## Station-level data
+
+### Spatial distribution
+
+Total and fishable biomass density are mapped for all years combined in @fig-density-map. The fishable fish occur in the same areas as the total catch, but in fewer hauls.
+
+```{r density-map-base}
+n_years <- dplyr::n_distinct(dt$year)
+base_density <- ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 8,
+                                     rotate = TRUE, expand.factor = 1,
+                                     land.col = "grey85", land.border.col = "grey60")
+density_map_height <- map_fig_height(base_density, ncol = 2, extra = 1, side = 0.4)
+```
+
+```{r, fig.height = density_map_height}
+#| label: fig-density-map
+#| fig-cap: !expr 'paste0("Biomass density of total (left) and fishable (right) ", sp, " in all retained hauls, all years combined. Grey crosses: zero catch; circles: positive hauls, size and colour by density (kg per nmi²).")'
+base_density +
+  ggspatial::geom_spatial_point(
+    data = dplyr::filter(products, density == 0),
+    aes(longitudestart, latitudestart), shape = 3, size = 0.2, colour = "grey50",
+    alpha = 0.4, crs = 4326) +
+  ggspatial::geom_spatial_point(
+    data = dplyr::arrange(dplyr::filter(products, density > 0), density),
+    aes(longitudestart, latitudestart, size = density, colour = density),
+    alpha = 0.8, crs = 4326) +
+  scale_colour_viridis_c(trans = "log10", option = "plasma", direction = -1,
+                         labels = scales::label_number(drop0trailing = TRUE),
+                         name = "Density (kg/nmi²)") +
+  scale_size_area(max_size = 3, guide = "none") +
+  facet_wrap(~product) +
+  theme(axis.title = element_blank(), axis.text = element_blank(),
+        axis.ticks = element_blank(), legend.position = "bottom",
+        legend.key.width = unit(1.5, "cm"))
+```
+
+### Prediction region
+
+```{r prediction-region}
+region_file <- here::here(cfg$PREDICTION_REGION_FILE %||%
+                            file.path(cfg$SOURCE_DIR %||% "data/source", paste0(stock, "-prediction-region.gpkg")))
+stock_area <- read_stock_area(cfg)
+region <- build_stock_region(dt, stock_area, cfg$CRS, buffer_km = cfg$REGION_BUFFER_KM %||% 25,
+                             ratio = cfg$REGION_CONCAVITY %||% 0.1, label = cfg$SPECIES_NAME)
+dir.create(dirname(region_file), recursive = TRUE, showWarnings = FALSE)
+sf::st_write(region, region_file, layer = cfg$REGION_LAYER, append = FALSE, quiet = TRUE)
+pts <- sf::st_as_sf(dt, coords = c("longitudestart", "latitudestart"), crs = 4326) |>
+  sf::st_transform(cfg$CRS)
+dt$in_region <- lengths(sf::st_intersects(pts, region)) > 0
+n_inside <- sum(dt$in_region)
+base_region <- ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 8, rotate = TRUE,
+                                    expand.factor = 1, land.col = "grey85",
+                                    land.border.col = "grey60")
+region_map_height <- map_fig_height(base_region, extra = 0.6)
+```
+
+The models predict density only where `r sp` has been caught. The prediction region is the concave hull of all hauls with `r sp`, buffered by `r cfg$REGION_BUFFER_KM %||% 25` km and cut to `r area_label` (@fig-prediction-region). Areas with only zero observations are left out. Land and depth limits are applied when the prediction grid is built in the model fit. `r n_fmt(n_inside)` of the `r n_fmt(nrow(dt))` hauls (`r round(100 * n_inside / nrow(dt))` %) lie inside the region, including `r n_fmt(sum(dt$in_region & dt$biomass > 0))` of the `r n_fmt(nrow(pos))` hauls with `r sp`.
+
+
+```{r, fig.height = region_map_height}
+#| label: fig-prediction-region
+#| fig-cap: !expr 'paste0("Prediction region for ", sp, " (blue): concave hull of the hauls with ", sp, " (orange), buffered and cut to ", area_label, ". Grey crosses: hauls without ", sp, ".")'
+(base_region +
+  ggplot2::geom_sf(data = sf::st_transform(region, 4326), fill = "#0072B2", alpha = 0.15,
+                   colour = "#0072B2", linewidth = 0.6, inherit.aes = FALSE) +
+  ggspatial::geom_spatial_point(data = dplyr::filter(dt, biomass == 0),
+    aes(longitudestart, latitudestart), shape = 3, size = 0.2, colour = "grey50", alpha = 0.4,
+    crs = 4326) +
+  ggspatial::geom_spatial_point(data = pos, aes(longitudestart, latitudestart),
+    colour = "#D55E00", size = 0.5, crs = 4326) +
+  theme(axis.title = element_blank())) |>
+  ggOceanMaps::reorder_layers()
+```
+
+### Through time
+
+The annual mean density and the share of positive hauls show how the raw data change through the time series before any model standardisation (@fig-annual-response). These values mix changes in stock size with changes in survey coverage, gear and season, which the model separates.
+
+```{r}
+#| label: fig-annual-response
+#| fig-height: 6
+#| fig-cap: !expr 'paste0("Annual raw data for total and fishable ", sp, ". A: share of hauls with ", sp, ". B: mean biomass density over all hauls (including zeros) with 95 % confidence intervals.")'
+annual <- products |>
+  dplyr::group_by(product, year) |>
+  dplyr::summarise(positive = mean(density > 0), mean = mean(density),
+                   se = stats::sd(density) / sqrt(dplyr::n()), .groups = "drop")
+p_a <- ggplot(annual, aes(year, 100 * positive, colour = product)) +
+  geom_line() + geom_point(size = 1) +
+  scale_colour_manual(values = prod_cols) +
+  labs(x = NULL, y = "Positive hauls (%)", colour = NULL) +
+  theme(legend.position = "none")
+p_b <- ggplot(annual, aes(year, mean, colour = product)) +
+  geom_pointrange(aes(ymin = pmax(mean - 1.96 * se, 0), ymax = mean + 1.96 * se),
+                  size = 0.2, position = position_dodge(width = 0.5)) +
+  scale_colour_manual(values = prod_cols) +
+  labs(x = "Year", y = "Mean density (kg/nmi²)", colour = NULL) +
+  theme(legend.position = "bottom")
+cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v", rel_heights = c(4, 5))
+```
+
+### Tow distance
+
+Tow distance enters the response through the swept area. @fig-effort shows the retained tow distances by year and gear type; changes in the typical tow distance change the swept area per haul and therefore the scale of the density values.
+
+```{r}
+#| label: fig-effort
+#| fig-height: 4.5
+#| fig-cap: "Tow distance of the retained hauls by year and gear type. Grey points: hauls (jittered); blue crossbars: annual mean with 95 % confidence interval."
+eff <- dt |>
+  dplyr::group_by(geartype, year) |>
+  dplyr::summarise(mean = mean(distance), se = stats::sd(distance) / sqrt(dplyr::n()),
+                   n = dplyr::n(), .groups = "drop") |>
+  dplyr::mutate(se = dplyr::coalesce(se, 0))
+ggplot(dt, aes(year, distance)) +
+  geom_jitter(colour = "grey60", size = 0.2, alpha = 0.4, width = 0.3, height = 0) +
+  geom_crossbar(data = eff, aes(year, mean, ymin = mean - 1.96 * se, ymax = mean + 1.96 * se),
+                colour = "#0072B2", width = 0.6, linewidth = 0.3, inherit.aes = FALSE) +
+  facet_wrap(~geartype) +
+  scale_x_continuous(breaks = seq(1980, 2030, 5)) +
+  coord_cartesian(ylim = c(0, NA)) +
+  labs(x = "Year", y = "Tow distance (nmi)")
+```
+
+### Depth
+
+Depth enters the models as a smooth term. The hauls with `r sp` cover a narrower depth range than the sampling effort (@fig-depth A), and density, including the zeros, varies with depth (@fig-depth B). The depth range of the data limits the depth range of the prediction grid.
+
+```{r}
+#| label: fig-depth
+#| fig-height: 6
+#| fig-cap: !expr 'paste0("Depth distribution of the data. A: bottom depth of all hauls and of hauls with ", sp, " (densities scaled to the same maximum; the deepest 0.5 % of hauls are outside the plotted range). B: biomass density against depth in all hauls, including zeros (pseudo-logarithmic y-axis); lines are descriptive loess smooths of all hauls, not the model.")'
+depth_lim <- c(0, stats::quantile(dt$depth, 0.995, na.rm = TRUE))
+depth_hauls <- dplyr::bind_rows(
+  dplyr::mutate(dt, group = "All hauls"),
+  dplyr::mutate(pos, group = paste("Hauls with", sp))
+)
+p_a <- ggplot(depth_hauls, aes(depth, after_stat(scaled), fill = group)) +
+  geom_density(alpha = 0.5, colour = NA) +
+  scale_fill_manual(values = c("grey50", "#E69F00")) +
+  coord_cartesian(xlim = depth_lim) +
+  labs(x = NULL, y = "Scaled density", fill = NULL) +
+  theme(legend.position = "top")
+p_b <- products |>
+  ggplot(aes(depth, density, colour = product)) +
+  geom_point(size = 0.4, alpha = 0.15) +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE, span = 0.5) +
+  scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1, base = 10),
+                     breaks = c(0, 1, 10, 100, 1000, 1e4),
+                     labels = scales::label_number(drop0trailing = TRUE)) +
+  coord_cartesian(xlim = depth_lim) +
+  scale_colour_manual(values = prod_cols) +
+  labs(x = "Bottom depth (m)", y = "Density (kg/nmi²)", colour = NULL) +
+  theme(legend.position = "bottom")
+cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v", rel_heights = c(4, 5))
+```
+
+### Season and gear
+
+Month enters the models as a smooth term and gear type as a fixed effect. Both are confounded with cruise series, because each series is fished in a fixed season with one main gear (see the survey-selection document). @fig-month-gear shows the raw positive densities by month and by gear type within cruise series; differences between gears within the same cruise series are the information the gear effect is estimated from.
+
+```{r}
+#| label: fig-month-gear
+#| fig-height: 6.5
+#| fig-cap: !expr 'paste0("Biomass density of total ", sp, " in positive hauls by month (A) and by gear type within cruise series (B), logarithmic scale. Numbers under the month labels and below the boxes are positive hauls.")'
+month_n <- dplyr::count(pos, month)
+month_lab <- stats::setNames(paste0(1:12, "\n(", month_n$n[match(1:12, month_n$month)], ")"), 1:12)
+month_lab <- sub("\\(NA\\)", "(0)", month_lab)
+p_a <- ggplot(pos, aes(factor(month, levels = 1:12), rho_biomass)) +
+  geom_boxplot(fill = "#0072B2", alpha = 0.4, outlier.size = 0.4, linewidth = 0.3) +
+  scale_x_discrete(drop = FALSE, labels = month_lab) +
+  scale_y_log10(labels = scales::label_number(drop0trailing = TRUE)) +
+  labs(x = "Month (positive hauls)", y = "Density (kg/nmi²)")
+gear_n <- dplyr::count(pos, cruiseseries, geartype)
+y_low <- min(pos$rho_biomass) / 3
+p_b <- ggplot(pos, aes(cruiseseries, rho_biomass, fill = geartype)) +
+  geom_boxplot(outlier.size = 0.4, linewidth = 0.3,
+               position = position_dodge(width = 0.75, preserve = "single")) +
+  geom_text(data = gear_n, aes(cruiseseries, y_low, label = n, group = geartype),
+            position = position_dodge(width = 0.75, preserve = "single"), size = 2.5,
+            inherit.aes = FALSE) +
+  scale_fill_manual(values = gear_colours()) +
+  scale_y_log10(labels = scales::label_number(drop0trailing = TRUE)) +
+  labs(x = NULL, y = "Density (kg/nmi²)", fill = "Gear type") +
+  theme(legend.position = "bottom")
+cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v")
+```
+
+### Index year and design balance
+
+The model's time step is the **index year** (`INDEX_YEAR_START_MONTH` = `r cfg$INDEX_YEAR_START_MONTH %||% 1`, labelled by the calendar year it `r cfg$INDEX_YEAR_LABEL %||% "start"`s). When surveys from several seasons are combined, every survey of one season must fall in the intended index year; @tbl-index-year shows how calendar months map to index years for each cruise series.
+
+```{r}
+#| label: tbl-index-year
+if (!"index_year" %in% names(dt)) {   # data compiled before index years were added
+  dt$index_year <- index_year(dt$year, dt$month, cfg$INDEX_YEAR_START_MONTH %||% 1L,
+                              cfg$INDEX_YEAR_LABEL %||% "start")
+}
+knitr::kable(
+  dt |>
+    dplyr::group_by(cruiseseries) |>
+    dplyr::summarise(
+      months = paste(sort(unique(month)), collapse = ", "),
+      calendar_years = paste0(min(year), "–", max(year)),
+      index_years = paste0(min(index_year), "–", max(index_year)),
+      shifted_hauls = sum(index_year != year),
+      .groups = "drop"
+    ),
+  caption = "Survey months, calendar years and index years by cruise series. Shifted hauls are assigned to an index year other than their calendar year."
+)
+```
+
+A cruise series or gear whose share of the hauls swings between years is confounded with the year effect: its catchability difference is then estimated from few years and can be read as a trend. @tbl-design-balance flags factor levels whose annual share ranges over more than 0.5, and @fig-design-balance shows the gear shares.
+
+```{r}
+#| label: tbl-design-balance
+balance <- lapply(intersect(c("cruiseseries", "geartype"), names(dt)), function(v) {
+  b <- design_balance(dt, v, time_col = "index_year")
+  dplyr::mutate(b$shift, factor = v, level = as.character(.data[[v]]), .before = 1) |>
+    dplyr::select(-dplyr::all_of(v))
+})
+knitr::kable(
+  dplyr::bind_rows(balance),
+  digits = 2,
+  caption = "Annual haul share by cruise series and gear type: years present, minimum and maximum share, and whether the share range exceeds 0.5."
+)
+```
+
+```{r}
+#| label: fig-design-balance
+#| fig-cap: "Share of retained hauls by gear type in each index year."
+design_balance(dt, "geartype", time_col = "index_year")$counts |>
+  ggplot(aes(index_year, share, fill = geartype)) +
+  geom_col() +
+  scale_fill_manual(values = gear_colours()) +
+  labs(x = "Index year", y = "Share of hauls", fill = "Gear type")
+```
+
+<!-- Describe the supported finding. A flagged level needs a decision before modelling: drop it, model it, or justify the confounding. -->
+
+### Terminal-year completeness
+
+Some data typically arrive after the assessment (for example one nation's or one vessel's hauls). Set `LATE_COMPONENTS` in `config.yaml` to the compiled-data column and values concerned; @tbl-late-components then shows their haul counts in recent index years, so an incomplete terminal year is visible. The robustness section of the final report refits the index without them in the terminal year.
+
+```{r, eval=!is.null(cfg$LATE_COMPONENTS)}
+#| label: tbl-late-components
+late_col <- cfg$LATE_COMPONENTS$column
+recent <- dplyr::filter(dt, index_year > max(index_year) - 5)
+knitr::kable(
+  as.data.frame.matrix(table(recent$index_year,
+                             ifelse(recent[[late_col]] %in% cfg$LATE_COMPONENTS$values,
+                                    "late component", "other"))),
+  caption = "Retained hauls in the last five index years from the components that usually arrive late."
+)
+```
+
+## Length-based data
+
+### Length–weight relationship
+
+The length–weight relationship was fitted on the log scale to `r n_fmt(lw$n)` survey fish with recorded weight, after removing `r compile_metadata$n_lw_outliers` outliers with an absolute standardised residual above `r compile_metadata$lw_outlier_sd`, using `ggFishPlots::plot_lw(outlier.sd = `r compile_metadata$lw_outlier_sd`)`. The fit gave $W = `r signif(lw$a, 3)` L^{`r round(lw$b, 3)`}$ with $W$ in kg and $L$ in cm (@fig-length-weight).
+
+```{r}
+#| label: fig-length-weight
+#| fig-height: 3.5
+#| fig-cap: !expr 'paste0("Length and weight of ", sp, " with recorded weight in the retained hauls (ggFishPlots::plot_lw). The line is the fitted length–weight relationship used to predict weight at length; crosses are the outliers removed from the fit.")'
+compile_metadata$lw_plot
+```
+
+### Length distributions
+
+The raised length distributions show which part of the population each cruise series catches relative to the fishable threshold (@fig-length-dist). The share of the catch above the threshold differs between cruise series, which is one reason why the fishable and total indices can diverge.
+
+```{r}
+#| label: fig-length-dist
+#| fig-height: !expr 'ceiling(dplyr::n_distinct(lengths$cruiseseries) / 3) * 1.8 + 0.6'
+#| fig-cap: !expr 'paste0("Raised length distributions of ", sp, " by cruise series (5-cm bins; each measured fish weighted by its raising factor). Dashed line: fishable threshold (", over_cm, " cm). n: measured fish.")'
+len_n <- dplyr::count(lengths, cruiseseries, name = "n") |>
+  dplyr::mutate(label = paste0("n = ", vapply(n, n_fmt, character(1))))
+ggplot(lengths, aes(length_cm, weight = raising, fill = cruiseseries)) +
+  geom_histogram(binwidth = 5, boundary = 0, colour = NA) +
+  geom_vline(xintercept = over_cm, linetype = "dashed") +
+  geom_text(data = len_n, aes(x = Inf, y = Inf, label = label), inherit.aes = FALSE,
+            hjust = 1.1, vjust = 1.5, size = 2.5) +
+  scale_fill_manual(values = cs_cols, guide = "none") +
+  facet_wrap(~cruiseseries, ncol = 3, scales = "free_y") +
+  labs(x = "Length (cm)", y = "Raised number of fish")
+```
+
+The length composition also changes through time (@fig-length-year). Because the cruise-series mix changes between years, part of this change reflects survey coverage rather than the stock.
+
+```{r}
+#| label: fig-length-year
+#| fig-height: 4
+#| fig-cap: !expr 'paste0("Annual raised length composition of ", sp, ", all cruise series combined. Line: median length; ribbon: 10th–90th percentile. Dashed line: fishable threshold. Years with fewer than 10 measured fish are not shown.")'
+wq <- function(x, w, p) {
+  o <- order(x); x <- x[o]; w <- w[o]
+  cw <- cumsum(w) / sum(w)
+  x[which(cw >= p)[1]]
+}
+lengths |>
+  dplyr::group_by(year) |>
+  dplyr::filter(dplyr::n() >= 10) |>
+  dplyr::summarise(q10 = wq(length_cm, raising, 0.1), q50 = wq(length_cm, raising, 0.5),
+                   q90 = wq(length_cm, raising, 0.9), .groups = "drop") |>
+  ggplot(aes(year, q50)) +
+  geom_ribbon(aes(ymin = q10, ymax = q90), fill = "#0072B2", alpha = 0.25) +
+  geom_line(colour = "#0072B2") +
+  geom_point(colour = "#0072B2", size = 1) +
+  geom_hline(yintercept = over_cm, linetype = "dashed") +
+  labs(x = "Year", y = "Length (cm)")
+```
+
+### Fishable share and length coverage
+
+`r n_fmt(sum(pos$fishable_imputed == "measured"))` of the `r n_fmt(nrow(pos))` positive hauls had measured lengths; the fishable share of the others was taken from the survey or cruise-series mean (@fig-length-coverage A). The annual fishable share of the total catch is shown in @fig-length-coverage B.
+
+```{r}
+#| label: fig-length-coverage
+#| fig-height: 6
+#| fig-cap: !expr 'paste0("A: positive ", sp, " hauls by the source of their fishable share, by cruise series. B: fishable share of the total ", sp, " catch by year (all hauls combined); point size shows the number of positive hauls.")'
+src_cols <- c(measured = "#0072B2", `survey mean` = "#56B4E9",
+              `series-year mean` = "#E69F00", `series mean` = "#D55E00", none = "grey50")
+p_a <- pos |>
+  dplyr::count(cruiseseries, fishable_imputed) |>
+  dplyr::mutate(fishable_imputed = factor(fishable_imputed, levels = names(src_cols))) |>
+  ggplot(aes(cruiseseries, n, fill = fishable_imputed)) +
+  geom_col() +
+  scale_fill_manual(values = src_cols, drop = TRUE) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = NULL, y = "Positive hauls", fill = "Fishable share from") +
+  theme(legend.position = "right")
+p_b <- dt |>
+  dplyr::group_by(year) |>
+  dplyr::summarise(share = sum(biomass_fishable) / sum(biomass), n = sum(biomass > 0),
+                   .groups = "drop") |>
+  dplyr::filter(n > 0) |>
+  ggplot(aes(year, 100 * share)) +
+  geom_line(colour = "grey50") +
+  geom_point(aes(size = n), colour = "#D55E00") +
+  scale_size_area(max_size = 3, name = "Positive hauls") +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(x = "Year", y = "Fishable share of catch (%)") +
+  theme(legend.position = "right")
+cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v", axis = "lr")
+```
+
+### Data checks
+
+The automated checks in @tbl-data-checks look for errors that the haul filter cannot catch: unit or subsampling errors in catch weight and count, partly measured catches, inconsistent derived values, implausible tow speeds, positive hauls outside the prediction region and gaps in the time series. Flagged hauls are not removed automatically; they are listed in `ai/review/` for inspection.
+
+```{r}
+#| label: tbl-data-checks
+checks <- data_checks(dt, lengths, lw, region)
+readr::write_csv(
+  attr(checks, "flagged") |>
+    dplyr::left_join(dplyr::select(dt, haul_id, year, cruiseseries, gearname, biomass, count,
+                                   distance, duration_min), by = "haul_id"),
+  here::here("ai", "review", paste0(stock, "-flagged-hauls.csv"))
+)
+checks |>
+  dplyr::mutate(`Flagged (%)` = round(100 * Flagged / Of, 1)) |>
+  knitr::kable(caption = paste0("Automated data checks for the compiled ", sp, " data. Of: number of hauls or years checked."))
+```
+
+# Results and recommendations
+
+**Ready for modelling.** The total-biomass response is complete for all `r n_fmt(nrow(dt))` hauls, with `r sprintf("%.1f", 100 * mean(dt$biomass == 0))` % true zeros. The fishable-biomass response is defined for every haul as well; `r sprintf("%.1f", 100 * mean(dt$biomass_fishable == 0))` % of the hauls have no fishable `r sp`.
+
+**Usable with a stated limitation.** For `r n_fmt(sum(pos$fishable_imputed != "measured"))` positive hauls the fishable share is a survey or cruise-series mean rather than a measurement (@fig-length-coverage). The fishable share also depends on the predicted weight at length, so the fishable biomass is a modelled division of an observed catch.
+
+**To examine in the model fits.** Depth, month and gear type all relate to density in the raw data (@fig-depth, @fig-month-gear), but these relations are confounded with cruise series and area. Whether the cruise series needs its own term, and how the changing survey mix affects the indices, is examined in the model fits and validation.
+
+# Software and reproducibility
+
+```{r software-citations}
+#| results: asis
+source(here::here("R", "report_helpers.R"))
+report_software(
+  c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "ggspatial", "cowplot", "ggFishPlots", "scales", "knitr"),
+  here::here("docs", "assets", paste0(stock, "-3-data-software.bib"))
+)
+```
+
+This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. The authors designed the study, specified and checked the analyses, and reviewed, edited and approved the AI-assisted content, for which they take full responsibility. This version has not yet been reviewed by the authors.
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+# Appendix: analysis scripts {.appendix}
+
+The data are compiled by the survey-selection document with the functions in `R/compile_functions.R` (@lst-compile-functions); the figures use `R/plot_helpers.R` (@lst-plot-helpers), and the index-year and design-balance tables use `R/index_helpers.R` (@lst-index-helpers).
+
+```{r compile-appendix, code = readLines(here::here("R", "compile_functions.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-compile-functions
+#| lst-cap: "Data compilation functions, including the length–weight fit and the fishable share."
+#| code-fold: true
+#| code-summary: "Show compilation functions"
+```
+
+```{r plot-appendix, code = readLines(here::here("R", "plot_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-plot-helpers
+#| lst-cap: "Plot helpers."
+#| code-fold: true
+#| code-summary: "Show plot helpers"
+```
+
+```{r index-helpers-appendix, code = readLines(here::here("R", "index_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-index-helpers
+#| lst-cap: "Effort, index-year, reference, balance, bridging and robustness helpers."
+#| code-fold: true
+#| code-summary: "Show index helpers"
+```

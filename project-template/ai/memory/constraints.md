@@ -12,7 +12,7 @@ metadata:
 - **No data / no private paths in tracked files.** `data/`, `logs/`, `ai/review/` are
   git-ignored; GIS polygons and extracts live in `data/source/` only.
 - **Filtering is fixed by method.** Reproduce index-wise `data-filtering.md` exactly
-  (documented `gearcondition` set, conditional `samplequality`, `stationtype` exclusions, duplicate
+  (documented `gearcondition` set, conditional `samplequality`, `stationtype` keep-list, `EXCLUDE_CRUISES`, duplicate
   removal, true zeros, swept-area density). Don't improvise.
 - **Config-driven.** Settings change in `config.yaml`, not in the qmds.
 - **Review before render; render in screen with a log; toggle compute off after outputs

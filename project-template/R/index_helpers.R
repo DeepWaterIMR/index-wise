@@ -21,7 +21,8 @@ effort_mode <- function(cfg) {
 
 # The offset as a column NAME. sdmTMB and sdmTMB_selection() accept a column name, which keeps
 # the offset attached to its rows when a fit is updated on a subset (robustness refits).
-model_offset <- function(cfg) {
+# R/0_setup.R stores it as `model_offset`; pass that object, not a call, to sdmTMB().
+offset_column <- function(cfg) {
   if (identical(effort_mode(cfg), "offset")) "log_swept_area" else NULL
 }
 

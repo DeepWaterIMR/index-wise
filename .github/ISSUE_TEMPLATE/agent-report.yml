@@ -1,0 +1,56 @@
+name: Agent report
+description: A defect, wrong instruction, user correction, or new recipe found while an AI agent used Fiskwise.
+labels: ["agent-reported"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Public issue. Do **not** include data values, station positions, personal paths,
+        credentials, project names, or unpublished assessment results. Security problems go to
+        **Security → Report a vulnerability**; data incidents follow your institute procedure.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options: [defect, instruction, correction, new-recipe, broken-step]
+    validations:
+      required: true
+  - type: input
+    id: component
+    attributes:
+      label: Component and version
+      placeholder: "wise-writing 1.4.12 (2026-11-04)"
+    validations:
+      required: true
+  - type: input
+    id: skill
+    attributes:
+      label: Skill or file
+      placeholder: "academic-assessment-report, or templates/report/_setup.R"
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction (synthetic or open data only)
+  - type: textarea
+    id: fix
+    attributes:
+      label: Suggested fix
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Checks
+      options:
+        - label: I read this text and approve it; Fiskwise's `scripts/feedback_scan.py` passed on it, if installed.
+          required: true

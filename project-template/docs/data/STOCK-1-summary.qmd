@@ -1,0 +1,124 @@
+---
+title: "{{SPECIES_NAME}} — {{AREA_LABEL}} survey index"
+subtitle: "Summary of the index calculation"
+author: {{AUTHORS_YAML}}
+affiliations: {{AFFILIATIONS_YAML}}
+date: today
+date-format: "YYYY-MM-DD"
+published-title: "Version"
+lang: en-US
+bibliography: ../assets/references.bib
+csl: ../assets/ices_jms.csl
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "{{SPECIES_NAME}} — {{AREA_LABEL}} survey index"
+    code-fold: true
+    code-summary: "Show code"
+    fig-format: jpeg
+    fig-dpi: 160
+    fig-width: 6.69
+    fig-height: 5
+    embed-resources: true
+crossref:
+  fig-title: "Figure"
+  tbl-title: "Table"
+  fig-prefix: "Figure"
+  tbl-prefix: "Table"
+execute:
+  warning: false
+  message: false
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup}
+knitr::opts_knit$set(root.dir = here::here())
+```
+
+```{r config}
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "plot_helpers.R"))
+
+stock <- cfg$STOCK_SLUG %||% cfg$SPECIES_SLUG
+sp <- tolower(cfg$SPECIES_NAME)
+area_label <- if (length(cfg$STOCK_SUBAREAS)) {
+  paste("ICES subareas", paste(unlist(cfg$STOCK_SUBAREAS), collapse = " and "))
+} else cfg$REGION
+dt <- readRDS(file.path(out_dir, "compiled-data.rds"))
+compile_metadata <- readRDS(file.path(out_dir, "compile-metadata.rds"))
+dt$cruiseseries <- order_cruise_series(dt$cruiseseries, dt$year)
+n_fmt <- function(x) format(x, big.mark = " ")
+```
+
+# Abstract {.unnumbered}
+
+<!-- PLACEHOLDER: write a 300-word abstract once the index calculation is finished (Steps 1–4): data, model, validation, the three indices, and the recommended SPiCT index. -->
+
+*To be written when the index calculation is finished.*
+
+# Introduction
+
+## Purpose
+
+This document summarises the IMR bottom-trawl survey indices for `r sp` (*`r cfg$SPECIES_LATIN`*) in `r area_label` (stock `r cfg$STOCK_CODE`). `r cfg$PURPOSE`
+
+<!-- Describe the index products (total biomass, length-based, assessment index) and their model structure from config.yaml. -->
+
+## Documents
+
+The index calculation is documented in the files listed in @tbl-documents. Each document is reproducible from the IMR Biotic database and `config.yaml`.
+
+```{r}
+#| label: tbl-documents
+tibble::tribble(
+  ~Document, ~Content, ~Status,
+  paste0(stock, "-1-summary"), "This summary: purpose, overview and main results", "In progress",
+  paste0(stock, "-2-survey-selection"), "Stock area, haul filter, survey and cruise-series selection, gear and timing", "Draft",
+  paste0(stock, "-3-data"), "Station-level and length-based model inputs, prediction region and data checks", "Draft",
+  paste0(stock, "-fishable-length"), "Derivation of the length threshold of the length-based product (docs/background/stock-background)", "Draft",
+  "Model fit", "First feasible sdmTMB model and prediction grid", "Not started",
+  "Model validation", "Mesh, random-field structure, fixed effects, family and grid selection; retrospective", "Not started",
+  "Index report", "Final indices and assessment hand-off files", "Not started"
+) |>
+  knitr::kable(caption = "Documents of the index calculation.")
+```
+
+## Use of generative AI
+
+This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. AI was used to write code, compile data and draft text. The authors designed the study, specified and checked the analyses, and reviewed, edited and approved the AI-assisted content, for which they take full responsibility. This version has not yet been reviewed by the authors.
+
+# Data
+
+The indices are based on `r n_fmt(nrow(dt))` research bottom-trawl hauls from `r dplyr::n_distinct(dt$missionid)` surveys in `r area_label`, `r min(dt$year)`–`r max(dt$year)`, of which `r n_fmt(sum(dt$biomass > 0))` caught `r sp` (@tbl-summary-surveys). The selection is described in [`r stock`-2-survey-selection](`r stock`-2-survey-selection.html).
+
+```{r}
+#| label: tbl-summary-surveys
+dt |>
+  dplyr::group_by(`Cruise series` = cruiseseries) |>
+  dplyr::summarise(Years = paste0(min(year), "–", max(year)),
+                   Hauls = dplyr::n(), `Positive hauls` = sum(biomass > 0),
+                   `Fishable-positive hauls` = sum(biomass_fishable > 0),
+                   .groups = "drop") |>
+  knitr::kable(caption = paste0("Hauls by cruise series used for the ", sp, " indices."))
+```
+
+<!-- PLACEHOLDER: add the stock-area map and the main data figures once the data report is final. -->
+
+# Model
+
+<!-- PLACEHOLDER: model formula, family, mesh, random fields, and validation outcome (from the fit and validation documents). -->
+
+*To be written after model validation.*
+
+# Indices
+
+<!-- PLACEHOLDER: figure of the three indices, table of index values with CVs, comparison with the longline CPUE index. -->
+
+*To be written after the final index report.*
+
+# References {.unnumbered}
+
+::: {#refs}
+:::

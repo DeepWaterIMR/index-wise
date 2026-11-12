@@ -4,14 +4,10 @@ description: Start a new sdmTMB survey-index project for a species — run the s
 ---
 
 <!-- pack-resources:start -->
-**Pack resources:** resolve `index-wise` from `~/.index-wise/config.json` → `index_template_path` (or
-`~/.fiskwise/config.json` → `components.index-wise.path`). If neither exists, use the
-checkout containing this skill, or locate/obtain the pack through its install instructions.
-Paths such as `knowledge/`, `cookbook/`, `config/` and `project-template/` belong to that
-repository, not the current research directory. For a copied skill, resolve a link that
-leaves this skill's directory against the corresponding source skill under that root;
-keep bundled `references/` links relative to the skill. Never assume `../../` from an
-agent's global skills folder reaches the repository. Use absolute resolved script paths.
+**Pack resources:** the `index-wise` root is `~/.index-wise/config.json` → `index_template_path`, else `~/.fiskwise/config.json` →
+`components.index-wise.path`, else the checkout containing this skill. Paths such as `knowledge/`
+and `project-template/` are relative to that root, never `../../` from a skills folder; resolve
+links that leave this skill's folder against the source skill there. Use absolute paths.
 <!-- pack-resources:end -->
 
 
@@ -59,17 +55,21 @@ every answer for `ai/memory/scaffold-interview.md`.
    reference (`CATCHABILITY_REFERENCE`, e.g. daylight); they are tested in Step 3, not imposed.
 9. **Assessment model** — what consumes the index (e.g. SPiCT)? This drives the
    spatiotemporal/year-effect choice for the selected index (AR1 + no year effect for total/
-   length; IID + year fixed effect, or a year effect with AR1, for the assessment-selected
-   index). Does an index already exist? If so, record its configuration (family, year effect,
-   fields, domain) and its published values (`PREVIOUS_INDEX_FILE`) for bridging.
+   length; IID + year fixed effect for an index feeding SPiCT, which smooths the series
+   itself; a year effect with AR1 is a third option common in existing indices). If the answer
+   is SPiCT, tell the user this now. Does an index already exist? If so, record its
+   configuration (family, year effect, fields, domain) and its published values
+   (`PREVIOUS_INDEX_FILE`) for bridging.
 10. **Late data** — which data typically arrive after the assessment (a nation's or vessel's
     hauls, a late survey)? Record them as `LATE_COMPONENTS` and agree how the terminal year is
     handled (`knowledge/data-filtering.md`).
 11. **Years** — first year to include (default `> 1980`).
-12. **Domain** — study area / prediction region, CRS (EPSG), grid cell size (km), mesh cutoff
-    (km), barrier mesh yes/no, depth range of the grid (`MIN_DEPTH`, `MAX_DEPTH`). Has an area
-    entered the survey mid-series (`knowledge/regions.md`)? GIS polygons are **user-supplied**
-    and go in the project's `data/source/` — never in the template.
+12. **Stock and domain** — stock code and slug (`STOCK_SLUG`, prefix of the `docs/data/`
+    documents), stock area as ICES subareas (`STOCK_SUBAREAS`) or a polygon, the purpose
+    sentence (`PURPOSE`), study area / prediction region, CRS (EPSG), grid cell size (km), mesh
+    cutoff (km), barrier mesh yes/no, depth range of the grid (`MIN_DEPTH`, `MAX_DEPTH`). Has an
+    area entered the survey mid-series (`knowledge/regions.md`)? GIS polygons are
+    **user-supplied** and go in the project's `data/source/` — never in the template.
 13. **Russian data** — included by default; ask only if they want to exclude it.
 14. **Human metadata** — accountable authors and affiliations using wise-writing's
     `AUTHORS` and `AFFILIATIONS` schema; confirm exact AI models and roles before reporting.

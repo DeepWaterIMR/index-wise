@@ -5,8 +5,8 @@ source("project-template/R/index_helpers.R")
 # --- Effort and index year --------------------------------------------------------------
 stopifnot(all.equal(swept_area_nmi2(1, 1852), 1),
           identical(effort_mode(list()), "density"),
-          is.null(model_offset(list(EFFORT = "density"))),
-          identical(model_offset(list(EFFORT = "offset")), "log_swept_area"),
+          is.null(offset_column(list(EFFORT = "density"))),
+          identical(offset_column(list(EFFORT = "offset")), "log_swept_area"),
           inherits(try(effort_mode(list(EFFORT = "area")), silent = TRUE), "try-error"))
 
 # Calendar year by default; a July-June season labelled by its start or by its end year.

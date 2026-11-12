@@ -1,0 +1,140 @@
+---
+title: "{{SPECIES_NAME}} — fishable length"
+subtitle: "Length threshold for the fishable-biomass index"
+author: {{AUTHORS_YAML}}
+affiliations: {{AFFILIATIONS_YAML}}
+date: today
+date-format: "YYYY-MM-DD"
+published-title: "Version"
+lang: en-US
+bibliography: ../../assets/references.bib
+csl: ../../assets/ices_jms.csl
+format:
+  html:
+    toc: true
+    toc-title: "{{SPECIES_NAME}} — fishable length"
+    code-fold: true
+    code-summary: "Show code"
+    fig-format: jpeg
+    fig-dpi: 160
+    fig-width: 6.69
+    fig-height: 4
+    embed-resources: true
+crossref:
+  fig-title: "Figure"
+  tbl-title: "Table"
+  fig-prefix: "Figure"
+  tbl-prefix: "Table"
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+knitr::opts_knit$set(root.dir = here::here())
+```
+
+```{r config}
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "compile_functions.R"))
+source(here::here("R", "fishable_length.R"))
+sp <- tolower(cfg$SPECIES_NAME)
+area_label <- if (length(cfg$STOCK_SUBAREAS)) {
+  paste("ICES subareas", paste(unlist(cfg$STOCK_SUBAREAS), collapse = " and "))
+} else cfg$REGION
+n_fmt <- function(x) format(x, big.mark = " ")
+last_year <- as.integer(cfg$LAST_YEAR %||% (as.integer(format(Sys.Date(), "%Y")) - 1L))
+
+# Reference-fleet records are confidential: read at render time, never saved.
+con <- DBI::dbConnect(duckdb::duckdb(
+  path.expand(Sys.getenv("BES_DATABASE_PATH", "~/IMR_biotic_BES_database/bioticexplorer.duckdb")),
+  read_only = TRUE
+))
+cl <- collect_commercial_lengths(con, cfg, gear_category = cfg$FISHABLE_GEAR %||% "Hooks",
+                                 last_year = last_year)
+DBI::dbDisconnect(con, shutdown = TRUE)
+thr <- fishable_length_threshold(cl$length_cm)
+survey_lengths <- readRDS(file.path(out_dir, "length-data.rds"))
+```
+
+# Purpose
+
+The fishable-biomass index for `r sp` (*`r cfg$SPECIES_LATIN`*, stock `r cfg$STOCK_CODE`) includes fish at or above a length threshold that represents the size of fish caught by the fishery. This document shows how the threshold was derived from the length distribution of the commercial longline catch in `r area_label`. The threshold is used as `OVER_CM` in `config.yaml` (currently `r cfg$OVER_CM` cm).
+
+# Data
+
+The data are length measurements of `r sp` from the Norwegian reference fleet (Referanseflåten) catches with gear category `r cfg$FISHABLE_GEAR %||% "Hooks"` in `r area_label`, `r min(cl$year)`–`r max(cl$year)`, read from the IMR Biotic database when this document is rendered. The records are confidential; only aggregated length frequencies are shown and nothing is saved. The data contain `r n_fmt(nrow(cl))` measured fish.
+
+# Method
+
+Lengths were floored to whole centimetres and counted. The length-frequency distribution was smoothed with a centred `r 5`-cm running mean. The threshold is the smallest length on the ascending limb at which the smoothed frequency reaches half of its maximum (the mode). This approximates the length at which half of the fish are retained by the combined effect of longline selectivity and the availability of fish on the fishing grounds. The rule is implemented in `fishable_length_threshold()` in `R/fishable_length.R` (@lst-fishable-length).
+
+# Results
+
+The smoothed commercial length distribution has its mode at `r thr$mode` cm and reaches half of the modal frequency at **`r thr$threshold` cm** (@fig-commercial-lengths). `r if (identical(as.numeric(thr$threshold), as.numeric(cfg$OVER_CM))) "This equals the threshold in config.yaml." else paste0("This differs from the threshold in config.yaml (", cfg$OVER_CM, " cm); update OVER_CM or explain the difference.")`
+
+```{r}
+#| label: fig-commercial-lengths
+#| fig-cap: !expr 'paste0("Length distribution of ", sp, " in reference-fleet longline catches, ", min(cl$year), "–", max(cl$year), ". Bars: number of fish per cm; line: 5-cm running mean. Dashed line: fishable-length threshold; dotted line: mode.")'
+ggplot(thr$freq, aes(length)) +
+  geom_col(aes(y = n), fill = "grey70", width = 1) +
+  geom_line(aes(y = smooth), colour = "#0072B2", linewidth = 0.8) +
+  geom_vline(xintercept = thr$threshold, linetype = "dashed") +
+  geom_vline(xintercept = thr$mode, linetype = "dotted") +
+  annotate("text", x = thr$threshold, y = Inf, label = paste(thr$threshold, "cm"),
+           hjust = 1.1, vjust = 1.5, size = 3) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05)), labels = scales::label_number(big.mark = " ")) +
+  labs(x = "Length (cm)", y = "Number of fish")
+```
+
+The threshold computed separately for three periods of equal length is shown in @tbl-threshold-periods.
+
+```{r}
+#| label: tbl-threshold-periods
+yr <- range(cl$year)
+brk <- round(seq(yr[1] - 1, yr[2], length.out = 4))
+periods <- cut(cl$year, breaks = brk, labels = paste0(brk[-4] + 1, "–", brk[-1]))
+lapply(split(cl$length_cm, periods), function(x) {
+  r <- fishable_length_threshold(x)
+  tibble::tibble(Fish = n_fmt(length(x)), `Mode (cm)` = r$mode, `Threshold (cm)` = r$threshold,
+                 `Median (cm)` = stats::median(x))
+}) |>
+  dplyr::bind_rows(.id = "Years") |>
+  knitr::kable(caption = "Mode, threshold and median length of the commercial catch by period.")
+```
+
+The research bottom trawls catch a wider length range than the longline fishery, including small fish (@fig-survey-vs-commercial). The share of the survey catch above the threshold is therefore lower than in the commercial catch, and the fishable-biomass index follows the part of the stock that the fishery exploits.
+
+```{r}
+#| label: fig-survey-vs-commercial
+#| fig-cap: !expr 'paste0("Length distributions of ", sp, " in reference-fleet longline catches and in the research bottom-trawl surveys used for the index (raised numbers), scaled to the same area. Dashed line: fishable-length threshold.")'
+dplyr::bind_rows(
+  tibble::tibble(length_cm = cl$length_cm, w = 1, source = "Reference-fleet longlines"),
+  tibble::tibble(length_cm = floor(survey_lengths$length_cm), w = survey_lengths$raising,
+                 source = "Research bottom trawls")
+) |>
+  ggplot(aes(length_cm, weight = w, fill = source)) +
+  geom_density(alpha = 0.5, colour = NA, adjust = 0.7) +
+  geom_vline(xintercept = thr$threshold, linetype = "dashed") +
+  scale_fill_manual(values = c("#D55E00", "#0072B2"), name = NULL) +
+  labs(x = "Length (cm)", y = "Density") +
+  theme(legend.position = "bottom")
+```
+
+# Software and reproducibility
+
+This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs. The authors are responsible for the content. This version has not yet been reviewed by the authors.
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+# Appendix {.appendix}
+
+```{r fl-appendix, code = readLines(here::here("R", "fishable_length.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-fishable-length
+#| lst-cap: "Fishable-length functions."
+#| code-fold: true
+#| code-summary: "Show fishable-length functions"
+```

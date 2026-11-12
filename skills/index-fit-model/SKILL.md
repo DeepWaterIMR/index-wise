@@ -1,17 +1,13 @@
 ---
 name: index-fit-model
-description: Step 2 of the index workflow — fit the first feasible sdmTMB model (no length groups) to confirm the method works, build the prediction grid, and compute a survey index. Use after the data are compiled (step 1) and the user is ready to model.
+description: Step 2 of the index workflow — fit the first feasible sdmTMB model (no length groups) to confirm the method works, build the prediction grid, and compute a survey index. Use after the data are compiled (step 1) and the user is ready to model. For sdmTMB index work outside a scaffolded index-wise project, use index-sdmtmb.
 ---
 
 <!-- pack-resources:start -->
-**Pack resources:** resolve `index-wise` from `~/.index-wise/config.json` → `index_template_path` (or
-`~/.fiskwise/config.json` → `components.index-wise.path`). If neither exists, use the
-checkout containing this skill, or locate/obtain the pack through its install instructions.
-Paths such as `knowledge/`, `cookbook/`, `config/` and `project-template/` belong to that
-repository, not the current research directory. For a copied skill, resolve a link that
-leaves this skill's directory against the corresponding source skill under that root;
-keep bundled `references/` links relative to the skill. Never assume `../../` from an
-agent's global skills folder reaches the repository. Use absolute resolved script paths.
+**Pack resources:** the `index-wise` root is `~/.index-wise/config.json` → `index_template_path`, else `~/.fiskwise/config.json` →
+`components.index-wise.path`, else the checkout containing this skill. Paths such as `knowledge/`
+and `project-template/` are relative to that root, never `../../` from a skills folder; resolve
+links that leave this skill's folder against the source skill there. Use absolute paths.
 <!-- pack-resources:end -->
 
 
@@ -53,7 +49,7 @@ conventions to every generated artifact; retain index-wise's scientific workflow
 
    Keep `geartype` in the formula when multiple major gears are present (always, if a single
    set gear width was used — see the gear-width note in `config.yaml`). Pass
-   `offset = model_offset(cfg)` (NULL for density). `SURVEY_EFFECT` and `CATCHABILITY_TERMS`
+   `offset = model_offset` (NULL for density). `SURVEY_EFFECT` and `CATCHABILITY_TERMS`
    add configured terms through `build_formula()`. If `sanity()` fails, simplify (coarser mesh,
    drop a smooth, change spatiotemporal) rather than forcing it.
 5. **Prediction grid** — `make_survey_prediction_region()` → `make_prediction_grid()` (GEBCO

@@ -3,7 +3,7 @@
 # 📈 index-wise — Build sdmTMB survey indices with AI agents
 
 <!-- version -->
-**Version 0.2.6** (2026-10-26)
+**Version 0.2.26** (2026-11-12)
 <!-- /version -->
 
 **Teach your AI coding agent to build a spatiotemporal survey index for stock assessment — for any species, on your own machine.**
@@ -26,6 +26,7 @@ index-wise owns the **sdmTMB index-building** workflow. BAIT handles Biotic **da
 You may install and update packs through Fiskwise's managed lifecycle, or use the standalone
 pack skills in this repository. Shared writing/reporting dependencies are installed on demand;
 they are not a prerequisite for the index-wise pack itself.
+The versioned assessment index also feeds survey indices of [spict-wise](https://github.com/DeepWaterIMR/spict-wise) and [gadget-wise](https://github.com/DeepWaterIMR/gadget-wise) models.
 Use `fiskwise-workflow` for requests spanning packs. For managed R tasks, always use
 **`r-code-style`**. The coordinator's lifecycle skills are `fiskwise-install`,
 `fiskwise-update`, and `fiskwise-uninstall`.
@@ -63,6 +64,7 @@ This repo is **public and contains instructions only — never data**:
 |------|-------|
 | Scaffold a project (questionnaire + plan) | [`index-new-project`](skills/index-new-project/SKILL.md) |
 | Create valid study-region polygons | [`index-make-regions`](skills/index-make-regions/SKILL.md) |
+| Ask about or review an sdmTMB index in any project | [`index-sdmtmb`](skills/index-sdmtmb/SKILL.md) |
 | **1.** Compile & report the data | [`index-compile-data`](skills/index-compile-data/SKILL.md) |
 | **2.** Fit the first feasible model | [`index-fit-model`](skills/index-fit-model/SKILL.md) |
 | **3.** Validate / select the model | [`index-validate-model`](skills/index-validate-model/SKILL.md) |
@@ -88,7 +90,7 @@ Long renders are compiled with [`index-render`](skills/index-render/SKILL.md) in
 
 ## 🧰 Siblings
 
-- [**BAIT**](https://github.com/DeepWaterIMR/BAIT) — IMR Biotic data access, the database, privacy, maps, life history. **Required.**
+- [**BAIT**](https://github.com/DeepWaterIMR/BAIT) — IMR Biotic data access, the database, privacy, maps, life history. **Required for Biotic data** (Step 1); other survey data can use the own-data contract in [`knowledge/data-filtering.md`](knowledge/data-filtering.md).
 - [**wise-writing**](https://github.com/DeepWaterIMR/wise-writing) — the writing style, document conventions, and shared project layout. **Required when scaffolding reports**; install it on demand.
 - [**spict-wise**](https://github.com/DeepWaterIMR/spict-wise) — SPiCT biomass-dynamic stock assessments. **The index this pack exports is what a SPiCT assessment consumes**; step 4's selected index becomes SPiCT's `obsI`.
 - [**wise-presentations**](https://github.com/DeepWaterIMR/wise-presentations) — Quarto RevealJS slides.

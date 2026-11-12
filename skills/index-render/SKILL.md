@@ -4,14 +4,10 @@ description: Render the (slow) Quarto index documents safely — code-review fir
 ---
 
 <!-- pack-resources:start -->
-**Pack resources:** resolve `index-wise` from `~/.index-wise/config.json` → `index_template_path` (or
-`~/.fiskwise/config.json` → `components.index-wise.path`). If neither exists, use the
-checkout containing this skill, or locate/obtain the pack through its install instructions.
-Paths such as `knowledge/`, `cookbook/`, `config/` and `project-template/` belong to that
-repository, not the current research directory. For a copied skill, resolve a link that
-leaves this skill's directory against the corresponding source skill under that root;
-keep bundled `references/` links relative to the skill. Never assume `../../` from an
-agent's global skills folder reaches the repository. Use absolute resolved script paths.
+**Pack resources:** the `index-wise` root is `~/.index-wise/config.json` → `index_template_path`, else `~/.fiskwise/config.json` →
+`components.index-wise.path`, else the checkout containing this skill. Paths such as `knowledge/`
+and `project-template/` are relative to that root, never `../../` from a skills folder; resolve
+links that leave this skill's folder against the source skill there. Use absolute paths.
 <!-- pack-resources:end -->
 
 
@@ -39,7 +35,7 @@ may not be installed in every agent environment.
 ## Step 3 — Render detached with a log
 
 Use a background process and save output to `logs/` so rendering can continue after the
-conversation or terminal closes. `screen` is one option on systems where it is installed:
+conversation or terminal closes. `screen` is one option on systems where it is installed. Fill placeholders such as `<slug>`, `<doc>` and `<path>` with plain names (letters, digits, `_`, `-`, and `/` in paths); never paste user text containing quotes, `$`, `;` or backticks into these commands.
 
 ```bash
 screen -dmS <slug>-<doc> bash -c '
@@ -66,12 +62,17 @@ Then tell the user:
 ## Step 4 — Suggest a server for heavy jobs
 
 For big meshes, many length groups, CV, or bias correction, **offer to run the render on a
-compute server** to speed it up and free the user's machine.
+compute server** to speed it up and free the user's machine. On the server, use forked
+(`multicore`) parallel workers, keep `get_index_split()` chunks at ~75 000 rows, and launch
+through a wrapper that exports `LD_LIBRARY_PATH` (`knowledge/rendering.md`, "Unattended runs").
 
 ## Step 5 — After it finishes
 
 - Confirm the expected `data/output/` files were written.
-- Check the HTML size is reasonable (`fig-format: jpeg`, sensible dpi).
+- Check the HTML size is reasonable: per-chunk `dev: jpeg` on map chunks only (not a global
+  `fig-format: jpeg`), sensible dpi; see `knowledge/rendering.md` §4.
+- Grep the log for `Unable to resolve crossref` (bracketed captions) and for workers lost
+  mid-run.
 - Flip the compute toggles to `FALSE` for future re-renders.
 - Do **not** delete `.quarto/` to "force a clean build" — fix load paths instead.
 

@@ -122,12 +122,15 @@ moves the end of the series.
      retrospective window) — Mohn's rho with mesh coarsening in place of data peeling;
    - the **mean absolute relative difference** over the whole series, which guards against a
      mesh that matches the end of the series but distorts its trend.
-3. **Check that the ladder has converged:** the second-finest mesh must be within the tolerance
-   of the reference. If it is not, the reference is not yet a reference; extend the ladder
-   before choosing.
-4. **Choose the coarsest cutoff from which the index has stabilised:** it and every finer
-   cutoff have all three summaries within the tolerance $\tau$. Requiring the finer cutoffs too
-   means the index has settled, rather than crossed the reference by chance at one cutoff.
+3. **Check the ladder:** if the differences shrink steadily towards the reference but the
+   second-finest mesh is still outside the tolerance, the reference is not yet a reference;
+   extend the ladder before choosing. If they scatter without a trend, the ladder is adequate.
+4. **Choose the coarsest cutoff whose three summaries are all within the tolerance** $\tau$.
+   Also report whether every finer cutoff is within it (the index has *stabilised*). Do not
+   require stabilisation: the differences often scatter non-monotonically around the reference
+   by a fraction of the index standard error (Atlantic halibut N62: 50 km within 1 %, 35 km at
+   5.8 %), and requiring it would force the most expensive mesh. When the differences scatter,
+   say so and read them as noise around the reference rather than a converging sequence.
    The default is $\tau = 0.05$: an order of magnitude below the Mohn's rho values usually
    regarded as acceptable for an assessment (about −0.15 to 0.20 for longer-lived species;
    Hurtado-Ferro et al. 2015) and well inside the coefficient of variation of a typical survey
@@ -138,7 +141,7 @@ selection as one four-panel figure (`plot_mesh_selection()` in the template's `v
 (a) ΔELPD ± 2 paired SE, when the ladder was cross-validated; (b) the mesh $\Delta\rho$ and the
 terminal-year difference against the cutoff, with the tolerance band; (c) fit time labelled with
 the vertex count; (d) the index under every cutoff. The selected mesh is where (b) enters the
-band for good, read against the cost in (c). Report the cross-validated
+band, read against the cost in (c). Report the cross-validated
 ELPD as well, as supporting information — a cutoff that is much worse on ELPD *and* moves the
 index is clearly too coarse — but do not select on it.
 
@@ -193,6 +196,23 @@ structure. A specification that only just converges for total biomass will often
 sparser length group. When two candidates are not distinguishable on the selection metric,
 prefer the simpler one, and confirm that the chosen structure converges for every product before
 calling the selection final.
+
+"Not distinguishable" needs a rule, stated before the results are seen. Use the
+**one-standard-error rule** (Hastie et al. 2009, §7.10): among the *eligible* candidates
+(converged, comparable, passing `sanity()`), choose the one with the fewest parameters whose
+cross-validated ELPD is within one **paired** standard error of the best. The paired SE comes
+from the per-observation differences on one shared fold assignment, which is far smaller than
+the SE of either ELPD alone. Apply the same rule to every stage, the formula stage included —
+an exception for "best ELPD" there quietly re-admits the larger model.
+
+## Confirm the final specification one setting at a time
+
+The staged search above carries each winner forward, so later stages are conditional on earlier
+choices. Once a specification is in `config.yaml`, confirm it **one setting at a time**: for each
+stage, vary that setting alone around the final model and hold every other setting at its final
+value. If any stage's selection differs from the final model, report it as an inconsistency,
+update `config.yaml`, and re-render until every comparison agrees with the model being carried.
+This makes each table a direct check on the reported model rather than on an intermediate one.
 
 ## Selection criteria versus diagnostics of the final model
 
@@ -299,6 +319,11 @@ Practical notes:
   components mean different things (log group density and weight per group), and a spatial field
   that was estimable in one component of a standard delta model may collapse in the other. Re-run
   the random-field stage after changing family rather than carrying the old structure across.
+- **It is a candidate to test, not a default.** In one benchmark (total biomass, same data and
+  response, so AIC comparable) the Poisson-link delta-lognormal converged and passed `sanity()`
+  but was 502 AIC units worse than the standard delta-lognormal; the indices differed little
+  (median ratio 0.98, within ±9 % in the well-sampled years, larger in sparse early years), and
+  the fit took about 20 % longer. Report such a result and keep the better-fitting family.
 - When combining delta components in prediction code, use `est1 + est2` for the Poisson link
   and `plogis(est1) * exp(est2)` for a logit first component. `plogis()` on a Poisson-link
   `est1` gives a plausible-looking but meaningless map.
@@ -368,12 +393,35 @@ trade worth making.
 
 ## The assessment constraint on the spatiotemporal structure
 
-Statistical fit is not the only criterion here. Total and length-group indices use
-`spatiotemporal = "ar1"` and **no** year fixed effect. The assessment-selected index (feeding
-e.g. SPiCT) often uses `iid` with **year as a fixed effect**, so that the series is not
-temporally smoothed before the assessment model sees it. If cross-validation prefers `ar1` for
-the assessment index, say so in the text and carry `iid` anyway, with the reason — see the next
-section.
+Statistical fit is not the only criterion here. Total and length-group indices, read as
+descriptions of the stock, use `spatiotemporal = "ar1"` and **no** year fixed effect. An index
+that feeds a state-space assessment model — **SPiCT above all**, and also SAM or a state-space
+JABBA — defaults to `spatiotemporal = "iid"` with **year as a fixed effect**
+(`formula = value ~ 0 + factor(year) + ...`). Advise this whenever `ASSESSMENT_MODEL` is SPiCT,
+without waiting to be asked.
+
+Why: an `ar1` or `rw` field, a smoother on year (`s(year)`), or `time_varying = ~ 1` all borrow
+strength across years, so each year's estimate is pulled towards its neighbours. That is
+smoothing, and SPiCT already smooths: it treats biomass as a latent state with process error
+(`sdb`) and the index as an observation of it with observation error (`sdi`). A pre-smoothed
+index therefore
+
+1. is **smoothed twice**, and SPiCT attributes too much of the variation to the latent state;
+2. carries **autocorrelated observation errors**, which breaks the independence the OSA residual
+   tests assume (Ljung–Box in `plotspict.diagnostic()`); and
+3. has **understated inter-annual variability and standard errors**, so `sdi` is
+   underestimated, `stdevfacI` is too small, and the advice confidence intervals are too narrow.
+
+With an `iid` field and year as a fixed effect, each year's level is estimated from that year's
+data alone, and its standard error — larger than under `ar1`, as it should be — goes to SPiCT as
+`stdevfacI`. Let the assessment model separate process from observation noise.
+
+If cross-validation prefers `ar1` for the assessment index, say so in the text and carry `iid`
+anyway, with the reason — see the next section. If a year has too few positive catches for its
+year effect to be estimated, report it and drop that year from the hand-off (SPiCT handles a
+missing year) rather than returning to `ar1`. For an assessment model that is not state-space
+(e.g. gadget3), the same independence argument applies to its likelihood, so prefer `iid` + year
+there too; confirm with the assessment lead.
 
 A third configuration is common in existing survey indices: **a year fixed effect with an AR1
 field**. The year effect leaves the annual mean free, as in `iid` + year, while the AR1 field
@@ -468,6 +516,14 @@ Selection is the slowest thing in the project, so it is the most likely to be in
   which point candidates start failing for reasons that have nothing to do with the model.
 - Free each fit between candidates in any hand-written loop (`rm(m); gc()`); `sdmTMB_selection()`
   keeps only the summary and the fit you asked it to keep.
+- **Key each stage's cache to the settings it holds fixed.** Append a short hash of those
+  settings (mesh cutoff, family, formula, fields, data version) to the stage's `cache_prefix`,
+  so a changed upstream choice cannot silently reuse stale candidate fits. Leave the setting
+  the stage *varies* out of its own key — otherwise changing `MESH_CUTOFF_KM` in the config
+  invalidates the mesh ladder that chose it.
+- **Compare candidate indices on one fixed selection grid**, independent of `GRID_KM`, and
+  scale by that grid's cell area. Otherwise a grid change between renders moves every index and
+  the comparison measures the grid, not the candidate.
 
 See `rendering.md` for the render-side toggles and the screen-session discipline.
 
@@ -480,7 +536,9 @@ paragraph is what a reviewer reads.
 
 ## References
 
-- Hurtado-Ferro, F., Szuwalski, C. S., Valero, J. L., *et al.* 2015. Looking in the rear-view
+- Hastie, T., Tibshirani, R., and Friedman, J. 2009. The Elements of Statistical Learning: Data
+  Mining, Inference, and Prediction. 2nd edn. Springer, New York.
+  <https://doi.org/10.1007/978-0-387-84858-7>- Hurtado-Ferro, F., Szuwalski, C. S., Valero, J. L., *et al.* 2015. Looking in the rear-view
   mirror: bias and retrospective patterns in integrated, age-structured stock assessment
   models. ICES Journal of Marine Science, 72: 99–110. <https://doi.org/10.1093/icesjms/fsu198>
 - Mohn, R. 1999. The retrospective problem in sequential population analysis: an investigation

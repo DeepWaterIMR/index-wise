@@ -41,14 +41,14 @@ packages <- c(
   yaml = NA,
   ggOceanMaps = "MikkoVihtakari/ggOceanMaps",
   sdmTMB = "sdmTMB/sdmTMB",   # org renamed from pbs-assess; the old path still redirects
-  sdmTMBexperiments = "DeepWaterIMR/sdmTMBexperiments"
+  sdmTMBexperiments = "DeepWaterIMR/sdmTMBexperiments",
+  ggFishPlots = "DeepWaterIMR/ggFishPlots"   # length-weight fit (>= 0.4.11 for outlier.sd)
 )
 
 # Needed only on some paths, so not installed until something asks for them:
 #   sdmTMBextra  BARRIER: true (barrier mesh)
 #   blockCV      the spatial block cross-validation in validate.qmd
-#   ggFishPlots  the length-weight figure in the data report
-#   RstoxUtils   reading SPD files in compile-data.qmd
+#   RstoxUtils   reading SPD files in <stock>-2-survey-selection.qmd
 #   suncalc      sun altitude as a catchability covariate (CATCHABILITY_TERMS: sun_altitude)
 #   glmmTMB      CPUE GLMMs in cpue.qmd (CPUE: engine: glmmTMB); mgcv ships with R
 #   DHARMa       grouped residual dispersion in cpue.qmd
@@ -57,12 +57,12 @@ packages <- c(
 optional_packages <- c(
   sdmTMBextra = "pbs-assess/sdmTMBextra",
   blockCV = NA,
-  ggFishPlots = "DeepWaterIMR/ggFishPlots",
   RstoxUtils = "DeepWaterIMR/RstoxUtils",
   suncalc = NA,
   glmmTMB = NA,
   DHARMa = NA,
-  future = NA
+  future = NA,
+  plotly = NA      # interactive survey-timing figure (static fallback without it)
 )
 
 # Set R_INDEX_INSTALL_MISSING=true only after package installation has been authorized.
@@ -102,9 +102,21 @@ package_setup(packages, install_missing_packages = install_missing_packages,
 .read_yaml_utf8 <- function(path) {
   txt <- readChar(path, file.info(path)$size, useBytes = TRUE)
   Encoding(txt) <- "UTF-8"
-  yaml::yaml.load(txt)
+  yaml::yaml.load(txt, eval.expr = FALSE)
 }
 cfg <- .read_yaml_utf8(.find_config())
+
+# yaml parses an unquoted whole number as an R integer, and an integer `cutoff` makes
+# sdmTMB::make_mesh() build one vertex per unique location (53 221 instead of 76 vertices for
+# one 14 683-haul dataset) with only a generic ">1000 vertices" warning. Coerce every
+# measurement-like setting to double here, once. CRS codes and row/year counts stay integer:
+# they are identifiers, and a row limit must not become 2.5e+05 in a SQL LIMIT. Add any new
+# numeric measurement setting to this list.
+for (.nm in c("OVER_CM", "GEAR_WIDTH", "GRID_KM", "MESH_CUTOFF_KM", "MAX_DEPTH",
+              "REFERENCE_MONTH")) {
+  if (is.integer(cfg[[.nm]])) cfg[[.nm]] <- as.numeric(cfg[[.nm]])
+}
+rm(.nm)
 
 # Effort, index-year, prediction-reference, balance, bridging and robustness helpers.
 source(here::here("R", "index_helpers.R"))
@@ -115,14 +127,56 @@ source(here::here("R", "cpue_helpers.R"))
 dt_crs         <- cfg$CRS
 grid_side_size <- cfg$GRID_KM                       # km
 grid_cell_area_nmi2 <- (cfg$GRID_KM / 1.852)^2      # nmi^2 per cell (for get_index area=)
-response_col   <- if (identical(cfg$RESPONSE, "abundance")) "rho_abundance" else "rho_biomass"
 
+# RESPONSE names the biological quantity; EFFORT names how sampled area enters the model.
+# "density" models swept-area density (rho_*) with no offset; "offset" models raw catch with
+# log(swept_area) as an offset, which the prepare chunks add as the `log_swept_area` column.
+# Pass the offset to sdmTMB() and sdmTMB_cv() as that column NAME, never as a vector (the CV
+# folds must subset it) and never as an explicit NULL (sdmTMB_cv() rejects it): use
+# `offset = model_offset` in sdmTMB(), and `args$offset <- model_offset` in argument lists.
+effort_model <- effort_mode(cfg)   # validates EFFORT (R/index_helpers.R)
+model_quantity <- if (identical(cfg$RESPONSE, "abundance")) "abundance" else "biomass"
+response_col <- if (identical(effort_model, "offset")) {
+  if (identical(model_quantity, "abundance")) "count" else "biomass"
+} else {
+  paste0("rho_", model_quantity)
+}
+model_offset <- offset_column(cfg)
+
+# Poisson-link delta families use the `type = "poisson-link"` argument (the
+# delta_poisson_link_*() constructors are deprecated). Their first link is "log", not "logit":
+# the first linear predictor is log group density, and the offset enters both components.
 model_family <- switch(cfg$FAMILY,
-  delta_lognormal = sdmTMB::delta_lognormal(),
-  delta_gamma     = sdmTMB::delta_gamma(),
-  tweedie         = sdmTMB::tweedie(),
+  delta_lognormal              = sdmTMB::delta_lognormal(),
+  delta_gamma                  = sdmTMB::delta_gamma(),
+  delta_lognormal_poisson_link = sdmTMB::delta_lognormal(type = "poisson-link"),
+  delta_gamma_poisson_link     = sdmTMB::delta_gamma(type = "poisson-link"),
+  tweedie                      = sdmTMB::tweedie(),
   stop("Unknown FAMILY in config.yaml: ", cfg$FAMILY)
 )
+
+# sdmTMB() takes `spatial` as one value for a one-part family and as a list with one entry per
+# component for a delta family. config.yaml stores SPATIAL as a value or a sequence.
+model_spatial <- local({
+  s <- cfg$SPATIAL %||% "on"
+  if (length(s) == 1L) s[[1]] else as.list(unlist(s))
+})
+
+# Log density per prediction row from a delta model, which predict() returns as est1/est2.
+# A logit first link gives log(plogis(est1)) + est2; a Poisson-link first link is already log
+# group density, so the sum is est1 + est2. plogis() on a Poisson-link est1 gives a
+# plausible-looking but meaningless map.
+delta_log_density <- function(pred, fit) {
+  if (identical(fit$family$link[1], "log")) pred$est1 + pred$est2
+  else stats::plogis(pred$est1, log.p = TRUE) + pred$est2
+}
+
+# Random fields present in a fit, so diagnostics plot only those (plot_random_field() errors on
+# a field that was switched off rather than skipping it).
+fitted_fields <- function(fit) {
+  c(if (any(unlist(fit$spatial) == "on")) "omega",
+    if (any(fit$spatiotemporal != "off")) "epsilon")
+}
 
 # A smooth term sized to the data it will be given. mgcv needs at least `k` unique covariate
 # values for `s(x, k = k)`; with fewer, sdmTMB stops with "A term has fewer unique covariate
@@ -150,7 +204,9 @@ model_terms <- function(cfg, has_multiple_gears = TRUE, data = NULL) {
   c(
     if (has_multiple_gears || !identical(cfg$GEAR_WIDTH, "per_gear")) "geartype",
     if (isTRUE(cfg$SURVEY_EFFECT) && several_surveys) "fsurvey",
-    smooth_term("month", data),
+    # A month smooth with very uneven seasonal coverage can collapse (SD at 0, NaN SEs on every
+    # fixed effect, NaN index limits); INCLUDE_MONTH: false drops it.
+    if (isTRUE(cfg$INCLUDE_MONTH %||% TRUE)) smooth_term("month", data),
     smooth_term("depth", data),
     if (isTRUE(cfg$INCLUDE_TEMPERATURE)) smooth_term("temperature", data),
     unlist(lapply(unlist(cfg$CATCHABILITY_TERMS), smooth_term, data = data))

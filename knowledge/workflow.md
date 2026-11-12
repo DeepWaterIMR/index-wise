@@ -11,8 +11,8 @@ IMR-internal) repos:
 
 | index-wise document | Background material, if you need to consult it (Vihtakari et al. 2026) |
 |---|---|
-| `docs/data-report/survey-selection/compile-data.qmd` | `ref-index-paper/docs/data/{Redfish bottom trawl, BioticExplorer_database, Compile_all_data}.Rmd` |
-| `docs/data-report/data-overview/<species>-<region>-data-report.qmd` | `ref-index-paper/docs/SI files/SI-Text-1-data.qmd` |
+| `docs/data/<stock>-2-survey-selection.qmd` | `ref-index-paper/docs/data/{Redfish bottom trawl, BioticExplorer_database, Compile_all_data}.Rmd` |
+| `docs/data/<stock>-3-data.qmd` | `ref-index-paper/docs/SI files/SI-Text-1-data.qmd` |
 | `docs/data-report/fit/fit.qmd` | `ref-index-paper/docs/SI files/SI-Text-2-sdmTMB.qmd` |
 | `docs/data-report/validation/validate.qmd` | `ref-index-paper/docs/SI files/SI-Text-3-model-selection.qmd` (staged selection, status-coded tables, index per candidate) |
 | `docs/data-report/<species>/report.qmd` (+ `*-section.qmd`) | `ref-assessment-index/docs/benchmark/beaked/*` |
@@ -33,7 +33,7 @@ but structured project ready for step 1. See `project-structure.md`.
 **Needs a locally installed BES database and an IMR intranet connection.** Use BAIT for access
 (`biotic-server-setup`, `biotic-connect`, `biotic-query`).
 
-1. Adapt the `docs/data-report/survey-selection/` compilation document for the species (`filter_sp`). They read
+1. Adapt the `docs/data/<stock>-2-survey-selection.qmd` compilation document for the species (`filter_sp`). They read
    station and individual data from the Biotic database (via BES) and — for northern/offshore
    species — optionally from legacy **SPD** files.
 2. Apply the **critical filtering** (`data-filtering.md`): the `gearcondition`,
@@ -42,10 +42,10 @@ but structured project ready for step 1. See `project-structure.md`.
 3. Compile everything into one dataset with true absences (zero catches at fished stations),
    with `swept_area`, the **index year** beside the calendar year, and `n_measured` when
    class products are planned.
-4. Generate the **data overview** (`<species>-<region>-data-report.qmd`): station maps, counts by
+4. Generate the **data report** (`<stock>-3-data.qmd`) and start the summary (`<stock>-1-summary.qmd`); structure in `data-documents.md`: station maps, counts by
    year/depth, the index-year mapping, survey × year and gear × year balance, terminal-year
    completeness of late-arriving components, response distributions, trawl parameters,
-   length–weight, length-group allocation and the coverage of individual data.
+   length–weight and length-group allocation.
 
 **Duplicates warning:** the Biotic database can contain duplicate records, and data are still
 being added to Biotic (making SPD files gradually obsolete). Detect duplicates and write a
@@ -89,11 +89,13 @@ set of assessment products:
   toggle): mesh comparison, barrier mesh, retrospective, cross-validation, survey comparison,
   bridging with the previous assessment's index, and robustness (station subsampling,
   start-year peels, late-arriving data, down-weighted years).
-- **Choose the assessment index** and export it (year, est, lwr, upr, se) to `data/output`.
+- **Choose the assessment index** and export it as the `assessment-index.rds` hand-off
+  (`assessment-index-handoff.md`) to `data/output`.
 
 Note the structural choice: total/length indices use `spatiotemporal = "ar1"` and **no** year
-fixed effect; the assessment-selected index (feeding e.g. SPiCT) often uses `iid` and **year
-as a fixed effect** to avoid temporal smoothing. Confirm with the user which the assessment
+fixed effect; the assessment-selected index for SPiCT (or another state-space model) uses `iid`
+and **year as a fixed effect**, because the assessment model smooths the series itself — see
+`model-selection.md`, *The assessment constraint*. Confirm with the user which the assessment
 consumes.
 
 ## Optional track — commercial CPUE (skills: `index-cpue-data`, `index-cpue-model`)

@@ -1,17 +1,13 @@
 ---
 name: index-validate-model
-description: Step 3 of the index workflow — validate and select the sdmTMB model via cross-validation and sensitivity analysis (component ranking, fixed effects, family, spatiotemporal structure, mesh resolution, retrospective). Use after a first feasible model works (step 2).
+description: Step 3 of the index workflow — validate and select the sdmTMB model via cross-validation and sensitivity analysis (component ranking, fixed effects, family, spatiotemporal structure, mesh resolution, retrospective). Use after a first feasible model works (step 2). For sdmTMB index work outside a scaffolded index-wise project, use index-sdmtmb.
 ---
 
 <!-- pack-resources:start -->
-**Pack resources:** resolve `index-wise` from `~/.index-wise/config.json` → `index_template_path` (or
-`~/.fiskwise/config.json` → `components.index-wise.path`). If neither exists, use the
-checkout containing this skill, or locate/obtain the pack through its install instructions.
-Paths such as `knowledge/`, `cookbook/`, `config/` and `project-template/` belong to that
-repository, not the current research directory. For a copied skill, resolve a link that
-leaves this skill's directory against the corresponding source skill under that root;
-keep bundled `references/` links relative to the skill. Never assume `../../` from an
-agent's global skills folder reaches the repository. Use absolute resolved script paths.
+**Pack resources:** the `index-wise` root is `~/.index-wise/config.json` → `index_template_path`, else `~/.fiskwise/config.json` →
+`components.index-wise.path`, else the checkout containing this skill. Paths such as `knowledge/`
+and `project-template/` are relative to that root, never `../../` from a skills folder; resolve
+links that leave this skill's folder against the source skill there. Use absolute paths.
 <!-- pack-resources:end -->
 
 
@@ -36,22 +32,24 @@ the species and config. The order and its reasons are in `knowledge/model-select
 short, start from the Step 2 model and settle the most expensive, most conditioning setting
 first:
 
-1. **Mesh resolution** — a cutoff ladder; choose the **coarsest mesh from which the index has
-   stabilised**: it and every finer cutoff within 5 % of the finest mesh in the terminal year,
+1. **Mesh resolution** — a cutoff ladder; choose the **coarsest mesh whose index is within 5 % of
+   the finest mesh** (report whether every finer cutoff is too) in the terminal year,
    over the last five years (the mesh Δρ, after Mohn's rho) and over the whole series. Show the
    four-panel selection figure (ΔELPD, Δρ, fit time, index); ELPD is supporting, not decisive.
 2. **Random-field structure** — spatial field on/off per component, `ar1`/`rw`/`iid`, and the
    year-effect pairings (`iid` + year, `ar1` + year). Remember the assessment use-case:
-   total/length indices → `ar1` with no year effect; the assessment-selected index → often
-   `iid` + `year` as a fixed effect, to avoid temporal smoothing; a year effect with `ar1` is
-   the third option and is common in existing indices. Confirm with the user which the
-   assessment consumes.
+   total/length indices → `ar1` with no year effect; the assessment-selected index for SPiCT →
+   `iid` + `year` as a fixed effect, because SPiCT smooths the series itself
+   (`knowledge/model-selection.md`, *The assessment constraint*). If CV prefers `ar1`, report
+   it and carry `iid`. A year effect with `ar1` is a third option, common in existing indices.
+   Confirm with the user which the assessment consumes.
 3. **Barrier, anisotropy and survey fields** — sensitivity of the index to each, on the
    selected mesh. With combined seasons, also the survey-specific spatial deviation field
    (`run_survey_field`; `knowledge/model-selection.md` *Combining surveys and seasons*).
 4. **Fixed effects** — the full model, each term dropped in turn, candidate additions
    (catchability covariates such as `hour`/`sun_altitude`). Survey × gear is usually not
-   estimable; read the survey × year and gear × year balance in the data report first.
+   estimable; read the survey × year and gear × year balance in the data report first, and flag
+   misrecorded gear there.
 5. **Family re-check** — the Step 3a winner against its runners-up with the selected structure.
    Prefer a Poisson-link delta family with a swept-area offset when it fits at least as well
    and converges; Tweedie with an offset is the other coherent-effort baseline. When replacing

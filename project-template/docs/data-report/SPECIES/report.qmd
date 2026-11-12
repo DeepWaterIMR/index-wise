@@ -9,7 +9,7 @@ format:
     code-fold: true
     code-summary: "Show code"
     code-tools: true
-    fig-format: jpeg
+    fig-format: png
     fig-dpi: 160
     embed-resources: true
 params:
@@ -22,6 +22,7 @@ params:
   include_survey: false        # survey-comparison section
   include_bridging: false      # comparison with the previous assessment's index
   include_robustness: false    # station subsampling, start-year peels, late data, down-weighting
+  include_influence: false     # haul/cruise influence and leverage section
 execute:
   fig-width: 6.69
   warning: false
@@ -46,7 +47,8 @@ csl: ../../assets/ices_jms.csl
 <!-- Step 4: the final model report and the exported assessment index for {{SPECIES_NAME}}.
 Modelled on ref-assessment-index/docs/benchmark/beaked. Produces MULTIPLE indices (total
 biomass, over-X-cm biomass, length-group abundances) and, via the *-section.qmd includes,
-optional mesh / barrier / retro / CV / survey-comparison / bridging / robustness analyses (each behind a toggle). Set
+optional mesh / barrier / retro / CV / survey-comparison / influence / bridging / robustness
+analyses (each behind a toggle). Map chunks use `dev: jpeg`; line plots stay png. Set
 bias_correct: true for the final run. Do NOT hard-wrap prose. -->
 
 # Data
@@ -62,6 +64,7 @@ dt   <- readRDS(file.path(out_dir, "compiled-data.rds")) |>
 dt$fyear <- factor(dt$year)   # for products with a year fixed effect
 grid <- readRDS(file.path(out_dir, "prediction-grid.rds"))
 grid$fyear <- factor(grid$year, levels = levels(dt$fyear))
+grid$log_swept_area <- 0      # predict a density: one unit of swept area
 mesh <- sdmTMB::make_mesh(dt, xy_cols = c("X", "Y"), cutoff = cfg$MESH_CUTOFF_KM)
 has_multiple_gears <- dplyr::n_distinct(dt$geartype) > 1
 ```
@@ -76,7 +79,8 @@ This report builds the indices the assessment needs. Define the response for eac
 - **Over-`r cfg$OVER_CM` cm biomass** — biomass of individuals above the threshold.
 - **Length-group abundance** — one index per group in `config.yaml` `LENGTH_GROUPS`.
 - **Selected assessment index** — `r cfg$SELECTED_INDEX` (feeds `r cfg$ASSESSMENT_MODEL`);
-  often `iid` + `year` as a fixed effect. Confirm with the assessment lead.
+  `iid` + `year` as a fixed effect for a state-space model such as SPiCT, which smooths the
+  series itself. Confirm with the assessment lead.
 
 Size-, sex- or maturity-class products can be fitted one class at a time or as one **stacked class model** (one row per station and class, class-specific smooths and year effects; see index-wise `model-selection.md`). A stacked model shares its spatial fields between classes unless class-specific fields are added; state which, and why the classes may share a spatial pattern. Positive hauls without individual data are missing from class products, never zero.
 
@@ -90,8 +94,9 @@ form <- build_formula(cfg, has_multiple_gears, data = dt)
 # warn about irregular time spacing and can leave the fit grinding for a very long time.
 extra_time <- setdiff(seq(min(dt$year), max(dt$year)), unique(dt$year))
 fit_total <- sdmTMB::sdmTMB(
-  form, data = dt, mesh = mesh, offset = model_offset(cfg),
-  family = model_family, spatial = "on", spatiotemporal = "ar1", time = "year",
+  form, data = dt, mesh = mesh,
+  family = model_family, offset = model_offset, spatial = model_spatial,
+  spatiotemporal = "ar1", time = "year",
   extra_time = if (length(extra_time)) extra_time else NULL,
   control = sdmTMB::sdmTMBcontrol(newton_loops = 2)
 )
@@ -126,6 +131,8 @@ ggplot2::ggplot(index_total, ggplot2::aes(year, est)) +
 
 ```{r}
 #| label: fig-report-results
+#| dev: jpeg
+#| dev-args: !expr list(quality = 85)
 #| fig-cap: "Final-model diagnostics: fixed effects, annual prediction maps, spatiotemporal random fields, and residual quantiles."
 plot_fixed_effects(fit_total)
 plot_prediction_map(pred_total, crs = dt_crs, column = "est", type = "annual")
@@ -178,6 +185,7 @@ compute is guarded by the matching include_* toggle. -->
 {{< include survey-comparison-section.qmd >}}
 {{< include bridging-section.qmd >}}
 {{< include robustness-section.qmd >}}
+{{< include influence-section.qmd >}}
 
 
 # Results and recommendations

@@ -19,7 +19,7 @@
 .read_yaml_utf8 <- function(path) {
   txt <- readChar(path, file.info(path)$size, useBytes = TRUE)
   Encoding(txt) <- "UTF-8"
-  yaml::yaml.load(txt)
+  yaml::yaml.load(txt, eval.expr = FALSE)
 }
 
 # --- Locate the project-template/ directory -------------------------------------------
@@ -95,6 +95,20 @@ scaffold_index <- function(config, target, template = NULL, dry = FALSE) {
   # Regions are optional for single-domain projects, but when a project is split by region
   # the region slug belongs in data-document filenames to keep N62/S62 outputs unambiguous.
   region_slug <- if (!is.null(cfg$REGION_SLUG)) as.character(cfg$REGION_SLUG) else "all"
+  # The stock slug prefixes the docs/data documents (<stock>-1-summary.qmd, ...). Default: the
+  # species slug, plus the region slug for split-region projects.
+  stock_slug <- if (!is.null(cfg$STOCK_SLUG) && !grepl("^\\{\\{", cfg$STOCK_SLUG)) {
+    as.character(cfg$STOCK_SLUG)
+  } else if (!region_slug %in% c("all", "ALL")) {
+    tolower(paste(slug, region_slug, sep = "-"))
+  } else slug
+  if (!grepl("^[a-z0-9-]+$", stock_slug))
+    stop("STOCK_SLUG must be lower-case kebab-case: got '", stock_slug, "'")
+  area_label <- if (!is.null(cfg$AREA_LABEL) && !grepl("^\\{\\{", cfg$AREA_LABEL)) {
+    as.character(cfg$AREA_LABEL)
+  } else if (length(cfg$STOCK_SUBAREAS)) {
+    paste0("ICES ", paste(unlist(cfg$STOCK_SUBAREAS), collapse = "\u2013"))
+  } else if (!is.null(cfg$REGION)) as.character(cfg$REGION) else "all"
   if (!grepl("^[A-Za-z0-9-]+$", region_slug))
     stop("REGION_SLUG must contain only letters, numbers, and hyphens: got '", region_slug, "'")
 
@@ -149,6 +163,10 @@ scaffold_index <- function(config, target, template = NULL, dry = FALSE) {
     sp_dir <- file.path(target, "docs", "data-report", "SPECIES")
     if (dir.exists(sp_dir)) file.rename(sp_dir, file.path(target, "docs", "data-report", slug))
     for (f in list.files(target, recursive = TRUE, full.names = TRUE)) {
+      if (grepl("^STOCK-", basename(f)))
+        file.rename(f, file.path(dirname(f), sub("^STOCK", stock_slug, basename(f))))
+    }
+    for (f in list.files(target, recursive = TRUE, full.names = TRUE)) {
       if (grepl("SPECIES", basename(f)))
         file.rename(f, file.path(dirname(f), gsub("SPECIES", slug, basename(f))))
     }
@@ -157,14 +175,17 @@ scaffold_index <- function(config, target, template = NULL, dry = FALSE) {
         file.rename(f, file.path(dirname(f), gsub("\\{\\{REGION_SLUG\\}\\}", region_slug, basename(f))))
     }
   }
-  msg("Renamed SPECIES -> ", slug, " and region -> ", region_slug, " in paths")
+  msg("Renamed STOCK -> ", stock_slug, ", SPECIES -> ", slug, " and region -> ", region_slug, " in paths")
 
   # --- Stamp identity tokens in text files --------------------------------------------
+  area_label <- enc2utf8(area_label)
   tokens <- c(
     "{{SPECIES_NAME}}"  = as.character(cfg$SPECIES_NAME),
     "{{SPECIES_SLUG}}"  = as.character(cfg$SPECIES_SLUG),
     "{{SPECIES_LATIN}}" = as.character(cfg$SPECIES_LATIN),
     "{{REGION_SLUG}}"   = region_slug,
+    "{{STOCK_SLUG}}"    = stock_slug,
+    "{{AREA_LABEL}}"    = area_label,
     "{{AUTHORS_YAML}}" = yaml_block(authors),
     "{{AFFILIATIONS_YAML}}" = yaml_block(cfg$AFFILIATIONS)
   )
@@ -197,7 +218,7 @@ scaffold_index <- function(config, target, template = NULL, dry = FALSE) {
       txt <- tryCatch({
         s <- readChar(f, file.info(f)$size, useBytes = TRUE); Encoding(s) <- "UTF-8"; s
       }, error = function(e) "")
-      if (grepl("\\{\\{(SPECIES_(NAME|SLUG|LATIN)|REGION_SLUG)\\}\\}", txt)) left <- c(left, f)
+      if (grepl("\\{\\{(SPECIES_(NAME|SLUG|LATIN)|REGION_SLUG|STOCK_SLUG|AREA_LABEL)\\}\\}", txt)) left <- c(left, f)
     }
     if (length(left))
       warning("Leftover identity placeholders in:\n  ", paste(left, collapse = "\n  "))

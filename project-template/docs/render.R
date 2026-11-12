@@ -22,9 +22,9 @@ if (!requireNamespace("quarto", quietly = TRUE))
 if (!requireNamespace("yaml", quietly = TRUE))
   stop("The 'yaml' package is required: install.packages('yaml')")
 
-cfg  <- yaml::read_yaml("config.yaml")
+cfg  <- yaml::read_yaml("config.yaml", eval.expr = FALSE)
 slug <- cfg$SPECIES_SLUG
-region_slug <- if (!is.null(cfg$REGION_SLUG)) cfg$REGION_SLUG else if (!is.null(cfg$REGION)) cfg$REGION else "all"
+stock <- if (!is.null(cfg$STOCK_SLUG)) cfg$STOCK_SLUG else slug
 
 dir.create("logs", showWarnings = FALSE)
 
@@ -35,8 +35,8 @@ render <- function(path) {
 }
 
 if (stage %in% c("all", "data")) {
-  render("docs/data-report/survey-selection/compile-data.qmd")
-  render(file.path("docs/data-report/data-overview", paste0(slug, "-", region_slug, "-data-report.qmd")))
+  for (part in c("2-survey-selection", "3-data", "1-summary"))
+    render(file.path("docs/data", paste0(stock, "-", part, ".qmd")))
 }
 if (stage %in% c("all", "fit"))      render("docs/data-report/fit/fit.qmd")
 if (stage %in% c("all", "validate")) render("docs/data-report/validation/validate.qmd")

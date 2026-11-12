@@ -1,0 +1,579 @@
+---
+title: "{{SPECIES_NAME}} — {{AREA_LABEL}} survey selection"
+subtitle: "Step 1 of 2 · survey selection"
+author: {{AUTHORS_YAML}}
+affiliations: {{AFFILIATIONS_YAML}}
+date: today
+date-format: "YYYY-MM-DD"
+published-title: "Version"
+lang: en-US
+bibliography:
+  - ../assets/references.bib
+  - ../assets/{{STOCK_SLUG}}-2-survey-selection-software.bib
+csl: ../assets/ices_jms.csl
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "{{SPECIES_NAME}} — {{AREA_LABEL}} survey selection"
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+    fig-format: jpeg
+    fig-dpi: 160
+    fig-width: 6.69
+    fig-height: 5
+    embed-resources: true
+crossref:
+  fig-title: "Figure"
+  tbl-title: "Table"
+  lst-title: "Code"
+  fig-prefix: "Figure"
+  tbl-prefix: "Table"
+  lst-prefix: "Code"
+params:
+  recompile: true   # FALSE → load the compiled dataset from data/output/<species>
+execute:
+  warning: false
+  message: false
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup}
+knitr::opts_knit$set(root.dir = here::here())
+```
+
+```{r config}
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "compile_functions.R"))
+source(here::here("R", "plot_helpers.R"))
+
+stock <- cfg$STOCK_SLUG %||% cfg$SPECIES_SLUG
+sp <- tolower(cfg$SPECIES_NAME)
+Sp <- cfg$SPECIES_NAME
+area_label <- if (length(cfg$STOCK_SUBAREAS)) {
+  paste("ICES subareas", paste(unlist(cfg$STOCK_SUBAREAS), collapse = " and "))
+} else cfg$REGION
+area_short <- if (length(cfg$STOCK_SUBAREAS)) {
+  paste0("ICES ", paste(unlist(cfg$STOCK_SUBAREAS), collapse = "–"))
+} else cfg$REGION
+inside_label <- paste("Inside", area_short)
+compiled_path <- file.path(out_dir, "compiled-data.rds")
+metadata_path <- file.path(out_dir, "compile-metadata.rds")
+# Last complete year: LAST_YEAR in config.yaml, or the year before the current year,
+# because the current year's surveys are not yet complete. Numeric literal for DuckDB.
+last_year <- as.integer(cfg$LAST_YEAR %||% (as.integer(format(Sys.Date(), "%Y")) - 1L))
+```
+
+# Purpose
+
+This document selects the IMR bottom-trawl survey data used for the `r sp` (*`r cfg$SPECIES_LATIN`*) survey indices in `r area_label` (stock `r cfg$STOCK_CODE`). `r cfg$PURPOSE`
+
+The document answers which surveys, hauls and catch records enter the indices, and which are excluded and why. Its output is the compiled station dataset in `data/output/`, which is described further in the companion data report ([`r stock`-3-data](`r stock`-3-data.html)) and is the input to the spatiotemporal sdmTMB models [@Vihtakari2026]. Species, survey and model settings are read at run time from `config.yaml`.
+
+```{r compile, eval=params$recompile}
+con <- DBI::dbConnect(duckdb::duckdb(
+  path.expand(Sys.getenv("BES_DATABASE_PATH",
+                         "~/IMR_biotic_BES_database/bioticexplorer.duckdb")),
+  read_only = TRUE
+))
+db_meta <- DBI::dbGetQuery(con, "SELECT * FROM metadata")
+
+res <- compile_species_stations(con, cfg, last_year)
+dt <- add_response_and_covariates(res$stations, cfg)
+
+lengths <- collect_lengths(con, cfg, dt)
+length_limits <- unlist(cfg$LENGTH_LIMITS %||% c(5, 200)) # plausible lengths (cm)
+length_outliers <- dplyr::filter(lengths, length_cm < length_limits[1] |
+                                   length_cm > length_limits[2])
+lengths <- dplyr::filter(lengths, length_cm >= length_limits[1],
+                         length_cm <= length_limits[2])
+lw <- fit_length_weight(lengths, cfg$LW_OUTLIER_SD %||% 4)
+dt <- add_fishable_biomass(dt, lengths, lw, cfg$OVER_CM)
+
+positive_observations <- collect_positive_observations(con, cfg, last_year)
+distance_check <- distance_diagnostics(con, cfg, last_year)
+quality_codes <- quality_code_table(con)
+other_data <- other_data_summary(con, cfg)
+DBI::dbDisconnect(con, shutdown = TRUE)
+
+dir.create(here::here("ai", "review"), recursive = TRUE, showWarnings = FALSE)
+readr::write_csv(res$diagnostics$duplicates,
+                 here::here("ai", "review", paste0(stock, "-duplicate-hauls.csv")))
+readr::write_csv(res$diagnostics$incomplete,
+                 here::here("ai", "review", paste0(stock, "-incomplete-catches.csv")))
+
+compile_metadata <- list(
+  data_downloaded_at_label = format(Sys.time(), "%Y-%m-%d %H:%M %Z"),
+  db_updated = format(as.POSIXct(db_meta$timeend[1]), "%Y-%m-%d"),
+  diagnostics = res$diagnostics[c("n_candidate_rows", "n_valid_hauls",
+                                  "n_qualifying_missions")],
+  n_duplicates = nrow(res$diagnostics$duplicates),
+  n_incomplete = nrow(res$diagnostics$incomplete),
+  incomplete_by_series = res$diagnostics$incomplete,
+  n_multi_sample = nrow(res$diagnostics$multi_sample),
+  lw = lw[c("a", "b", "n")],
+  lw_plot = lw$plot,
+  lw_outlier_sd = cfg$LW_OUTLIER_SD %||% 4,
+  n_lw_outliers = nrow(lw$outliers),
+  length_limits = length_limits,
+  n_length_outliers = nrow(length_outliers),
+  positive_observations = positive_observations,
+  distance_check = distance_check,
+  quality_codes = quality_codes,
+  other_data = other_data
+)
+saveRDS(dt, compiled_path)
+saveRDS(lengths, file.path(out_dir, "length-data.rds"))
+saveRDS(compile_metadata, metadata_path)
+```
+
+```{r load}
+dt <- readRDS(compiled_path)
+compile_metadata <- readRDS(metadata_path)
+dt$cruiseseries <- order_cruise_series(dt$cruiseseries, dt$year)
+cs_cols <- cruise_series_colours(levels(dt$cruiseseries))
+n_fmt <- function(x) format(x, big.mark = " ")
+included_surveys <- dplyr::n_distinct(dt$missionid)
+latest <- dplyr::slice_max(dt, start_time, n = 1, with_ties = FALSE)
+```
+
+# Data
+
+The station and catch data were read from a local copy of the IMR Biotic database compiled with [BioticExplorerServer](https://github.com/DeepWaterIMR/BioticExplorerServer) [@BioticExplorerServer], last updated on `r compile_metadata$db_updated`, and extracted on `r compile_metadata$data_downloaded_at_label`.
+
+## Stock area
+
+The stock is defined by `r area_label`. The overview map shows all quality-filtered research bottom-trawl hauls with `r sp` in the Northeast Atlantic, coloured by whether the haul lies inside the stock area (@fig-stock-area). Hauls outside the stock area belong to neighbouring stocks and are not used. Of the `r n_fmt(nrow(compile_metadata$positive_observations))` positive hauls on the map, `r n_fmt(sum(compile_metadata$positive_observations$inside))` lie inside `r area_label`.
+
+```{r stock-area-map}
+stock_area <- read_stock_area(cfg)
+obs <- compile_metadata$positive_observations |>
+  dplyr::mutate(Location = factor(dplyr::if_else(inside, inside_label, "Outside"),
+                                  levels = c("Outside", inside_label))) |>
+  dplyr::arrange(Location)
+lim <- unlist(cfg$MAP_LIMITS)
+
+base_area <- ggOceanMaps::basemap(limits = lim, bathymetry = TRUE, bathy.style = "rcb",
+                                  bathy.alpha = 0.35, land.col = "grey85",
+                                  land.border.col = "grey60", legends = FALSE,
+                                  base_size = 9, rotate = TRUE)
+area_map_height <- map_fig_height(base_area, extra = 0.7) # before geom_sf() resets limits
+p_area <- base_area +
+  ggplot2::geom_sf(data = stock_area, fill = "#0072B2", alpha = 0.15, colour = "#0072B2",
+                   linewidth = 0.6) +
+  ggnewscale::new_scale_fill() +
+  ggspatial::geom_spatial_point(
+    data = obs, ggplot2::aes(longitudestart, latitudestart, fill = Location),
+    shape = 21, size = 1, stroke = 0.15, colour = "black", crs = 4326
+  ) +
+  ggplot2::scale_fill_manual(values = stats::setNames(c("#56B4E9", "#E69F00"),
+                                                     c("Outside", inside_label)),
+                             name = NULL) +
+  ggplot2::guides(fill = ggplot2::guide_legend(override.aes = list(size = 3))) +
+  ggplot2::theme(legend.position = "bottom")
+```
+
+```{r, fig.height = area_map_height}
+#| label: fig-stock-area
+#| fig-cap: !expr 'paste0(area_label, " (blue) and quality-filtered research bottom-trawl hauls with ", sp, " in the Northeast Atlantic, ", cfg$FIRST_YEAR, "–", max(dt$year), ". Orange: inside the stock area; light blue: outside. Hauls without ", sp, " are not shown.")'
+ggOceanMaps::reorder_layers(p_area)
+```
+
+## Haul filter {#sec-haul-filter}
+
+A haul was retained when it met all criteria in @tbl-filter-criteria. The rules follow index-wise `data-filtering.md`; the meaning of each retained quality code is taken from the reference tables of the Biotic database [see also the BAIT quality-code documentation].
+
+```{r}
+#| label: tbl-filter-criteria
+tibble::tribble(
+  ~Field, ~`Retained values`, ~Meaning,
+  "gearcategory", "Bottom trawls", "Bottom-trawl gear only",
+  "missiontypename", "Forskningsfartøy, Leiefartøy", "Research vessels and chartered vessels; reference fleet, commercial sampling and coast guard excluded",
+  "startyear", paste0(cfg$FIRST_YEAR, "–", last_year), "Years included; the current year is excluded until its surveys are complete (LAST_YEAR)",
+  "Stock area", if (length(cfg$STOCK_SUBAREAS)) paste0("icesarea ", paste0("27.", unlist(cfg$STOCK_SUBAREAS), ".*", collapse = ", ")) else "inside REGION_FILE polygon", area_label,
+  "gearcondition", "1, 2", "1: gear OK; 2: minor damage with no material effect on catch",
+  "samplequality", "1 (CoastalS: 1, 2)", "1: preselected position, trawl sensors normal; 2: deployed on an acoustic registration or other fish information, sensors normal",
+  "stationtype", "missing, 1, 3, 9, 13", "Missing: ordinary unflagged station; 1: part of a 24-hour station; 3: gear trial that is also a regular fish station; 9: regular fish station; 13: additional preselected station",
+  "distance", "0.3–5 nmi", "Towed distance usable for swept area",
+  "gear", "not 3100, 3101, 3130", "Unspecified bottom-trawl codes removed"
+) |>
+  knitr::kable(caption = "Haul filter criteria. Hauls meeting all criteria were retained.")
+```
+
+The filter was applied in the database before the records were collected; the sample-quality rule, which depends on the cruise series, was applied immediately after collection (@lst-filter-expression).
+
+```{r}
+#| lst-label: lst-filter-expression
+#| lst-cap: "Haul filter applied to the Biotic `stnall` table (from `standard_haul_filter()`, `apply_samplequality()` and `in_stock_area()` in `R/compile_functions.R`)."
+#| code-fold: false
+#| eval: false
+stnall |>
+  dplyr::filter(
+    gearcategory == "Bottom trawls",
+    missiontypename %in% c("Forskningsfartøy", "Leiefartøy"),
+    startyear >= cfg$FIRST_YEAR,
+    startyear <= last_year,
+    !is.na(distance), !is.na(latitudestart), !is.na(longitudestart),
+    latitudestart > 0,
+    gearcondition %in% c("1", "2"),
+    is.na(stationtype) | stationtype %in% c("1", "3", "9", "13"),
+    distance >= 0.3, distance <= 5,
+    is.na(gear) | !gear %in% c("3100", "3101", "3130")
+  ) |>
+  area_filter_lazy(cfg) |>   # ICES-area code (STOCK_SUBAREAS) or polygon bounding box
+  dplyr::collect() |>
+  dplyr::filter(in_stock_area(dplyr::pick(dplyr::everything()), cfg)) |>
+  dplyr::filter(
+    dplyr::if_else(
+      !is.na(cruiseseriescode) & cruiseseriescode == "23",
+      samplequality %in% c("1", "2"),
+      samplequality %in% "1"
+    )
+  )
+```
+
+The coastal survey (CoastalS, cruise-series code 23) accepts sample-quality codes 1 and 2, whereas other cruise series require code 1. In its early years the coastal survey targeted saithe acoustically. We assume that `r sp` was nevertheless sampled at random with respect to those registrations, so code 2 hauls are kept for CoastalS.
+
+Missing station types are retained explicitly, because most ordinary stations carry no station type and a database `IN` test would otherwise drop them. Russian data are `r if (isTRUE(cfg$INCLUDE_RUSSIAN)) "included" else "excluded"` (`INCLUDE_RUSSIAN` in `config.yaml`); `r n_fmt(sum(dt$nation %in% c("140", "90")))` retained hauls are Russian.
+
+The filter gave `r n_fmt(compile_metadata$diagnostics$n_valid_hauls)` valid hauls in `r area_label`. Hauls where the length sample exceeded the catch (`r compile_metadata$n_duplicates` hauls) and hauls where `r sp` was recorded without a catch weight (`r compile_metadata$n_incomplete` hauls) were removed; their identifiers are listed in `ai/review/`. In `r compile_metadata$n_multi_sample` hauls, `r sp` was recorded in more than one catch sample; these samples were treated as additive and summed.
+
+
+### Tow distance and unspecified gear
+
+The tow-distance limits (0.3–5 nmi) are the generic index-wise rule developed for other species. To check them for `r sp`, @fig-tow-distance shows the distribution of tow distance for all hauls that passed the other haul criteria and for hauls with `r sp`. `r dc <- compile_metadata$distance_check; pos <- dplyr::filter(dc, catch_kg > 0); paste0("Of the ", n_fmt(nrow(pos)), " hauls with ", sp, ", ", sum(pos$distance < 0.3, na.rm = TRUE), " were shorter than 0.3 nmi, ", sum(pos$distance > 5, na.rm = TRUE), " longer than 5 nmi and ", sum(is.na(pos$distance)), " lacked a distance, so the limits keep ", round(100 * mean(pos$distance >= 0.3 & pos$distance <= 5, na.rm = TRUE), 1), " % of them")`. Catch per nautical mile decreased with tow distance (@tbl-tow-distance), so catches did not scale proportionally with tow length; the shortest tows gave the highest catch rates and are the most sensitive to errors in recorded distance. <!-- State the decision: keep the generic limits or adapt them for the species, with the reason. -->
+
+```{r}
+#| label: fig-tow-distance
+#| fig-height: 3.5
+#| fig-cap: !expr 'paste0("Tow distance of all hauls passing the other haul criteria and of hauls with ", sp, " (logarithmic scale). Dashed lines: the 0.3 and 5 nmi limits.")'
+dc <- compile_metadata$distance_check |>
+  dplyr::filter(!is.na(distance), distance > 0)
+dplyr::bind_rows(
+  dplyr::mutate(dc, group = "All hauls"),
+  dplyr::mutate(dplyr::filter(dc, catch_kg > 0), group = paste("Hauls with", sp))
+) |>
+  ggplot(aes(distance)) +
+  geom_histogram(bins = 60, fill = "#0072B2", colour = NA) +
+  geom_vline(xintercept = c(0.3, 5), linetype = "dashed") +
+  scale_x_log10(labels = scales::label_number(drop0trailing = TRUE)) +
+  facet_wrap(~group, scales = "free_y") +
+  labs(x = "Tow distance (nmi)", y = "Hauls")
+```
+
+```{r}
+#| label: tbl-tow-distance
+dc |>
+  dplyr::mutate(`Distance (nmi)` = cut(distance, c(0, 0.3, 0.5, 1, 1.5, 2, 3, 5, Inf))) |>
+  dplyr::group_by(`Distance (nmi)`) |>
+  dplyr::summarise(Hauls = dplyr::n(), `Positive hauls` = sum(catch_kg > 0),
+                   `Median catch (kg)` = round(stats::median(catch_kg[catch_kg > 0]), 1),
+                   `Median catch per nmi (kg)` = round(stats::median(catch_kg[catch_kg > 0] /
+                                                                    distance[catch_kg > 0]), 1),
+                   .groups = "drop") |>
+  knitr::kable(caption = paste0("Hauls and ", sp, " catches by tow distance, before the distance filter. Medians are for hauls with ", sp, "."))
+```
+
+The unspecified bottom-trawl codes (3100, 3101, 3130) occurred in `r sum(compile_metadata$distance_check$gear %in% c("3100", "3101", "3130"))` hauls, of which `r sum(compile_metadata$distance_check$gear %in% c("3100", "3101", "3130") & compile_metadata$distance_check$catch_kg > 0)` caught `r sp`. Removing them has a negligible effect on the data.
+
+## Surveys and cruise series
+
+A survey means one cruise. A survey was included when at least one positive `r sp` catch passed the haul filter inside `r area_label` (the encountered-on-a-cruise rule). All valid hauls of an included survey were retained, so hauls without `r sp` in those surveys are true zeros. Other surveys in the same cruise series were not included unless they also caught `r sp`. Included surveys were afterwards grouped by cruise series; surveys without a cruise-series code were grouped as `Other` only after they qualified.
+
+The rule selected `r included_surveys` surveys and `r n_fmt(nrow(dt))` hauls (@tbl-survey-selection). `r cs_top <- dt |> dplyr::count(cruiseseries, wt = biomass > 0, sort = TRUE); paste0(cs_top$cruiseseries[1], " and ", cs_top$cruiseseries[2])` contributed most positive hauls (`r round(100 * sum(cs_top$n[1:2]) / sum(cs_top$n))` %).
+
+```{r}
+#| label: tbl-survey-selection
+dt |>
+  dplyr::group_by(`Cruise series` = cruiseseries) |>
+  dplyr::summarise(
+    Code = {codes <- unique(stats::na.omit(dplyr::na_if(cruiseseriescode, "NA")))
+            paste(codes[order(as.numeric(sub(",.*", "", codes)))], collapse = ", ")},
+    Surveys = dplyr::n_distinct(missionid),
+    `First year` = min(year), `Last year` = max(year),
+    Months = format_months(month),
+    Hauls = dplyr::n(),
+    `Positive hauls` = sum(biomass > 0),
+    `Catch (kg)` = round(sum(biomass)),
+    `Zero fraction (%)` = round(100 * mean(biomass == 0), 1),
+    .groups = "drop"
+  ) |>
+  knitr::kable(caption = paste0("Cruise series of the included surveys with ", sp,
+                                " in ", area_label, ". Zero fraction is the percentage of retained hauls without ", sp, "."))
+```
+
+Surveys grouped as `Other` either have no cruise-series code or belong to cruise series with few surveys in the stock area. They are listed one by one in @tbl-other-surveys, with the short name of the cruise series where a code exists, so that each survey can be judged separately.
+
+```{r}
+#| label: tbl-other-surveys
+dt |>
+  dplyr::filter(cruiseseries == "Other") |>
+  dplyr::group_by(Year = year, Vessel = platformname, Cruise = cruise,
+                  Series = survey_label(cruiseseriescode, series_short, cruise, cfg)) |>
+  dplyr::summarise(Months = format_months(month),
+                   Gear = paste(sort(unique(geartype)), collapse = ", "),
+                   Hauls = dplyr::n(), `Positive hauls` = sum(biomass > 0),
+                   .groups = "drop") |>
+  knitr::kable(caption = "Included surveys grouped as Other. Series gives the short name and code of the cruise series, or the survey name from SURVEY_NAMES in config.yaml for surveys without a code; – means neither is known.")
+```
+
+## Dataset overview
+
+@tbl-data-overview summarises the compiled dataset.
+
+```{r}
+#| label: tbl-data-overview
+tibble::tibble(
+  Metric = c("Database last updated", "Data extracted", "Latest haul",
+             "Retained hauls", paste0("Hauls with ", sp), "True-zero hauls (zero fraction)",
+             "Included surveys", "Cruise series", "Years", "Number of years",
+             "Removed: length sample exceeds catch", "Removed: catch weight missing"),
+  Value = c(compile_metadata$db_updated, compile_metadata$data_downloaded_at_label,
+            paste0(format(latest$station_date), " (", latest$cruiseseries, ")"),
+            n_fmt(nrow(dt)), n_fmt(sum(dt$biomass > 0)),
+            paste0(n_fmt(sum(dt$biomass == 0)), " (", sprintf("%.1f", 100 * mean(dt$biomass == 0)), " %)"),
+            included_surveys, dplyr::n_distinct(dt$cruiseseries),
+            paste0(min(dt$year), "–", max(dt$year)), dplyr::n_distinct(dt$year),
+            compile_metadata$n_duplicates, compile_metadata$n_incomplete)
+) |>
+  knitr::kable(caption = paste0("Overview of the compiled ", sp, " dataset."))
+```
+
+# Analysis
+
+## Survey catch and effort
+
+Catch is the total recorded `r sp` biomass per haul, and occurrence is the number of positive hauls. The cruise series differ in both, and they do not rank identically by catch and by positive hauls (@fig-survey-catch-overview). Split by year, the same quantities show when each series entered the time series and how uneven the annual coverage is (@fig-survey-catch-year).
+
+```{r}
+#| label: fig-survey-catch-overview
+#| fig-height: 3.5
+#| fig-cap: !expr 'paste0("Total ", sp, " catch (t) and number of positive hauls by cruise series. The panels use independent y-axis scales.")'
+dt |>
+  dplyr::group_by(cruiseseries) |>
+  dplyr::summarise(`Total catch (t)` = sum(biomass) / 1000,
+                   `Positive hauls` = sum(biomass > 0), .groups = "drop") |>
+  tidyr::pivot_longer(-cruiseseries) |>
+  ggplot(aes(cruiseseries, value, fill = cruiseseries)) +
+  geom_col() +
+  facet_wrap(~name, scales = "free_y") +
+  scale_fill_manual(values = cs_cols, guide = "none") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = NULL, y = NULL) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+#| label: fig-survey-catch-year
+#| fig-height: 6
+#| fig-cap: !expr 'paste0("Annual number of positive ", sp, " hauls (A) and total catch (B) by cruise series.")'
+annual <- dt |>
+  dplyr::group_by(year, cruiseseries) |>
+  dplyr::summarise(positive = sum(biomass > 0), catch_t = sum(biomass) / 1000,
+                   .groups = "drop")
+p1 <- ggplot(annual, aes(year, positive, fill = cruiseseries)) +
+  geom_col() +
+  scale_fill_manual(values = cs_cols) +
+  scale_x_continuous(breaks = seq(1980, 2030, 5), expand = expansion(mult = 0.01)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = NULL, y = "Positive hauls", fill = "Cruise series") +
+  theme(legend.position = "none")
+p2 <- ggplot(annual, aes(year, catch_t, fill = cruiseseries)) +
+  geom_col() +
+  scale_fill_manual(values = cs_cols) +
+  scale_x_continuous(breaks = seq(1980, 2030, 5), expand = expansion(mult = 0.01)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = "Year", y = "Catch (t)", fill = "Cruise series") +
+  guides(fill = guide_legend(nrow = 2)) +
+  theme(legend.position = "bottom")
+cowplot::plot_grid(p1, p2, ncol = 1, labels = "AUTO", rel_heights = c(4, 5.2))
+```
+
+## Survey positions
+
+The cruise series cover overlapping but different parts of the stock area, and positive hauls are a spatially clustered subset of the effort in every series (@fig-survey-positions).
+
+```{r survey-positions-map}
+n_series <- dplyr::n_distinct(dt$cruiseseries)
+p_pos <- ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 8, rotate = TRUE,
+                              expand.factor = 1, land.col = "grey85",
+                              land.border.col = "grey60") +
+  ggspatial::geom_spatial_point(data = dplyr::filter(dt, biomass == 0),
+    aes(longitudestart, latitudestart), colour = "grey40", size = 0.15, alpha = 0.5,
+    crs = 4326) +
+  ggspatial::geom_spatial_point(data = dplyr::filter(dt, biomass > 0),
+    aes(longitudestart, latitudestart), colour = "#D55E00", size = 0.5, crs = 4326) +
+  facet_wrap(~cruiseseries, ncol = 3) +
+  theme(axis.title = element_blank(), axis.text = element_blank(),
+        axis.ticks = element_blank())
+positions_map_height <- map_fig_height(p_pos, ncol = 3, nrow = ceiling(n_series / 3),
+                                       extra = 0.3 * ceiling(n_series / 3), side = 0.3)
+```
+
+```{r, fig.height = positions_map_height}
+#| label: fig-survey-positions
+#| fig-cap: !expr 'paste0("Retained hauls by cruise series. Grey: hauls without ", sp, " (true zeros); orange: hauls with ", sp, ".")'
+p_pos
+```
+
+## Gear
+
+All catches were converted to density using a common `r cfg$GEAR_WIDTH` m effective width, and gear type is kept as a fixed effect in the models so that systematic gear differences can be estimated. `r gt <- dplyr::count(dt, geartype, sort = TRUE); paste0(gt$geartype[1], " trawls")` account for `r round(100 * gt$n[1] / sum(gt$n))` % of the hauls (@fig-gear-overview). Depth, tow distance and haul duration differ between cruise series and gears (@tbl-gear).
+
+```{r}
+#| label: fig-gear-overview
+#| fig-height: 7
+#| fig-cap: !expr 'paste0("Gear used in the included surveys. A: ", sp, " catch per positive haul by gear (number of hauls in brackets), coloured by cruise series, logarithmic scale. B: number of hauls by year and gear type.")'
+gear_n <- dplyr::count(dt, gearname, name = "n_hauls")
+gd <- dt |>
+  dplyr::filter(biomass > 0) |>
+  dplyr::left_join(gear_n, by = "gearname") |>
+  dplyr::mutate(gear_label = paste0(gearname, " (", n_hauls, ")"))
+p_gear <- ggplot(gd, aes(stats::reorder(gear_label, biomass, FUN = median), biomass,
+                         fill = cruiseseries)) +
+  geom_boxplot(outlier.size = 0.5, outlier.alpha = 0.3, linewidth = 0.3) +
+  scale_y_log10(labels = scales::label_number(drop0trailing = TRUE)) +
+  scale_fill_manual(values = cs_cols) +
+  labs(x = NULL, y = "Catch per positive haul (kg)", fill = "Cruise series") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "right")
+p_year <- dt |>
+  dplyr::count(year, geartype) |>
+  ggplot(aes(year, n, fill = geartype)) +
+  geom_col() +
+  scale_fill_manual(values = gear_colours()) +
+  scale_x_continuous(breaks = seq(1980, 2030, 5), expand = expansion(mult = 0.01)) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  labs(x = "Year", y = "Hauls", fill = "Gear type")
+cowplot::plot_grid(p_gear, p_year, ncol = 1, labels = "AUTO", rel_heights = c(6, 4),
+                   align = "v", axis = "lr")
+```
+
+```{r}
+#| label: tbl-gear
+fmt_range <- function(x, digits = 1) {
+  x <- x[is.finite(x)]
+  if (!length(x)) return("–")
+  sprintf(paste0("%.", digits, "f [%.", digits, "f–%.", digits, "f]"), mean(x), min(x), max(x))
+}
+dt |>
+  dplyr::group_by(`Cruise series` = cruiseseries, `Gear type` = geartype, Gear = gearname) |>
+  dplyr::summarise(Hauls = dplyr::n(), `Positive hauls` = sum(biomass > 0),
+                   `Depth (m)` = fmt_range(depth, 0),
+                   `Distance (nmi)` = fmt_range(distance, 2),
+                   `Duration (min)` = fmt_range(duration_min, 0),
+                   .groups = "drop") |>
+  knitr::kable(caption = "Gear and haul characteristics by cruise series. Values are mean [minimum–maximum].")
+```
+
+## Survey timing
+
+```{r timing-height}
+timing_height <- round(0.2 * dplyr::n_distinct(dt$year) + 1.2, 1)
+```
+
+The cruise series occupy characteristic and largely stable parts of the year, so season is partly confounded with cruise series (@fig-survey-timing). Month is therefore included as a smooth term in the models, and the survey effect is examined in the model fits.
+
+```{r, fig.height = timing_height}
+#| label: fig-survey-timing
+#| fig-cap: "Timing of the included surveys, newest year at the top. Segments span the first to last retained haul of each survey; cruise series are offset slightly within a year."
+plot_survey_timing(dt, cs_cols)
+```
+
+## Gross-error screening
+
+Recorded depths, positions and length and weight records were screened for gross errors (@tbl-screening). Depth mismatches are reported but not removed, because the recorded depth is the better measure on steep slopes; they are examined in the data report.
+
+```{r}
+#| label: tbl-screening
+tibble::tibble(
+  Check = c("Depth missing or non-positive; filled from GEBCO",
+            "Recorded depth differs from GEBCO by more than a factor of 2",
+            "Haul on land according to GEBCO (depth ≤ 0)",
+            paste0("Length records outside ", compile_metadata$length_limits[1], "–",
+                   compile_metadata$length_limits[2], " cm (removed)"),
+            paste0("Length–weight outliers (|standardised residual| > ", compile_metadata$lw_outlier_sd %||% 4, "; excluded from the fit)"),
+            "Positive hauls without length measurements"),
+  Count = c(sum(dt$depth_source == "GEBCO"),
+            sum(dt$depth_ratio > 2 | dt$depth_ratio < 0.5, na.rm = TRUE),
+            sum(dt$depth_gebco <= 0, na.rm = TRUE),
+            compile_metadata$n_length_outliers,
+            compile_metadata$n_lw_outliers,
+            sum(dt$biomass > 0 & dt$n_measured == 0))
+) |>
+  knitr::kable(caption = paste0("Gross-error screening of the compiled ", sp, " data."))
+```
+
+## Other data in the database
+
+The database also holds `r sp` records that are not research bottom-trawl hauls, such as reference-fleet, commercial and coast-guard samples (@tbl-other-data). These are not survey hauls with a known swept area and are not used for the trawl index. <!-- State here any other use of these data in the project, e.g. setting a fishable-length threshold. -->
+
+```{r}
+#| label: tbl-other-data
+compile_metadata$other_data |>
+  dplyr::rename(`Mission type` = missiontypename, `Gear category` = gearcategory,
+                Stations = stations, `First year` = first_year, `Last year` = last_year) |>
+  knitr::kable(caption = paste0("All IMR Biotic stations with ", sp, " in ", area_label, " by mission type and gear category, before filtering."))
+```
+
+# Results and recommendations
+
+The compiled station dataset is written to `data/output/`, which is git-ignored.
+
+**Ready for downstream use.** The dataset contains `r n_fmt(nrow(dt))` bottom-trawl hauls from `r included_surveys` surveys in `r min(dt$year)`–`r max(dt$year)`, of which `r n_fmt(sum(dt$biomass > 0))` caught `r sp` (@tbl-data-overview). Its zeros are true absences within surveys that caught `r sp`. Gear type, depth, month and cruise series are available for every haul.
+
+**Provisional.** The common `r cfg$GEAR_WIDTH` m effective width pushes gear differences into the gear fixed effect; if that effect cannot be estimated, the width assumption is the first to revisit. Keeping sample-quality code 2 for CoastalS assumes that `r sp` was sampled at random within those acoustically targeted hauls. The current year is excluded until its surveys are complete (`LAST_YEAR` in `config.yaml`).
+
+**To decide in the data report and model fits.** Which cruise series and gear types to keep, and whether the irregular `Other` surveys add information or noise.
+
+# Software and reproducibility
+
+```{r software-citations}
+#| results: asis
+source(here::here("R", "report_helpers.R"))
+report_software(
+  c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "ggspatial", "DBI", "duckdb", "cowplot",
+    "knitr"),
+  here::here("docs", "assets", paste0(stock, "-2-survey-selection-software.bib"))
+)
+```
+
+This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. The authors designed the study, specified and checked the analyses, and reviewed, edited and approved the AI-assisted content, for which they take full responsibility.
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+# Appendix: analysis scripts {.appendix}
+
+The scripts are reproduced below in run order: `R/0_setup.R` loads the packages and reads `config.yaml` (@lst-setup-script); `R/compile_functions.R` acquires, filters and compiles the data (@lst-compile-functions); `R/plot_helpers.R` holds the shared colours and the stock-area reader (@lst-plot-helpers); `R/report_helpers.R` writes the software citations (@lst-report-helpers).
+
+```{r setup-appendix, code = readLines(here::here("R", "0_setup.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-setup-script
+#| lst-cap: "Shared setup script."
+#| code-fold: true
+#| code-summary: "Show setup script"
+```
+
+```{r compile-appendix, code = readLines(here::here("R", "compile_functions.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-compile-functions
+#| lst-cap: "Data compilation functions."
+#| code-fold: true
+#| code-summary: "Show compilation functions"
+```
+
+```{r plot-appendix, code = readLines(here::here("R", "plot_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-plot-helpers
+#| lst-cap: "Plot helpers and stock-area reader."
+#| code-fold: true
+#| code-summary: "Show plot helpers"
+```
+
+```{r helpers-appendix, code = readLines(here::here("R", "report_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-report-helpers
+#| lst-cap: "Software citation helper."
+#| code-fold: true
+#| code-summary: "Show report helpers"
+```

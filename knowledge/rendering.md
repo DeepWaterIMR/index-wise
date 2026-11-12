@@ -74,16 +74,92 @@ Rendering in screen session "<species>-fit". Attach with:  screen -r <species>-f
 Follow the log with:  tail -f logs/fit-*.log
 ```
 
+- The template's `render.sh` wraps this: it writes a timestamped log with host, commit and
+  exit status, and sets a UTF-8 locale. Without that locale, a detached render writes
+  Norwegian letters, Greek table headers and em dashes in captions or `cat()` output as
+  `<U+2014>`-style escapes. Use `screen -dmS <species>-fit ./render.sh <doc.qmd> -P key:value`.
+- **A slow chunk on a laptop may be the machine, not the code.** Check `uptime` before
+  concluding a fit is stuck: file-sync and antivirus daemons (OneDrive, Spotlight, Defender)
+  have pushed the load average past 100 while a render looked hung. Run fits and long renders
+  on the modelling server, including development checks.
 - List sessions: `screen -ls`. Detach from inside: `Ctrl-a d`.
 - **Suggest running on a server.** For big meshes / many length groups / bias correction,
   offer to run the render on a compute server to speed things up and free the laptop.
 - Never block the chat waiting for a long render — start it, report the session, and move on.
 
+### Unattended runs on a server: three silent killers
+
+- **Parallel workers die on logout.** `future::multisession` workers are separate processes
+  that systemd kills when the SSH session ends, even inside a detached `screen`. Use forked
+  `future::multicore` workers (sdmTMBexperiments ≥ 0.1.9 does this for `n_workers > 1`; set it
+  yourself in project chunks that call `future::plan()`).
+- **Bias correction crashes without an error.** `get_index_split(bias_correct = TRUE)` on
+  ~450 000-row chunks ended the R session silently; the render just stopped. Keep chunks at
+  ~75 000 rows (`nsplit = NULL` in sdmTMBexperiments, or `ceiling(nrow(grid) / 75e3)`). To
+  debug a silent crash, move the computation into a standalone `Rscript` with per-model
+  `tryCatch()` and logging, run it in its own screen session, and fold it back afterwards.
+- **Bias-corrected indices take hours.** `get_index_split(nsplit = 12, bias_correct = TRUE)`
+  for nine models took 13.4 h single-threaded on one benchmark server. Plan it as an overnight
+  run, and have the chain script restore the compute toggles after the HTML render (for
+  example `git checkout -- <doc>.qmd` when the toggles were flipped by a `sed` in the script)
+  so a following PDF or Word render loads instead of recomputing.
+- **`LD_LIBRARY_PATH` is lost.** Non-interactive `ssh host cmd` and `screen` sessions can start
+  without the login shell's `LD_LIBRARY_PATH`, so `sf` cannot find `libgdal`. Launch through a
+  small wrapper script that exports the login shell's value before calling `Rscript`/`quarto`.
+
 ## 4. Figure and file-size hygiene
 
-- **Raster figures use `fig-format: jpeg`** (density maps, bathymetry). Vector for line plots.
-- Keep rendered **HTML as small as feasible**: prefer jpeg rasters, sensible `fig-dpi`
-  (~150–180 for screen), and avoid embedding huge point layers. Large length-group reports can
-  reach tens of MB — watch the output size.
+- **Per-chunk JPEG, not a global `fig-format: jpeg`.** Map chunks (`geom_raster()` over the
+  grid, dense bubble maps) get `#| dev: jpeg` and `#| dev-args: !expr list(quality = 85)`;
+  very tall multi-panel annual maps use `quality = 70` and `#| fig-dpi: 72`. Line plots, Q-Q
+  plots and scatter plots stay png, which keeps text and points sharp. On one benchmark report
+  this took a self-contained HTML from 70 MB to 32 MB.
+- **Find the heavy figures before compressing.** In the self-contained HTML, measure each
+  `data:image/(png|jpeg);base64,...` block (length × 3/4 ≈ bytes) and map it to the nearest
+  preceding `id="fig-..."` anchor.
+- Keep rendered **HTML as small as feasible**: sensible `fig-dpi` (~150–180 for screen), and
+  avoid embedding huge point layers. Large length-group reports can reach tens of MB.
+- **Brackets in captions break cross-references silently.** A `fig-cap` with length-interval
+  notation such as `(0,10]` stops pandoc-crossref from registering the figure id; the figure
+  renders, but `@fig-...` fails with only an "Unable to resolve crossref" log warning. Escape
+  the brackets (a small `esc_cap()` helper) and grep the render log for that warning.
+- **PDF output:** pdflatex has no Greek glyphs in text; write `$\rho$`, not ρ. Limit
+  multi-model figures to the products that matter in the PDF (a `fig_models()` helper that
+  returns all models for HTML and the first one or two for PDF).
+- **Parameter tables: scientific notation for large values.** Near-zero variance terms (a
+  smooth's SD, `sigma_O`) in `tidy(fit, "ran_pars", conf.int = TRUE)` give upper bounds of `Inf`
+  or about 1e172. With `format.args = list(scientific = FALSE)` LaTeX prints a 173-digit number
+  and the longtable runs off the page. Format values ≥ 1e4 in scientific notation
+  (`format_par_value()` in `R/report_helpers.R`).
+- **Word output.** Table helpers should write pandoc pipe tables
+  (`knitr::kable(format = "pipe")`) for docx; flextable with a vector `digits` fails. Notes
+  meant for every non-HTML format use `content-visible unless-format="html"`, not
+  `when-format="pdf"`, and reduced-figure/table gates use `!knitr::is_html_output()`, not
+  `knitr::is_latex_output()`, so Word gets them too.
+- **Word layout for an index working document.** The workflow QMDs are HTML; when a final report
+  also goes to Word, follow "Word layout fixes" in wise-writing's `quarto-reporting`
+  (`references/formal-reports.md`). Copy its `scripts/docx_tidy.R`, `scripts/render_word.R` and
+  `scripts/make_word_reference.R` into the project's `R/`. The hooks an index report needs:
+  - `columns: 10000` in the `docx:` format. Otherwise Pandoc fixes relative column widths for
+    any pipe table with a row longer than 72 characters, and label columns shrink to one
+    character.
+  - A post-render step on `word/document.xml` (`docx_tidy()`; xml2 + zip). It removes the one-cell layout
+    tables that Quarto wraps around each cross-referenced figure and table, which Word draws
+    with dashed frames; a Lua filter cannot reach them. It also sets column widths from the cell
+    text, fitted to the section's text width from the following `w:sectPr`. Keep captions,
+    bookmarks and cross-references intact.
+  - A reference document built from Pandoc's default `reference.docx`. Give it a booktabs-like
+    `Table` style and an A4 page size in the final `sectPr`, and force-add it to git because
+    `*.docx` is usually ignored.
+  - For landscape tables, explicit `{=openxml}` section-break paragraphs with A4 `pgSz` and
+    `pgMar`, before and after the table, beside the `{=latex}` landscape blocks. `::: landscape`
+    leaves the preceding portrait section without a page size, so Word falls back to US Letter.
+  - A render wrapper (`render_word.R`: `quarto render --to docx`, then `docx_tidy()`), so the
+    docx is never made with plain `quarto render`.
+  - QA: LibreOffice's docx-to-PDF conversion can show PNG figures as blank even in unprocessed
+    Quarto output. Check figures in Word before treating them as broken.
+- **Optional sections need a fallback chunk.** Each `*-section.qmd` starts with an
+  unconditional chunk that defines the objects its inline R uses, so the document renders when
+  the section is switched off.
 - `docs/render.R` renders all documents and refreshes data; use it for a full rebuild, but
   the same review-then-screen-then-toggle discipline applies.
