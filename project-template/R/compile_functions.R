@@ -297,20 +297,27 @@ collect_lengths <- function(con, cfg, stations) {
     )
 }
 
-#' Fit a log-log length–weight relationship with outlier screening
+#' Fit the length–weight relationship with ggFishPlots
 #'
-#' Observations with absolute studentised residual > 4 are flagged as gross errors and
-#' excluded from the final fit.
+#' Log-log regression with `ggFishPlots::plot_lw()`. Records with an absolute standardised
+#' residual above `outlier_sd` are flagged as gross errors, excluded from the fit and shown as
+#' crosses in the returned figure.
 #'
 #' @param lengths Output of [collect_lengths()].
-#' @return List with `a`, `b` (weight in kg, length in cm), `fit`, `outliers`.
-fit_length_weight <- function(lengths) {
+#' @param outlier_sd Standardised-residual threshold (`LW_OUTLIER_SD` in `config.yaml`).
+#' @return List with `a`, `b` (weight in kg, length in cm), `n` (records in the fit),
+#'   `outliers` (flagged records) and `plot` (ggplot).
+fit_length_weight <- function(lengths, outlier_sd = 4) {
   d <- dplyr::filter(lengths, !is.na(weight_kg), weight_kg > 0, length_cm > 0)
+  res <- ggFishPlots::plot_lw(as.data.frame(dplyr::select(d, length_cm, weight_kg)),
+                              length = "length_cm", weight = "weight_kg",
+                              outlier.sd = outlier_sd, xlab = "Length", ylab = "Weight",
+                              verbose = FALSE)
   fit0 <- stats::lm(log(weight_kg) ~ log(length_cm), data = d)
-  out <- abs(stats::rstandard(fit0)) > 4
-  fit <- stats::lm(log(weight_kg) ~ log(length_cm), data = d[!out, ])
-  list(a = exp(unname(stats::coef(fit)[1])), b = unname(stats::coef(fit)[2]),
-       fit = fit, n = sum(!out), outliers = d[out, ])
+  out <- abs(stats::rstandard(fit0)) > outlier_sd
+  pars <- res$params
+  list(a = pars$estimate[pars$term == "a"], b = pars$estimate[pars$term == "b"],
+       n = sum(!out), outliers = d[out, ], plot = res$plot)
 }
 
 #' Fishable biomass fraction per haul
@@ -510,4 +517,115 @@ survey_label <- function(code, short, cruise, cfg) {
     !is.na(by_cruise) ~ by_cruise,
     TRUE ~ "–"
   )
+}
+
+#' Prediction region of a stock from its positive hauls
+#'
+#' Concave hull of the hauls that caught the species, buffered and cut to the stock area, so
+#' that the prediction grid does not cover areas with only zero observations. The buffered
+#' positive hauls are added to the stock area so that coastal hauls outside the ICES
+#' polygons stay inside the region. Land and depth
+#' limits are applied later when the prediction grid is built.
+#'
+#' @param dt Compiled station data (`biomass`, `longitudestart`, `latitudestart`).
+#' @param stock_area Stock-area polygon from [read_stock_area()].
+#' @param crs Projected CRS for the hull (`CRS` in `config.yaml`).
+#' @param buffer_km Buffer around the hull (`REGION_BUFFER_KM`).
+#' @param ratio Concavity ratio for [sf::st_concave_hull()] (`REGION_CONCAVITY`).
+#' @param label Region name.
+#' @return sf polygon with a `region` column.
+build_stock_region <- function(dt, stock_area, crs, buffer_km = 25, ratio = 0.1,
+                               label = "prediction region") {
+  pos <- dplyr::filter(dt, biomass > 0)
+  pts <- sf::st_as_sf(pos, coords = c("longitudestart", "latitudestart"), crs = 4326) |>
+    sf::st_transform(crs)
+  # The ICES polygons follow the coastline, so hauls in fjords and sounds can lie outside
+  # them; adding the buffered hauls keeps every positive haul inside the region.
+  area <- sf::st_union(sf::st_transform(sf::st_make_valid(stock_area), crs),
+                       sf::st_union(sf::st_buffer(pts, buffer_km * 1000)))
+  pts |>
+    sf::st_union() |>
+    sf::st_concave_hull(ratio = ratio) |>
+    sf::st_buffer(buffer_km * 1000) |>
+    sf::st_intersection(area) |>
+    sf::st_make_valid() |>
+    sf::st_sf(region = label, geometry = _)
+}
+
+#' Data checks for the compiled station and length data
+#'
+#' @param dt Compiled station data.
+#' @param lengths Length records with `haul_id`, `length_cm`, `raising`, `catchsampleid`,
+#'   `catchcount`.
+#' @param lw Length–weight fit (`a`, `b`).
+#' @param region Prediction-region polygon (or `NULL`).
+#' @return Tibble of checks with the number of flagged hauls or records; attribute
+#'   `flagged` lists the flagged hauls of the weight and speed checks.
+data_checks <- function(dt, lengths, lw, region = NULL) {
+  pos <- dplyr::filter(dt, biomass > 0)
+  # Mean fish weight in the catch against the mean predicted weight of the measured fish
+  pred <- lengths |>
+    dplyr::mutate(w = lw$a * length_cm^lw$b) |>
+    dplyr::group_by(haul_id) |>
+    dplyr::summarise(pred_mean_w = stats::weighted.mean(w, raising), .groups = "drop")
+  wcheck <- pos |>
+    dplyr::filter(count > 0) |>
+    dplyr::inner_join(pred, by = "haul_id") |>
+    dplyr::mutate(ratio = (biomass / count) / pred_mean_w)
+  # Share of the haul count covered by the length-measured catch samples
+  cover <- lengths |>
+    dplyr::distinct(haul_id, catchsampleid, catchcount) |>
+    dplyr::group_by(haul_id) |>
+    dplyr::summarise(measured_count = sum(catchcount, na.rm = TRUE), .groups = "drop") |>
+    dplyr::inner_join(dplyr::select(pos, haul_id, count), by = "haul_id") |>
+    dplyr::filter(count > 0)
+  speed <- dt$distance / (dt$duration_min / 60)
+  outside <- if (is.null(region)) NA_integer_ else {
+    pts <- sf::st_as_sf(pos, coords = c("longitudestart", "latitudestart"), crs = 4326) |>
+      sf::st_transform(sf::st_crs(region))
+    sum(lengths(sf::st_intersects(pts, region)) == 0)
+  }
+  years <- seq(min(dt$year), max(dt$year))
+  # Possible duplicate hauls: same date and position (rounded to about 1 km) but different ids
+  dup <- dt |>
+    dplyr::mutate(key = paste(station_date, round(latitudestart, 2),
+                              round(longitudestart * cos(latitudestart * pi / 180), 2))) |>
+    dplyr::group_by(key) |>
+    dplyr::filter(dplyr::n() > 1) |>
+    dplyr::ungroup()
+  flagged <- dplyr::bind_rows(
+    dplyr::transmute(dup, haul_id, check = "possible duplicate (same date and position)",
+                     value = NA_real_),
+    dplyr::transmute(dplyr::filter(wcheck, ratio > 3 | ratio < 1 / 3), haul_id,
+                     check = "mean fish weight", value = ratio),
+    dplyr::transmute(dplyr::filter(dplyr::mutate(dt, speed = speed), speed < 1.5 | speed > 6),
+                     haul_id, check = "tow speed (knots)", value = speed)
+  )
+  out <- tibble::tibble(
+    Check = c(
+      "Mean fish weight in the catch differs from the length-based prediction by more than a factor of 3",
+      "Length-measured catch samples cover less than 90 % of the haul count",
+      "Fishable biomass exceeds total biomass",
+      "Density differs from catch / swept area",
+      "Tow speed outside 1.5–6 knots (distance / duration)",
+      "Positive hauls outside the prediction region",
+      "Years without positive hauls",
+      "Possible duplicate hauls (same date and position within about 1 km)"
+    ),
+    Unit = c("hauls", "hauls", "hauls", "hauls", "hauls", "hauls", "years", "hauls"),
+    Flagged = c(
+      sum(wcheck$ratio > 3 | wcheck$ratio < 1 / 3),
+      sum(cover$measured_count / cover$count < 0.9),
+      sum(dt$biomass_fishable > dt$biomass + 1e-9),
+      sum(abs(dt$rho_biomass - dt$biomass / dt$swept_area) > 1e-6),
+      sum(speed < 1.5 | speed > 6, na.rm = TRUE),
+      outside,
+      sum(!years %in% pos$year),
+      nrow(dup)
+    ),
+    Of = c(nrow(wcheck), nrow(cover), nrow(dt), nrow(dt), sum(!is.na(speed)), nrow(pos),
+           length(years), nrow(dt))
+  )
+  attr(out, "flagged") <- flagged
+  out
 }

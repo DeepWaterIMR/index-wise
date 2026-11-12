@@ -29,8 +29,11 @@ SURVEYS:                              # cruise-series labels (groups of surveys)
 USE_SPD: false                        # legacy SPD files? true for northern/offshore; false for southern/coastal
 INCLUDE_RUSSIAN: true                 # Russian data included by DEFAULT; set false to exclude
 FIRST_YEAR: 1981                      # earliest year to include
+LAST_YEAR: null                       # last year to include; null = the year before the current year
 MAX_COLLECT_ROWS: 2000000              # stop before collecting more candidate stations than this
 LENGTH_LIMITS: [5, 200]               # plausible length range (cm); length records outside are removed
+FISHABLE_GEAR: "Hooks"                # Biotic gear category of the commercial catches used for the fishable length (docs/background)
+LW_OUTLIER_SD: 4                      # length-weight records with |standardised residual| above this are outliers
 CRUISE_SERIES_LABELS: null
 SURVEY_NAMES: null                    # optional names of surveys without a cruise-series code, keyed by cruise number            # optional map code -> label; defaults in R/compile_functions.R
 # Documented cruise exclusions. Use only when no general filtering rule removes an anomaly
@@ -55,6 +58,9 @@ REGION: "ALL"                         # feature/layer name used by a multi-regio
 REGION_SLUG: "all"                    # filename-safe region identifier, e.g. N62 or S62
 REGION_FILE: "data/source/prediction_region.gpkg"
 REGION_LAYER: "prediction_region"
+PREDICTION_REGION_FILE: null          # built by docs/data/<stock>-3-data.qmd; default data/source/<stock>-prediction-region.gpkg
+REGION_BUFFER_KM: 25                  # buffer around the hull of positive hauls (prediction region)
+REGION_CONCAVITY: 0.1                 # sf::st_concave_hull ratio for the prediction region
 # Stock area for survey selection: ICES subareas (tested on the icesarea code) or, when
 # empty, the REGION_FILE polygon (ACQUISITION_REGION_LAYER if set).
 STOCK_SUBAREAS: []                    # e.g. ["1", "2"]

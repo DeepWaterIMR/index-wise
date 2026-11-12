@@ -76,6 +76,7 @@ products <- dplyr::bind_rows(
                    biomass = biomass_fishable, density = rho_biomass_fishable)
 ) |>
   dplyr::mutate(product = factor(product, levels = c("Total", fish_label)))
+prod_cols <- stats::setNames(c("#0072B2", "#D55E00"), levels(products$product))
 ```
 
 # Purpose
@@ -115,7 +116,7 @@ $$
 \rho = \frac{B}{d \times w / 1852},
 $$
 
-where $B$ is the catch weight (kg), $d$ the towed distance (nmi) and $w = `r cfg$GEAR_WIDTH`$ m the common effective trawl width, giving density in kg nmi^−2^. The density is the model response (`EFFORT: "`r cfg$EFFORT`"` in `config.yaml`); gear type is a fixed effect in the models.
+where $B$ is the catch weight (kg), $d$ the towed distance (nmi) and $w = `r cfg$GEAR_WIDTH`$ m the common effective trawl width, giving density in kg/nmi². The model response has not been decided yet (catch weight with swept area as an offset, or density); this report uses swept-area biomass density throughout. Gear type is a fixed effect in the models.
 
 ### Individual-level data
 
@@ -129,9 +130,9 @@ $$
 p = \frac{\sum_{i:\,L_i \ge `r over_cm`} s_i w_i}{\sum_i s_i w_i},
 $$
 
-and the fishable biomass is $B_f = pB$, with density $\rho_f = B_f / (d \times w / 1852)$. The fishable part therefore never exceeds the total, and the length data only redistribute the recorded catch. <!-- State how the threshold OVER_CM was chosen (e.g. from commercial length distributions or maturity). -->
+and the fishable biomass is $B_f = pB$, with density $\rho_f = B_f / (d \times w / 1852)$. The fishable part therefore never exceeds the total, and the length data only redistribute the recorded catch. The derivation of the threshold `r over_cm` cm is documented in [`r stock`-fishable-length](../background/stock-background/`r stock`-fishable-length.html).
 
-Positive hauls without length measurements receive the biomass-weighted mean fishable share of the same survey, or, if no fish were measured in that survey, of the same cruise series and year, or of the cruise series. Zero hauls are zero for both products.
+Positive hauls without length measurements receive the biomass-weighted mean fishable share of the same survey, or, if no fish were measured in that survey, of the same cruise series and year, or of the cruise series. Zero hauls are zero for both products. Because the share is applied to the recorded catch weight, a survey that weighed the catch but did not measure the fish still contributes fishable biomass; it is not turned into a false zero, which would bias the fishable index downwards. The calculation is done by `add_fishable_biomass()` in `R/compile_functions.R` (@lst-compile-functions) when the survey-selection document compiles the data, and it is verified against hand-calculated cases and an independent recomputation in `ai/tests/test-fishable-biomass.R`.
 
 # Analysis
 
@@ -173,6 +174,30 @@ dt |>
   knitr::kable(caption = paste0("Station-level responses by cruise series. Density is swept-area biomass density in hauls with ", sp, "; fishable share is the fishable part of the total catch."))
 ```
 
+### Response distribution
+
+The response is zero-inflated and right-skewed (@fig-response-dist): most hauls are zeros, and the positive densities span several orders of magnitude. This shape is what delta (hurdle) model families describe with separate occurrence and positive-density components.
+
+```{r}
+#| label: fig-response-dist
+#| fig-height: 3.5
+#| fig-cap: !expr 'paste0("Distribution of swept-area biomass density of total and fishable ", sp, " in positive hauls (logarithmic x-axis). The share of zero hauls is given in each panel.")'
+zero_lab <- products |>
+  dplyr::group_by(product) |>
+  dplyr::summarise(label = paste0("Zeros: ", sprintf("%.1f", 100 * mean(density == 0)), " %\nPositive: ",
+                                  n_fmt(sum(density > 0))), .groups = "drop")
+products |>
+  dplyr::filter(density > 0) |>
+  ggplot(aes(density, fill = product)) +
+  geom_histogram(bins = 40, colour = NA) +
+  geom_text(data = zero_lab, aes(x = Inf, y = Inf, label = label), inherit.aes = FALSE,
+            hjust = 1.05, vjust = 1.3, size = 2.8) +
+  scale_x_log10(labels = scales::label_number(drop0trailing = TRUE)) +
+  scale_fill_manual(values = prod_cols, guide = "none") +
+  facet_wrap(~product) +
+  labs(x = "Density (kg/nmi²)", y = "Hauls")
+```
+
 ## Station-level data
 
 ### Spatial distribution
@@ -209,6 +234,44 @@ base_density +
         legend.key.width = unit(1.5, "cm"))
 ```
 
+### Prediction region
+
+```{r prediction-region}
+region_file <- here::here(cfg$PREDICTION_REGION_FILE %||%
+                            file.path(cfg$SOURCE_DIR %||% "data/source", paste0(stock, "-prediction-region.gpkg")))
+stock_area <- read_stock_area(cfg)
+region <- build_stock_region(dt, stock_area, cfg$CRS, buffer_km = cfg$REGION_BUFFER_KM %||% 25,
+                             ratio = cfg$REGION_CONCAVITY %||% 0.1, label = cfg$SPECIES_NAME)
+dir.create(dirname(region_file), recursive = TRUE, showWarnings = FALSE)
+sf::st_write(region, region_file, layer = cfg$REGION_LAYER, append = FALSE, quiet = TRUE)
+pts <- sf::st_as_sf(dt, coords = c("longitudestart", "latitudestart"), crs = 4326) |>
+  sf::st_transform(cfg$CRS)
+dt$in_region <- lengths(sf::st_intersects(pts, region)) > 0
+n_inside <- sum(dt$in_region)
+base_region <- ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 8, rotate = TRUE,
+                                    expand.factor = 1, land.col = "grey85",
+                                    land.border.col = "grey60")
+region_map_height <- map_fig_height(base_region, extra = 0.6)
+```
+
+The models predict density only where `r sp` has been caught. The prediction region is the concave hull of all hauls with `r sp`, buffered by `r cfg$REGION_BUFFER_KM %||% 25` km and cut to `r area_label` (@fig-prediction-region). Areas with only zero observations are left out. Land and depth limits are applied when the prediction grid is built in the model fit. `r n_fmt(n_inside)` of the `r n_fmt(nrow(dt))` hauls (`r round(100 * n_inside / nrow(dt))` %) lie inside the region, including `r n_fmt(sum(dt$in_region & dt$biomass > 0))` of the `r n_fmt(nrow(pos))` hauls with `r sp`.
+
+
+```{r, fig.height = region_map_height}
+#| label: fig-prediction-region
+#| fig-cap: !expr 'paste0("Prediction region for ", sp, " (blue): concave hull of the hauls with ", sp, " (orange), buffered and cut to ", area_label, ". Grey crosses: hauls without ", sp, ".")'
+(base_region +
+  ggplot2::geom_sf(data = sf::st_transform(region, 4326), fill = "#0072B2", alpha = 0.15,
+                   colour = "#0072B2", linewidth = 0.6, inherit.aes = FALSE) +
+  ggspatial::geom_spatial_point(data = dplyr::filter(dt, biomass == 0),
+    aes(longitudestart, latitudestart), shape = 3, size = 0.2, colour = "grey50", alpha = 0.4,
+    crs = 4326) +
+  ggspatial::geom_spatial_point(data = pos, aes(longitudestart, latitudestart),
+    colour = "#D55E00", size = 0.5, crs = 4326) +
+  theme(axis.title = element_blank())) |>
+  ggOceanMaps::reorder_layers()
+```
+
 ### Through time
 
 The annual mean density and the share of positive hauls show how the raw data change through the time series before any model standardisation (@fig-annual-response). These values mix changes in stock size with changes in survey coverage, gear and season, which the model separates.
@@ -221,7 +284,6 @@ annual <- products |>
   dplyr::group_by(product, year) |>
   dplyr::summarise(positive = mean(density > 0), mean = mean(density),
                    se = stats::sd(density) / sqrt(dplyr::n()), .groups = "drop")
-prod_cols <- stats::setNames(c("#0072B2", "#D55E00"), levels(products$product))
 p_a <- ggplot(annual, aes(year, 100 * positive, colour = product)) +
   geom_line() + geom_point(size = 1) +
   scale_colour_manual(values = prod_cols) +
@@ -236,14 +298,37 @@ p_b <- ggplot(annual, aes(year, mean, colour = product)) +
 cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v", rel_heights = c(4, 5))
 ```
 
+### Tow distance
+
+Tow distance enters the response through the swept area. @fig-effort shows the retained tow distances by year and gear type; changes in the typical tow distance change the swept area per haul and therefore the scale of the density values.
+
+```{r}
+#| label: fig-effort
+#| fig-height: 4.5
+#| fig-cap: "Tow distance of the retained hauls by year and gear type. Grey points: hauls (jittered); blue crossbars: annual mean with 95 % confidence interval."
+eff <- dt |>
+  dplyr::group_by(geartype, year) |>
+  dplyr::summarise(mean = mean(distance), se = stats::sd(distance) / sqrt(dplyr::n()),
+                   n = dplyr::n(), .groups = "drop") |>
+  dplyr::mutate(se = dplyr::coalesce(se, 0))
+ggplot(dt, aes(year, distance)) +
+  geom_jitter(colour = "grey60", size = 0.2, alpha = 0.4, width = 0.3, height = 0) +
+  geom_crossbar(data = eff, aes(year, mean, ymin = mean - 1.96 * se, ymax = mean + 1.96 * se),
+                colour = "#0072B2", width = 0.6, linewidth = 0.3, inherit.aes = FALSE) +
+  facet_wrap(~geartype) +
+  scale_x_continuous(breaks = seq(1980, 2030, 5)) +
+  coord_cartesian(ylim = c(0, NA)) +
+  labs(x = "Year", y = "Tow distance (nmi)")
+```
+
 ### Depth
 
-Depth enters the models as a smooth term. The hauls with `r sp` cover a narrower depth range than the sampling effort (@fig-depth A), and density in the positive hauls varies with depth (@fig-depth B). The depth range of the data limits the depth range of the prediction grid.
+Depth enters the models as a smooth term. The hauls with `r sp` cover a narrower depth range than the sampling effort (@fig-depth A), and density, including the zeros, varies with depth (@fig-depth B). The depth range of the data limits the depth range of the prediction grid.
 
 ```{r}
 #| label: fig-depth
 #| fig-height: 6
-#| fig-cap: !expr 'paste0("Depth distribution of the data. A: bottom depth of all hauls and of hauls with ", sp, " (densities scaled to the same maximum; the deepest 0.5 % of hauls are outside the plotted range). B: biomass density against depth in positive hauls; lines are descriptive loess smooths, not the model.")'
+#| fig-cap: !expr 'paste0("Depth distribution of the data. A: bottom depth of all hauls and of hauls with ", sp, " (densities scaled to the same maximum; the deepest 0.5 % of hauls are outside the plotted range). B: biomass density against depth in all hauls, including zeros (pseudo-logarithmic y-axis); lines are descriptive loess smooths of all hauls, not the model.")'
 depth_lim <- c(0, stats::quantile(dt$depth, 0.995, na.rm = TRUE))
 depth_hauls <- dplyr::bind_rows(
   dplyr::mutate(dt, group = "All hauls"),
@@ -256,11 +341,12 @@ p_a <- ggplot(depth_hauls, aes(depth, after_stat(scaled), fill = group)) +
   labs(x = NULL, y = "Scaled density", fill = NULL) +
   theme(legend.position = "top")
 p_b <- products |>
-  dplyr::filter(density > 0) |>
   ggplot(aes(depth, density, colour = product)) +
-  geom_point(size = 0.4, alpha = 0.3) +
-  geom_smooth(method = "loess", formula = y ~ x, se = FALSE) +
-  scale_y_log10(labels = scales::label_number(drop0trailing = TRUE)) +
+  geom_point(size = 0.4, alpha = 0.15) +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE, span = 0.5) +
+  scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1, base = 10),
+                     breaks = c(0, 1, 10, 100, 1000, 1e4),
+                     labels = scales::label_number(drop0trailing = TRUE)) +
   coord_cartesian(xlim = depth_lim) +
   scale_colour_manual(values = prod_cols) +
   labs(x = "Bottom depth (m)", y = "Density (kg/nmi²)", colour = NULL) +
@@ -303,18 +389,13 @@ cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v")
 
 ### Length–weight relationship
 
-The length–weight relationship was fitted on the log scale to `r n_fmt(lw$n)` survey fish with recorded weight, after removing `r compile_metadata$n_lw_outliers` outliers (|standardised residual| > 4). The fit gave $W = `r signif(lw$a, 3)` L^{`r round(lw$b, 3)`}$ with $W$ in kg and $L$ in cm (@fig-length-weight).
+The length–weight relationship was fitted on the log scale to `r n_fmt(lw$n)` survey fish with recorded weight, after removing `r compile_metadata$n_lw_outliers` outliers with an absolute standardised residual above `r compile_metadata$lw_outlier_sd`, using `ggFishPlots::plot_lw(outlier.sd = `r compile_metadata$lw_outlier_sd`)`. The fit gave $W = `r signif(lw$a, 3)` L^{`r round(lw$b, 3)`}$ with $W$ in kg and $L$ in cm (@fig-length-weight).
 
 ```{r}
 #| label: fig-length-weight
 #| fig-height: 3.5
-#| fig-cap: !expr 'paste0("Length and weight of ", sp, " with recorded weight in the retained hauls. The line is the fitted length–weight relationship used to predict weight at length.")'
-lw_data <- dplyr::filter(lengths, !is.na(weight_kg), weight_kg > 0)
-ggplot(lw_data, aes(length_cm, weight_kg)) +
-  geom_point(size = 0.6, alpha = 0.3, colour = "grey30") +
-  geom_function(fun = function(x) lw$a * x^lw$b, colour = "#D55E00", linewidth = 0.8) +
-  geom_vline(xintercept = over_cm, linetype = "dashed") +
-  labs(x = "Length (cm)", y = "Weight (kg)")
+#| fig-cap: !expr 'paste0("Length and weight of ", sp, " with recorded weight in the retained hauls (ggFishPlots::plot_lw). The line is the fitted length–weight relationship used to predict weight at length; crosses are the outliers removed from the fit.")'
+compile_metadata$lw_plot
 ```
 
 ### Length distributions
@@ -395,25 +476,22 @@ p_b <- dt |>
 cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v", axis = "lr")
 ```
 
-### Consistency checks
+### Data checks
 
-The checks in @tbl-length-checks confirm that the length allocation is internally consistent.
+The automated checks in @tbl-data-checks look for errors that the haul filter cannot catch: unit or subsampling errors in catch weight and count, partly measured catches, inconsistent derived values, implausible tow speeds, positive hauls outside the prediction region and gaps in the time series. Flagged hauls are not removed automatically; they are listed in `ai/review/` for inspection.
 
 ```{r}
-#| label: tbl-length-checks
-tibble::tibble(
-  Check = c("Fishable biomass exceeds total biomass (hauls)",
-            "Largest difference total − fishable below zero (kg)",
-            "Positive hauls without a fishable share",
-            "Density equals catch / swept area (largest absolute difference)",
-            "Length records with raising factor ≠ 1"),
-  Value = c(sum(dt$biomass_fishable > dt$biomass + 1e-9),
-            format(min(0, min(dt$biomass - dt$biomass_fishable)), digits = 3),
-            sum(pos$fishable_imputed == "none"),
-            format(max(abs(dt$rho_biomass - dt$biomass / dt$swept_area)), digits = 3),
-            n_fmt(sum(lengths$raising != 1)))
-) |>
-  knitr::kable(caption = "Consistency checks of the station and length data.")
+#| label: tbl-data-checks
+checks <- data_checks(dt, lengths, lw, region)
+readr::write_csv(
+  attr(checks, "flagged") |>
+    dplyr::left_join(dplyr::select(dt, haul_id, year, cruiseseries, gearname, biomass, count,
+                                   distance, duration_min), by = "haul_id"),
+  here::here("ai", "review", paste0(stock, "-flagged-hauls.csv"))
+)
+checks |>
+  dplyr::mutate(`Flagged (%)` = round(100 * Flagged / Of, 1)) |>
+  knitr::kable(caption = paste0("Automated data checks for the compiled ", sp, " data. Of: number of hauls or years checked."))
 ```
 
 # Results and recommendations
@@ -430,7 +508,7 @@ tibble::tibble(
 #| results: asis
 source(here::here("R", "report_helpers.R"))
 report_software(
-  c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "ggspatial", "cowplot", "knitr"),
+  c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "ggspatial", "cowplot", "ggFishPlots", "scales", "knitr"),
   here::here("docs", "assets", paste0(stock, "-3-data-software.bib"))
 )
 ```

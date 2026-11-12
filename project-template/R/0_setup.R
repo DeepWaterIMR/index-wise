@@ -41,20 +41,19 @@ packages <- c(
   yaml = NA,
   ggOceanMaps = "MikkoVihtakari/ggOceanMaps",
   sdmTMB = "sdmTMB/sdmTMB",   # org renamed from pbs-assess; the old path still redirects
-  sdmTMBexperiments = "DeepWaterIMR/sdmTMBexperiments"
+  sdmTMBexperiments = "DeepWaterIMR/sdmTMBexperiments",
+  ggFishPlots = "DeepWaterIMR/ggFishPlots"   # length-weight fit (>= 0.4.11 for outlier.sd)
 )
 
 # Needed only on some paths, so not installed until something asks for them:
 #   sdmTMBextra  BARRIER: true (barrier mesh)
 #   blockCV      the spatial block cross-validation in validate.qmd
-#   ggFishPlots  the length-weight figure in the data report
 #   RstoxUtils   reading SPD files in <stock>-2-survey-selection.qmd
 #   future       parallel backends, if a document sets one up
 # Call ensure_packages("blockCV") in the chunk that needs one.
 optional_packages <- c(
   sdmTMBextra = "pbs-assess/sdmTMBextra",
   blockCV = NA,
-  ggFishPlots = "DeepWaterIMR/ggFishPlots",
   RstoxUtils = "DeepWaterIMR/RstoxUtils",
   future = NA,
   plotly = NA      # interactive survey-timing figure (static fallback without it)

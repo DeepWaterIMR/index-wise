@@ -24,22 +24,39 @@ does not repeat survey selection (stock area, filter, surveys, gear tables, timi
    length-based product, e.g. fishable biomass ≥ `OVER_CM`) are fit to be modelled.
 2. **Data** — *Data collation* with a Mermaid flowchart (stnall → haul roster with true zeros →
    total biomass; indall → raised lengths → weight at length → length share); *Station-level
-   data* (catch summed over catch samples, density formula with `GEAR_WIDTH`); *Individual-level
-   data* (cm conversion, `LENGTH_LIMITS`, raising factor n/m); *Length-based data* (share
-   formula, predicted weight at length, imputation hierarchy for positive hauls without lengths).
+   data* (catch summed over catch samples, density formula with `GEAR_WIDTH`; until the model
+   response is decided, swept-area biomass density is used); *Individual-level data* (cm
+   conversion, `LENGTH_LIMITS`, raising factor n/m); *Length-based data* (share formula,
+   predicted weight at length, imputation hierarchy for positive hauls without lengths, which
+   avoids false zeros from surveys that weighed but did not measure the catch; link to the
+   fishable-length background document and to `ai/tests/test-fishable-biomass.R`).
 3. **Analysis**
-   - *Dataset overview*: metric table (station and individual level) and responses by cruise
-     series (positive %, median positive density, total catch, length-product share).
-   - *Station-level data*: density map of both products (zeros as grey crosses, positives sized
-     and coloured by density; height from `map_fig_height()`); annual share of positive hauls and
-     mean density with 95 % CI; depth (scaled depth distribution of all vs positive hauls, x-axis
-     to the 99.5 % depth quantile; density vs depth with loess); season and gear (density by
-     month with counts in the axis labels; by gear type within cruise series with counts below
-     the boxes).
-   - *Length-based data*: length–weight fit; raised length distributions by cruise series with
-     the threshold; annual median and 10–90 % length; source of the length share by cruise series
-     and annual share of the catch above the threshold; consistency-check table.
+   - *Dataset overview*: metric table (station and individual level), responses by cruise
+     series, and *Response distribution* (histogram of positive densities, log x, zero share per
+     product).
+   - *Station-level data*: density map of both products; *Prediction region*
+     (`build_stock_region()`: concave hull of positive hauls, `REGION_BUFFER_KM`,
+     `REGION_CONCAVITY`, cut to the stock area plus buffered positives; written to
+     `PREDICTION_REGION_FILE`; map and the share of hauls inside); annual share of positive
+     hauls and mean density; *Tow distance* (distance by year and gear type, jittered hauls and
+     annual mean ± 95 % CI); depth (scaled depth distribution of all vs positive hauls; density
+     vs depth including zeros on a pseudo-log axis); season and gear.
+   - *Length-based data*: length–weight fit with `ggFishPlots::plot_lw(outlier.sd =
+     LW_OUTLIER_SD)` showing removed records; raised length distributions by cruise series;
+     annual median and 10–90 % length; source of the length share and annual share above the
+     threshold; *Data checks* (`data_checks()`: mean fish weight vs length-based prediction,
+     length coverage of the catch, fishable ≤ total, density = catch / swept area, tow speed,
+     positive hauls outside the prediction region, years without positives; flagged hauls to
+     `ai/review/<stock>-flagged-hauls.csv`).
 4. **Results and recommendations**, software, AI statement, references, script appendix.
+
+## `docs/background/stock-background/<stock>-fishable-length.qmd`
+
+How the fishable-length threshold (`OVER_CM`) was derived: commercial length records
+(`FISHABLE_GEAR`, reference fleet; confidential, read at render time and never saved),
+`fishable_length_threshold()` in `R/fishable_length.R` (length where the 5-cm running mean of
+the length frequency first reaches half of its mode), stability by period, and the commercial
+versus survey length distributions. The document states whether the result equals `OVER_CM`.
 
 ## `<stock>-1-summary.qmd`
 
@@ -60,7 +77,8 @@ Setup chunks first (`root.dir` in its own chunk, then config/source), then:
 
 1. **Purpose** — two sentences: what is selected for which stock and why (`PURPOSE` in
    `config.yaml`); then the output and downstream use.
-2. **Data** — database update and extraction dates (cite BioticExplorerServer), then
+2. **Data** — database update and extraction dates (cite BioticExplorerServer); the current year is
+   excluded until its surveys are complete (`LAST_YEAR`), then
    - *Stock area*: text, then **one overview map**: the stock area (combined ICES subareas from
      `STOCK_SUBAREAS`, or the `REGION_FILE` polygon) with all quality-filtered positive
      bottom-trawl hauls of the species in the region given by `MAP_LIMITS`, coloured

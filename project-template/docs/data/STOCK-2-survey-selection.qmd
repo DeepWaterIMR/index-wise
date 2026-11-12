@@ -61,7 +61,9 @@ area_short <- if (length(cfg$STOCK_SUBAREAS)) {
 inside_label <- paste("Inside", area_short)
 compiled_path <- file.path(out_dir, "compiled-data.rds")
 metadata_path <- file.path(out_dir, "compile-metadata.rds")
-last_year <- as.integer(format(Sys.Date(), "%Y")) # numeric literal for DuckDB
+# Last complete year: LAST_YEAR in config.yaml, or the year before the current year,
+# because the current year's surveys are not yet complete. Numeric literal for DuckDB.
+last_year <- as.integer(cfg$LAST_YEAR %||% (as.integer(format(Sys.Date(), "%Y")) - 1L))
 ```
 
 # Purpose
@@ -87,7 +89,7 @@ length_outliers <- dplyr::filter(lengths, length_cm < length_limits[1] |
                                    length_cm > length_limits[2])
 lengths <- dplyr::filter(lengths, length_cm >= length_limits[1],
                          length_cm <= length_limits[2])
-lw <- fit_length_weight(lengths)
+lw <- fit_length_weight(lengths, cfg$LW_OUTLIER_SD %||% 4)
 dt <- add_fishable_biomass(dt, lengths, lw, cfg$OVER_CM)
 
 positive_observations <- collect_positive_observations(con, cfg, last_year)
@@ -112,6 +114,8 @@ compile_metadata <- list(
   incomplete_by_series = res$diagnostics$incomplete,
   n_multi_sample = nrow(res$diagnostics$multi_sample),
   lw = lw[c("a", "b", "n")],
+  lw_plot = lw$plot,
+  lw_outlier_sd = cfg$LW_OUTLIER_SD %||% 4,
   n_lw_outliers = nrow(lw$outliers),
   length_limits = length_limits,
   n_length_outliers = nrow(length_outliers),
@@ -187,7 +191,7 @@ tibble::tribble(
   ~Field, ~`Retained values`, ~Meaning,
   "gearcategory", "Bottom trawls", "Bottom-trawl gear only",
   "missiontypename", "Forskningsfartøy, Leiefartøy", "Research vessels and chartered vessels; reference fleet, commercial sampling and coast guard excluded",
-  "startyear", paste0(cfg$FIRST_YEAR, "–", last_year), "Years included",
+  "startyear", paste0(cfg$FIRST_YEAR, "–", last_year), "Years included; the current year is excluded until its surveys are complete (LAST_YEAR)",
   "Stock area", if (length(cfg$STOCK_SUBAREAS)) paste0("icesarea ", paste0("27.", unlist(cfg$STOCK_SUBAREAS), ".*", collapse = ", ")) else "inside REGION_FILE polygon", area_label,
   "gearcondition", "1, 2", "1: gear OK; 2: minor damage with no material effect on catch",
   "samplequality", "1 (CoastalS: 1, 2)", "1: preselected position, trawl sensors normal; 2: deployed on an acoustic registration or other fish information, sensors normal",
@@ -489,7 +493,7 @@ tibble::tibble(
             "Haul on land according to GEBCO (depth ≤ 0)",
             paste0("Length records outside ", compile_metadata$length_limits[1], "–",
                    compile_metadata$length_limits[2], " cm (removed)"),
-            "Length–weight outliers (|standardised residual| > 4; excluded from the fit)",
+            paste0("Length–weight outliers (|standardised residual| > ", compile_metadata$lw_outlier_sd %||% 4, "; excluded from the fit)"),
             "Positive hauls without length measurements"),
   Count = c(sum(dt$depth_source == "GEBCO"),
             sum(dt$depth_ratio > 2 | dt$depth_ratio < 0.5, na.rm = TRUE),
@@ -519,7 +523,7 @@ The compiled station dataset is written to `data/output/`, which is git-ignored.
 
 **Ready for downstream use.** The dataset contains `r n_fmt(nrow(dt))` bottom-trawl hauls from `r included_surveys` surveys in `r min(dt$year)`–`r max(dt$year)`, of which `r n_fmt(sum(dt$biomass > 0))` caught `r sp` (@tbl-data-overview). Its zeros are true absences within surveys that caught `r sp`. Gear type, depth, month and cruise series are available for every haul.
 
-**Provisional.** The common `r cfg$GEAR_WIDTH` m effective width pushes gear differences into the gear fixed effect; if that effect cannot be estimated, the width assumption is the first to revisit. Keeping sample-quality code 2 for CoastalS assumes that `r sp` was sampled at random within those acoustically targeted hauls. The data for `r max(dt$year)` may be incomplete if surveys from the current year are not yet in the database.
+**Provisional.** The common `r cfg$GEAR_WIDTH` m effective width pushes gear differences into the gear fixed effect; if that effect cannot be estimated, the width assumption is the first to revisit. Keeping sample-quality code 2 for CoastalS assumes that `r sp` was sampled at random within those acoustically targeted hauls. The current year is excluded until its surveys are complete (`LAST_YEAR` in `config.yaml`).
 
 **To decide in the data report and model fits.** Which cruise series and gear types to keep, and whether the irregular `Other` surveys add information or noise.
 
