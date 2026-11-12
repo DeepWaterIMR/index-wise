@@ -1,18 +1,18 @@
 ---
-title: "{{SPECIES_NAME}} — fishable length"
-subtitle: "Length threshold for the fishable-biomass index"
+title: "{{SPECIES_NAME}} — {{AREA_LABEL}}: assessment background"
+subtitle: "Background for the survey-index work"
 author: {{AUTHORS_YAML}}
 affiliations: {{AFFILIATIONS_YAML}}
 date: today
 date-format: "YYYY-MM-DD"
 published-title: "Version"
 lang: en-US
-bibliography: ../../assets/references.bib
-csl: ../../assets/ices_jms.csl
+bibliography: ../assets/references.bib
+csl: ../assets/ices_jms.csl
 format:
   html:
     toc: true
-    toc-title: "{{SPECIES_NAME}} — fishable length"
+    toc-title: "{{SPECIES_NAME}} — {{AREA_LABEL}}: assessment background"
     code-fold: true
     code-summary: "Show code"
     fig-format: jpeg
@@ -34,7 +34,10 @@ execute:
 knitr::opts_knit$set(root.dir = here::here())
 ```
 
-```{r config}
+```{r fishable-data}
+# Fishable-length threshold. Remove this chunk and the Fishable length section if the project
+# has no length-based product. Reference-fleet records are confidential: read at render time,
+# never saved.
 source(here::here("R", "0_setup.R"))
 source(here::here("R", "compile_functions.R"))
 source(here::here("R", "fishable_length.R"))
@@ -59,17 +62,27 @@ survey_lengths <- readRDS(file.path(out_dir, "length-data.rds"))
 
 # Purpose
 
-The fishable-biomass index for `r sp` (*`r cfg$SPECIES_LATIN`*, stock `r cfg$STOCK_CODE`) includes fish at or above a length threshold that represents the size of fish caught by the fishery. This document shows how the threshold was derived from the length distribution of the commercial longline catch in `r area_label`. The threshold is used as `OVER_CM` in `config.yaml` (currently `r cfg$OVER_CM` cm).
+This document collects the assessment history, management and comparative background for `r sp` (*`r cfg$SPECIES_LATIN`*, stock `r cfg$STOCK_CODE`) in `r area_label`. <!-- PLACEHOLDER: purpose of the index work (benchmark, assessment model). Mark statements not yet confirmed from the primary source with *(to verify)*. -->
 
-# Data
+# Current assessment and advice
+
+<!-- PLACEHOLDER: assessment category and working group, latest advice with DOI, main index used. -->
+
+# Management
+
+<!-- PLACEHOLDER: current quotas and regulations. -->
+
+# Assessment of other stocks of the species
+
+<!-- PLACEHOLDER: table of other stocks: assessment model, main data, source. -->
+
+# Fishable length
+
+The fishable-biomass index for `r sp` (*`r cfg$SPECIES_LATIN`*, stock `r cfg$STOCK_CODE`) includes fish at or above a length threshold that represents the size of fish caught by the fishery. This section shows how the threshold was derived from the length distribution of the commercial longline catch in `r area_label`. The threshold is used as `OVER_CM` in `config.yaml` (currently `r cfg$OVER_CM` cm).
 
 The data are length measurements of `r sp` from the Norwegian reference fleet (Referanseflåten) catches with gear category `r cfg$FISHABLE_GEAR %||% "Hooks"` in `r area_label`, `r min(cl$year)`–`r max(cl$year)`, read from the IMR Biotic database when this document is rendered. The records are confidential; only aggregated length frequencies are shown and nothing is saved. The data contain `r n_fmt(nrow(cl))` measured fish.
 
-# Method
-
 Lengths were floored to whole centimetres and counted. The length-frequency distribution was smoothed with a centred `r 5`-cm running mean. The threshold is the smallest length on the ascending limb at which the smoothed frequency reaches half of its maximum (the mode). This approximates the length at which half of the fish are retained by the combined effect of longline selectivity and the availability of fish on the fishing grounds. The rule is implemented in `fishable_length_threshold()` in `R/fishable_length.R` (@lst-fishable-length).
-
-# Results
 
 The smoothed commercial length distribution has its mode at `r thr$mode` cm and reaches half of the modal frequency at **`r thr$threshold` cm** (@fig-commercial-lengths). `r if (identical(as.numeric(thr$threshold), as.numeric(cfg$OVER_CM))) "This equals the threshold in config.yaml." else paste0("This differs from the threshold in config.yaml (", cfg$OVER_CM, " cm); update OVER_CM or explain the difference.")`
 
@@ -121,9 +134,9 @@ dplyr::bind_rows(
   theme(legend.position = "bottom")
 ```
 
-# Software and reproducibility
+# Implications for the survey indices
 
-This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs. The authors are responsible for the content. This version has not yet been reviewed by the authors.
+<!-- PLACEHOLDER: what the background implies for the index (area, smoothing, length-based product, comparison with existing indices). -->
 
 # References {.unnumbered}
 

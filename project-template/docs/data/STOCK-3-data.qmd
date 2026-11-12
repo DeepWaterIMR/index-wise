@@ -130,7 +130,7 @@ $$
 p = \frac{\sum_{i:\,L_i \ge `r over_cm`} s_i w_i}{\sum_i s_i w_i},
 $$
 
-and the fishable biomass is $B_f = pB$, with density $\rho_f = B_f / (d \times w / 1852)$. The fishable part therefore never exceeds the total, and the length data only redistribute the recorded catch. The derivation of the threshold `r over_cm` cm is documented in [`r stock`-fishable-length](../background/stock-background/`r stock`-fishable-length.html).
+and the fishable biomass is $B_f = pB$, with density $\rho_f = B_f / (d \times w / 1852)$. The fishable part therefore never exceeds the total, and the length data only redistribute the recorded catch. The derivation of the threshold `r over_cm` cm is documented in the *Fishable length* section of [stock-background](../background/stock-background.html#fishable-length).
 
 Positive hauls without length measurements receive the biomass-weighted mean fishable share of the same survey, or, if no fish were measured in that survey, of the same cruise series and year, or of the cruise series. Zero hauls are zero for both products. Because the share is applied to the recorded catch weight, a survey that weighed the catch but did not measure the fish still contributes fishable biomass; it is not turned into a false zero, which would bias the fishable index downwards. The calculation is done by `add_fishable_biomass()` in `R/compile_functions.R` (@lst-compile-functions) when the survey-selection document compiles the data, and it is verified against hand-calculated cases and an independent recomputation in `ai/tests/test-fishable-biomass.R`.
 

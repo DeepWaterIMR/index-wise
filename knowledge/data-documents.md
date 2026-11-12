@@ -29,7 +29,7 @@ does not repeat survey selection (stock area, filter, surveys, gear tables, timi
    conversion, `LENGTH_LIMITS`, raising factor n/m); *Length-based data* (share formula,
    predicted weight at length, imputation hierarchy for positive hauls without lengths, which
    avoids false zeros from surveys that weighed but did not measure the catch; link to the
-   fishable-length background document and to `ai/tests/test-fishable-biomass.R`).
+   *Fishable length* section of `docs/background/stock-background.qmd` and to `ai/tests/test-fishable-biomass.R`).
 3. **Analysis**
    - *Dataset overview*: metric table (station and individual level), responses by cruise
      series, and *Response distribution* (histogram of positive densities, log x, zero share per
@@ -50,13 +50,16 @@ does not repeat survey selection (stock area, filter, surveys, gear tables, timi
      `ai/review/<stock>-flagged-hauls.csv`).
 4. **Results and recommendations**, software, AI statement, references, script appendix.
 
-## `docs/background/stock-background/<stock>-fishable-length.qmd`
+## `docs/background/stock-background.qmd`
 
-How the fishable-length threshold (`OVER_CM`) was derived: commercial length records
+One background document per project (all stocks): purpose, current assessment and advice,
+management, other stocks of the species, implications for the indices, and a *Fishable length*
+section showing how the fishable-length threshold (`OVER_CM`) was derived: commercial length records
 (`FISHABLE_GEAR`, reference fleet; confidential, read at render time and never saved),
 `fishable_length_threshold()` in `R/fishable_length.R` (length where the 5-cm running mean of
 the length frequency first reaches half of its mode), stability by period, and the commercial
-versus survey length distributions. The document states whether the result equals `OVER_CM`.
+versus survey length distributions. The section states whether the result equals `OVER_CM`. Do not make a separate
+fishable-length document.
 
 ## `<stock>-1-summary.qmd`
 

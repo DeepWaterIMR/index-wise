@@ -77,7 +77,7 @@ tibble::tribble(
   paste0(stock, "-1-summary"), "This summary: purpose, overview and main results", "In progress",
   paste0(stock, "-2-survey-selection"), "Stock area, haul filter, survey and cruise-series selection, gear and timing", "Draft",
   paste0(stock, "-3-data"), "Station-level and length-based model inputs, prediction region and data checks", "Draft",
-  paste0(stock, "-fishable-length"), "Derivation of the length threshold of the length-based product (docs/background/stock-background)", "Draft",
+  "stock-background", "Assessment background and derivation of the length threshold of the length-based product (docs/background)", "Draft",
   "Model fit", "First feasible sdmTMB model and prediction grid", "Not started",
   "Model validation", "Mesh, random-field structure, fixed effects, family and grid selection; retrospective", "Not started",
   "Index report", "Final indices and assessment hand-off files", "Not started"
