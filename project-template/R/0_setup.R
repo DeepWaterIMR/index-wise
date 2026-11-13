@@ -14,6 +14,12 @@
 } else {
   getwd()
 }
+# knitr does not always expose the sourced file's path (it depends on the knitr/evaluate
+# versions), and getwd() is then the document's folder; fall back to the project root.
+if (!file.exists(file.path(.setup_root, "R", "package_setup.R")) &&
+    requireNamespace("here", quietly = TRUE)) {
+  .setup_root <- here::here()
+}
 source(file.path(.setup_root, "R", "package_setup.R"))
 rm(.setup_frames, .setup_file, .setup_root)
 
@@ -94,7 +100,12 @@ package_setup(packages, install_missing_packages = install_missing_packages,
 # Documents may be rendered with the working directory at the project root (recommended) or
 # at the qmd's own folder; find config.yaml either way.
 .find_config <- function() {
-  for (p in c("config.yaml", "../config.yaml", "../../config.yaml", "../../../config.yaml", "../../../../config.yaml"))
+  # here::here() finds the project root from any document depth (docs/<root>/sdmtmb/fit/ is
+  # four levels down); the relative paths are the fallback without the here package.
+  if (requireNamespace("here", quietly = TRUE) && file.exists(here::here("config.yaml")))
+    return(here::here("config.yaml"))
+  for (p in c("config.yaml", "../config.yaml", "../../config.yaml", "../../../config.yaml",
+              "../../../../config.yaml"))
     if (file.exists(p)) return(normalizePath(p))
   stop("config.yaml not found. Render from the project root, or set the working directory.")
 }

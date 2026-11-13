@@ -60,7 +60,9 @@ knitr::opts_knit$set(root.dir = here::here())
 source(here::here("R", "0_setup.R"))
 # Same modelling frame as Steps 2-3: index year, response and offset follow config.yaml.
 dt   <- readRDS(file.path(out_dir, "compiled-data.rds")) |>
-  prepare_model_data(cfg)
+  prepare_model_data(cfg) |>
+  restrict_to_region(read_prediction_region(cfg)) |>   # same stations as Step 2
+  dplyr::filter(!is.na(depth))
 dt$fyear <- factor(dt$year)   # for products with a year fixed effect
 grid <- readRDS(file.path(out_dir, "prediction-grid.rds"))
 grid$fyear <- factor(grid$year, levels = levels(dt$fyear))

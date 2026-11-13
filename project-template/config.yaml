@@ -67,6 +67,8 @@ INDEX_YEAR_LABEL: "start"
 # --- Survey integration and catchability ------------------------------------------------
 SURVEY_EFFECT: false                  # cruise-series catchability factor (fsurvey) in the model
 REFERENCE_SURVEY: null                # prediction reference series; null = most-sampled series
+REFERENCE_GEAR: null                  # prediction reference gear type; null = most-sampled gear
+REFERENCE_MONTH: null                 # prediction reference month; null = most-sampled month
 CATCHABILITY_TERMS: []                # e.g. ["hour"] or ["sun_altitude"] for diel catchability
 CATCHABILITY_REFERENCE: {}            # e.g. {hour: 12}; a term without a value uses the median
 
@@ -109,6 +111,7 @@ EFFORT: "density"                     # density | offset
 FAMILY: "delta_lognormal"             # delta_lognormal | delta_gamma | delta_lognormal_poisson_link | delta_gamma_poisson_link | tweedie
 SPATIAL: "on"                         # one value, or one per delta component, e.g. ["on", "off"]
 SPATIOTEMPORAL: "ar1"                 # ar1 | iid | rw | off
+YEAR_EFFECT: false                    # year factor (fyear) in the Step 2 model; true for a SPiCT-type base (IID + year)
 INCLUDE_MONTH: true                   # month smooth; switch off if it collapses (uneven seasons)
 INCLUDE_TEMPERATURE: false            # temperature smooth is OFF by default
 ASSESSMENT_MODEL: "SPiCT"             # what consumes the selected index

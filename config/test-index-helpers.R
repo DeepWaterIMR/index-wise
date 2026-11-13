@@ -81,4 +81,19 @@ if (requireNamespace("sdmTMB", quietly = TRUE)) {
 } else {
   message("sdmTMB not installed: model-based index-helper checks skipped.")
 }
+# Prediction region, reference levels and per-fit grid years
+rd <- data.frame(lon = c(10, 20, 30), lat = c(70, 71, 72), geartype = c("Cod", "Shrimp", "Shrimp"),
+                 month = c(2L, 2L, 10L))
+stopifnot(identical(attr(restrict_to_region(rd, NULL), "n_outside"), 0L))
+if (requireNamespace("sf", quietly = TRUE)) {
+  box <- sf::st_as_sfc(sf::st_bbox(c(xmin = 5, ymin = 69, xmax = 25, ymax = 71.5), crs = 4326))
+  kept <- restrict_to_region(rd, sf::st_sf(geometry = box))
+  stopifnot(nrow(kept) == 2, attr(kept, "n_outside") == 1)
+}
+stopifnot(reference_gear(rd, list()) == "Shrimp", reference_gear(rd, list(REFERENCE_GEAR = "Cod")) == "Cod",
+          reference_month(rd, list()) == 2L, reference_month(rd, list(REFERENCE_MONTH = 8)) == 8L)
+fake_fit <- list(time = "year", data = data.frame(year = c(2001, 2003), fyear = factor(c(2001, 2003))))
+g <- grid_for_fit(data.frame(year = 2001:2003), fake_fit)
+stopifnot(identical(g$year, c(2001L, 2003L)), identical(levels(g$fyear), c("2001", "2003")))
+
 message("Synthetic index-helper checks passed.")

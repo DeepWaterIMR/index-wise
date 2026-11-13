@@ -63,6 +63,13 @@ If Step 1 acquired a broader reporting polygon and added a `region` field, filte
 
 ```{r prepare, eval=params$refit_model}
 dt <- prepare_model_data(dt, cfg)   # lon/lat, calendar and index year, value, offset, X/Y (km)
+# Keep the stations inside the stock prediction region from <stock>-3-data.qmd (when it exists).
+region <- read_prediction_region(cfg)
+dt <- restrict_to_region(dt, region)
+n_outside <- attr(dt, "n_outside")
+dt <- dplyr::filter(dt, !is.na(depth))   # depth is a covariate
+# The year fixed effect is a precomputed factor (never factor(year) in a formula).
+dt$fyear <- factor(dt$year)
 ```
 
 ## Mesh
@@ -90,6 +97,9 @@ has_multiple_gears <- dplyr::n_distinct(dt$geartype) > 1
 # `data = dt` sizes the smooth bases to what the survey actually sampled — a series covering
 # three months cannot support the default `s(month)` basis and fails with an opaque mgcv error.
 form <- build_formula(cfg, has_multiple_gears, data = dt)
+# YEAR_EFFECT: true adds a year factor (the SPiCT-type base: IID fields + year effect). A delta
+# model then needs at least one positive haul in every year.
+if (isTRUE(cfg$YEAR_EFFECT)) form <- stats::update(form, . ~ . + fyear)
 form
 
 # Years the survey skipped: an `ar1`/`rw` field assumes evenly spaced steps, and a gap makes
@@ -124,12 +134,13 @@ If `sanity()` flags problems (large gradients, non-PD Hessian, range > domain), 
 Depth is extracted per cell and the grid is then trimmed to `MIN_DEPTH`–`MAX_DEPTH`. Never match cells to a bathymetry that was first filtered to a depth band: cells outside the band would inherit the band edge's depth instead of being removed. The table reports cells outside the depth range of the data, where the depth smooth extrapolates.
 
 ```{r grid, eval=params$recompute_grid}
-region <- make_survey_prediction_region(dt, crs = dt_crs)
+if (is.null(region)) region <- make_survey_prediction_region(dt, crs = dt_crs)
 grid   <- make_prediction_grid(region, resolution = grid_side_size, max_depth = cfg$MAX_DEPTH)
 if (!is.null(cfg$MIN_DEPTH)) grid <- grid[grid$depth >= cfg$MIN_DEPTH, ]
 grid   <- tidyr::crossing(as.data.frame(grid), year = sort(unique(dt$year)))
-grid$geartype <- levels(factor(dt$geartype))[1]   # reference gear
-grid$month    <- 8L                               # reference month
+grid$fyear    <- factor(grid$year, levels = levels(dt$fyear))
+grid$geartype <- reference_gear(dt, cfg)          # most sampled gear unless REFERENCE_GEAR
+grid$month    <- reference_month(dt, cfg)         # most sampled month unless REFERENCE_MONTH
 grid <- add_reference_levels(grid, dt, cfg)       # survey and catchability references
 # Predict at one unit of swept area, so the prediction is a density and get_index(area =)
 # scales it once. Under a Poisson-link family the encounter/positive split at this point is not
@@ -159,7 +170,7 @@ knitr::kable(
 ```{r}
 #| label: fig-fit-index
 #| fig-cap: "Estimated annual index. The line represents the estimate and the shaded interval spans the returned lower and upper limits."
-index <- predict_index(fit, grid, area = grid_cell_area_nmi2, bias_correct = params$bias_correct)
+index <- predict_index(fit, grid_for_fit(grid, fit), area = grid_cell_area_nmi2, bias_correct = params$bias_correct)
 pred  <- predict(fit, newdata = grid, return_tmb_object = TRUE)   # for the maps below
 saveRDS(index, file.path(out_dir, "index-total.rds"))
 

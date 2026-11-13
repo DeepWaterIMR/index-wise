@@ -61,7 +61,9 @@ source(here::here("R", "0_setup.R"))
 
 # Same modelling frame as Step 2: index year, response and offset follow config.yaml.
 dt <- readRDS(file.path(out_dir, "compiled-data.rds")) |>
-  prepare_model_data(cfg)
+  prepare_model_data(cfg) |>
+  restrict_to_region(read_prediction_region(cfg)) |>   # same stations as Step 2
+  dplyr::filter(!is.na(depth))
 # The year fixed effect is a precomputed factor, never factor(year) in a formula: with
 # extra_time, an inline factor gains levels for the missing years and the model is not
 # identifiable (sdmTMB issue #320).

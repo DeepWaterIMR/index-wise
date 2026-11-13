@@ -50,13 +50,19 @@ conventions to every generated artifact; retain index-wise's scientific workflow
    Keep `geartype` in the formula when multiple major gears are present (always, if a single
    set gear width was used — see the gear-width note in `config.yaml`). Pass
    `offset = model_offset` (NULL for density). `SURVEY_EFFECT` and `CATCHABILITY_TERMS`
-   add configured terms through `build_formula()`. If `sanity()` fails, simplify (coarser mesh,
+   add configured terms through `build_formula()`; `YEAR_EFFECT: true` adds the precomputed year
+   factor `fyear` (SPiCT-type base: IID fields + year effect; a delta model then needs a positive
+   haul in every year — fit a fishable-length product without years that have none). Restrict
+   the model data to the stock prediction region first (`restrict_to_region(dt,
+   read_prediction_region(cfg))`), and drop stations without depth. If `sanity()` fails, simplify (coarser mesh,
    drop a smooth, change spatiotemporal) rather than forcing it.
-5. **Prediction grid** — `make_survey_prediction_region()` → `make_prediction_grid()` (GEBCO
-   depth per cell), trim to `MIN_DEPTH`–`MAX_DEPTH`, replicate over index years, set reference
-   `geartype`/`month`, then `add_reference_levels()` for the survey and catchability terms.
+5. **Prediction grid** — the stock region from `read_prediction_region(cfg)` (built in
+   `<stock>-3-data.qmd`; `make_survey_prediction_region()` only when there is none) →
+   `make_prediction_grid()` (GEBCO depth per cell), trim to `MIN_DEPTH`–`MAX_DEPTH`, replicate
+   over index years, set the reference gear and month (`reference_gear()`, `reference_month()`:
+   config, else the most sampled level), then `add_reference_levels()` for the survey and catchability terms.
    Report cells outside the data's depth range (`depth_extrapolation()`).
-6. **Predict & index** — `predict_index(fit, grid, area = <cell area in nmi²>)`: offset 0, so
+6. **Predict & index** — `predict_index(fit, grid_for_fit(grid, fit), area = <cell area in nmi²>)`: offset 0, so
    predictions are densities per nmi² under either `EFFORT`. Leave `bias_correct = FALSE` while
    exploring. Then run `check_index_scale(..., fit = fit)`: a median unit ratio (model vs
    observed density at the hauls) outside 1/1.5–1.5 means a unit error to find before Step 3;

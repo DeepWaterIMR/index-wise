@@ -69,6 +69,50 @@ prepare_model_data <- function(dt, cfg) {
   sdmTMB::add_utm_columns(out, ll_names = c("lon", "lat"), utm_crs = cfg$CRS)
 }
 
+# --- Prediction region ------------------------------------------------------------------
+# The stock prediction region that <stock>-3-data.qmd builds (PREDICTION_REGION_FILE, default
+# data/source/<stock>-prediction-region.gpkg), in `crs`; NULL when the file does not exist.
+read_prediction_region <- function(cfg, crs = cfg$CRS) {
+  f <- cfg$PREDICTION_REGION_FILE %||%
+    file.path(cfg$SOURCE_DIR %||% "data/source",
+              paste0(cfg$STOCK_SLUG %||% cfg$SPECIES_SLUG, "-prediction-region.gpkg"))
+  f <- here::here(f)
+  if (!file.exists(f)) return(NULL)
+  sf::st_transform(sf::read_sf(f), crs)
+}
+
+# Model data inside the prediction region (needs lon/lat from prepare_model_data()). The
+# stations outside are zero hauls far from where the species occurs; they would only widen the
+# mesh. Attribute "n_outside" counts them. With region = NULL the data are returned unchanged.
+restrict_to_region <- function(dt, region) {
+  if (is.null(region)) {
+    attr(dt, "n_outside") <- 0L
+    return(dt)
+  }
+  pts <- sf::st_as_sf(dt[, c("lon", "lat")], coords = c("lon", "lat"), crs = 4326) |>
+    sf::st_transform(sf::st_crs(region))
+  inside <- lengths(sf::st_intersects(pts, region)) > 0
+  out <- dt[inside, , drop = FALSE]
+  attr(out, "n_outside") <- sum(!inside)
+  out
+}
+
+# Reference gear and month for the prediction grid: config values, else the most sampled level.
+# They set the level of the index, not its trend. A hard-coded month outside the surveyed
+# season extrapolates the month smooth.
+reference_gear <- function(dt, cfg) cfg$REFERENCE_GEAR %||% names(which.max(table(dt$geartype)))
+reference_month <- function(dt, cfg) {
+  as.integer(cfg$REFERENCE_MONTH %||% names(which.max(table(dt$month))))
+}
+
+# Grid rows for the years a fit was given, with the year factor on that fit's levels (a fit can
+# lack years, e.g. a fishable-length model without positive catches in a year).
+grid_for_fit <- function(grid, fit) {
+  g <- grid[grid[[fit$time]] %in% unique(fit$data[[fit$time]]), , drop = FALSE]
+  if ("fyear" %in% names(fit$data)) g$fyear <- factor(g[[fit$time]], levels = levels(fit$data$fyear))
+  g
+}
+
 # --- Prediction reference ---------------------------------------------------------------
 # Reference levels for the survey factor and the catchability covariates. The index level
 # depends on these, not its shape; every one must be a level with good coverage in the data.
