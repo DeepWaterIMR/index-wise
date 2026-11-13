@@ -16,7 +16,7 @@ methods were taken over; no data, vessels, positions or project paths.
 **Layout.** Background in `knowledge/cpue.md` (data sources, why CPUE is not abundance, record
 preparation); models in `knowledge/cpue-models.md` (glmmTMB, mgcv, sdmTMB, prediction domain,
 uncertainty, sensitivity, handoff). Two skills: `index-cpue-data` (records) and
-`index-cpue-model` (standardisation). One template document `docs/data-report/cpue/cpue.qmd`
+`index-cpue-model` (standardisation). One template document `docs/sdmtmb/cpue/cpue.qmd`
 driven by the `CPUE:` block of `config.yaml`, with project-side helpers in
 `R/cpue_helpers.R`. The CPUE document is optional: `docs/render.R` renders it in `all` only when
 the logbook extract exists. Worked example: `examples/snowcrab-ers-cpue/` (synthetic data with a

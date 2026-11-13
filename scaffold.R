@@ -13,6 +13,16 @@
 #   # If the template can't be auto-located, pass it explicitly:
 #   scaffold_index("config.yaml", "../snabeluer-index", template = "<path>/project-template")
 #
+# Document-folder root (DOCS_DIR): the template's docs/{assets,background,data,sdmtmb} go to
+# `docs/` by default, or to `docs/benchmark/` for an index made for a stock assessment
+# (docs/render.R always stays at docs/render.R). Resolution order:
+#   1. the `docs_dir` argument, e.g. scaffold_index(..., docs_dir = "docs/assessment-2027");
+#   2. DOCS_DIR in the config when it is not the plain default "docs";
+#   3. "docs/benchmark" when the config names an ASSESSMENT_MODEL (not empty/null/"none");
+#   4. "docs".
+# Pass docs_dir = "docs" to force the flat layout for an index that has an ASSESSMENT_MODEL.
+# The chosen value is written to DOCS_DIR in the project's config.yaml.
+#
 # Requires: yaml. (install.packages("yaml"))
 
 # --- Read a YAML file as UTF-8, independent of the R locale ----------------------------
@@ -72,7 +82,26 @@
        call. = FALSE)
 }
 
-scaffold_index <- function(config, target, template = NULL, dry = FALSE) {
+# Resolve the document-folder root (see the header). Returns a relative path under docs/.
+.resolve_docs_dir <- function(cfg, docs_dir = NULL) {
+  assessment <- !is.null(cfg$ASSESSMENT_MODEL) && length(cfg$ASSESSMENT_MODEL) == 1L &&
+    !is.na(cfg$ASSESSMENT_MODEL) && nzchar(trimws(cfg$ASSESSMENT_MODEL)) &&
+    !tolower(trimws(cfg$ASSESSMENT_MODEL)) %in% c("none", "null", "no")
+  cfg_dir <- if (!is.null(cfg$DOCS_DIR) && !grepl("^\\{\\{", cfg$DOCS_DIR))
+    sub("/+$", "", as.character(cfg$DOCS_DIR)) else "docs"
+  out <- if (!is.null(docs_dir)) sub("/+$", "", docs_dir)
+         else if (!identical(cfg_dir, "docs")) cfg_dir
+         else if (assessment) "docs/benchmark"
+         else "docs"
+  if (!grepl("^docs(/[A-Za-z0-9._-]+)*$", out) || grepl("(^|/)\\.\\.?(/|$)", out))
+    stop("docs_dir/DOCS_DIR must be 'docs' or a subfolder such as 'docs/benchmark': got '",
+         out, "'", call. = FALSE)
+  out
+}
+
+# `docs_dir`: root of the document folders inside the project; NULL = derive from the config
+# (see the header: DOCS_DIR, else docs/benchmark for an assessment index, else docs).
+scaffold_index <- function(config, target, template = NULL, dry = FALSE, docs_dir = NULL) {
 
   if (!requireNamespace("yaml", quietly = TRUE))
     stop("The 'yaml' package is required: install.packages('yaml')")
@@ -87,6 +116,8 @@ scaffold_index <- function(config, target, template = NULL, dry = FALSE) {
   required <- c("SPECIES_NAME", "SPECIES_SLUG", "SPECIES_LATIN", "FILTER_SP")
   miss <- setdiff(required, names(cfg))
   if (length(miss)) stop("config.yaml is missing required keys: ", paste(miss, collapse = ", "))
+
+  docs_dir <- .resolve_docs_dir(cfg, docs_dir)
 
   slug <- cfg$SPECIES_SLUG
   if (!grepl("^[a-z0-9-]+$", slug))
@@ -155,13 +186,36 @@ scaffold_index <- function(config, target, template = NULL, dry = FALSE) {
       stop("Failed to copy wise-writing's package_setup.R into the scaffolded project.")
     }
     file.copy(config, file.path(target, "config.yaml"), overwrite = TRUE)
+
+    # Record DOCS_DIR in the project's config (replace the line, or add it when the supplied
+    # config predates the key).
+    cfg_path <- file.path(target, "config.yaml")
+    ctxt <- readChar(cfg_path, file.info(cfg_path)$size, useBytes = TRUE)
+    Encoding(ctxt) <- "UTF-8"
+    dline <- paste0('DOCS_DIR: "', docs_dir, '"')
+    if (grepl("(^|\n)DOCS_DIR:[^\n]*", ctxt)) {
+      ctxt <- sub("(^|\n)DOCS_DIR:[^\n]*", paste0("\\1", dline), ctxt)
+    } else {
+      ctxt <- paste0(sub("\n*$", "\n", ctxt), dline,
+                     "   # root of the document folders (assets, background, data, sdmtmb)\n")
+    }
+    writeBin(charToRaw(enc2utf8(ctxt)), cfg_path)
+
+    # Nest the document folders under docs_dir (render.R stays at docs/render.R).
+    if (!identical(docs_dir, "docs")) {
+      dir.create(file.path(target, docs_dir), recursive = TRUE, showWarnings = FALSE)
+      for (d in c("assets", "background", "data", "sdmtmb")) {
+        from <- file.path(target, "docs", d)
+        if (dir.exists(from)) file.rename(from, file.path(target, docs_dir, d))
+      }
+    }
   }
-  msg("Copied project-template/ -> ", target)
+  msg("Copied project-template/ -> ", target, " (document folders in ", docs_dir, "/)")
 
   # --- Rename SPECIES folder and SPECIES-* files to the slug --------------------------
   if (!dry) {
-    sp_dir <- file.path(target, "docs", "data-report", "SPECIES")
-    if (dir.exists(sp_dir)) file.rename(sp_dir, file.path(target, "docs", "data-report", slug))
+    sp_dir <- file.path(target, docs_dir, "sdmtmb", "SPECIES")
+    if (dir.exists(sp_dir)) file.rename(sp_dir, file.path(target, docs_dir, "sdmtmb", slug))
     for (f in list.files(target, recursive = TRUE, full.names = TRUE)) {
       if (grepl("^STOCK-", basename(f)))
         file.rename(f, file.path(dirname(f), sub("^STOCK", stock_slug, basename(f))))

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Render one Quarto document with a timestamped log in logs/. Made to run detached:
-#   screen -dmS <species>-validate ./render.sh docs/data-report/validation/validate.qmd -P key:value
+#   screen -dmS <species>-validate ./render.sh docs/sdmtmb/validation/validate.qmd -P key:value
+# (with DOCS_DIR "docs/benchmark" the path is docs/benchmark/sdmtmb/validation/validate.qmd)
 # Usage: ./render.sh <document.qmd> [extra quarto args]
 set -u
 cd "$(dirname "$0")"

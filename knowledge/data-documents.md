@@ -13,7 +13,7 @@ species slug; for split domains, e.g. `atlantic-halibut-n62`).
 | `docs/data/<stock>-3-data.qmd` | "<Species> — <area> data" / "Step 2 of 2 · data report" | Describes the compiled data: positions, depth, response distributions, trawl parameters, length–weight and length products, diagnostics. |
 
 The number in the file name is the reading order. Model documents (fit, validation, final
-report) follow under `docs/data-report/`.
+report) follow under `docs/sdmtmb/`.
 
 ## `<stock>-3-data.qmd`
 

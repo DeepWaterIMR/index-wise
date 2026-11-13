@@ -18,6 +18,7 @@ AUTHORS: []
 AFFILIATIONS: []
 BASE_SIZE: 12
 FIGURES_DIR: "figures"
+DOCS_DIR: "docs"                      # root of the document folders (assets, background, data, sdmtmb); "docs/benchmark" for an index made for a stock-assessment benchmark (later rounds: e.g. "docs/assessment-2027")
 
 # --- Data selection ---------------------------------------------------------------------
 FILTER_SP:                            # Norwegian commonname value(s) (confirm via BAIT taxaindex)
@@ -131,7 +132,7 @@ ROBUSTNESS:
   downweight_years: []                # years with a known problem, down-weighted as a sensitivity
   downweight_value: 0.1
 
-# --- Commercial CPUE (optional; docs/data-report/cpue, knowledge/cpue.md) -----------------
+# --- Commercial CPUE (optional; docs/sdmtmb/cpue, knowledge/cpue.md) -----------------
 # Logbook and landings extracts are local, confidential and git-ignored (data/source/cpue/).
 CPUE:
   file: "data/source/cpue/logbook_records.rds"  # one row per record, mapped to the schema in cpue.qmd

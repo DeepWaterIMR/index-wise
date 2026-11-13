@@ -44,7 +44,7 @@ across processes:
 
 ```bash
 for c in "Full model" "No depth" "No month"; do
-  Rscript -e "quarto::quarto_render('docs/data-report/validation/validate.qmd',
+  Rscript -e "quarto::quarto_render('docs/sdmtmb/validation/validate.qmd',
                                     execute_params = list(only = '$c'))"
 done
 ```
@@ -59,7 +59,7 @@ log in `logs/`**. `screen` or `tmux` can manage the process when installed:
 
 ```bash
 screen -dmS <species>-fit bash -c '
-  quarto render "docs/data-report/fit/fit.qmd" > "logs/fit-$(date +%Y%m%d-%H%M%S).log" 2>&1
+  quarto render "docs/sdmtmb/fit/fit.qmd" > "logs/fit-$(date +%Y%m%d-%H%M%S).log" 2>&1
 '
 ```
 

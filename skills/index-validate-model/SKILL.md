@@ -25,7 +25,7 @@ Before producing project files, read `knowledge/wise-writing.md` and the install
 `academic-style`, `academic-conventions`, and `academic-data-report` skills. Apply their
 conventions to every generated artifact; retain index-wise's scientific workflow.
 
-## Work in `docs/data-report/validation/validate.qmd`
+## Work in `docs/sdmtmb/validation/validate.qmd`
 
 Each stage has its own compute toggle and its own cache prefix. Adapt the candidate lists to
 the species and config. The order and its reasons are in `knowledge/model-selection.md`; in

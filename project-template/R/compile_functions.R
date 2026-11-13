@@ -1,6 +1,6 @@
 # compile_functions.R — Step 1 data compilation (index-wise).
 #
-# Shared by docs/data-report/survey-selection/<species>-compile-data.qmd. Implements
+# Shared by docs/data/<stock>-2-survey-selection.qmd and <stock>-3-data.qmd. Implements
 # index-wise knowledge/data-filtering.md: standard haul filter, mission-level
 # (encountered-on-a-cruise) qualification per species, true zeros, duplicate diagnostic,
 # swept-area density, depth filling and the fishable-length biomass fraction.

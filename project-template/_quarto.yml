@@ -1,8 +1,8 @@
 project:
   type: default
   render:
-    - docs/data/*.qmd
-    - docs/background/**/*.qmd
-    - docs/data-report/**/*.qmd
-    - "!docs/data-report/**/*-section.qmd"
+    - "docs/**/data/*.qmd"
+    - "docs/**/background/**/*.qmd"
+    - "docs/**/sdmtmb/**/*.qmd"
+    - "!docs/**/*-section.qmd"
 execute-dir: project

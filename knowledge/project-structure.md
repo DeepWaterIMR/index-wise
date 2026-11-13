@@ -25,7 +25,8 @@
 │   │   ├── <stock>-1-summary.qmd
 │   │   ├── <stock>-2-survey-selection.qmd
 │   │   └── <stock>-3-data.qmd
-│   └── data-report/
+│   ├── background/      # Stock background (stock-background.qmd)
+│   └── sdmtmb/          # sdmTMB model documents
 │       ├── fit/fit.qmd
 │       ├── validation/validate.qmd
 │       ├── cpue/cpue.qmd # optional commercial CPUE index (config CPUE:)
@@ -42,6 +43,26 @@
 └── config/              # Tooling configuration, separate from analysis settings
 ```
 
+### Document root (`DOCS_DIR`)
+
+The four document folders `assets/`, `background/`, `data/` and `sdmtmb/` sit under one root,
+`DOCS_DIR` in `config.yaml` (default `docs`); `docs/render.R` always stays at `docs/render.R`.
+An index made for a stock assessment nests them one level deeper, `DOCS_DIR: "docs/benchmark"`,
+so later assessment rounds can add sibling roots (`docs/assessment-2027/`, ...) beside it:
+
+```
+docs/render.R
+docs/benchmark/{assets,background,data,sdmtmb}/
+docs/assessment-2027/{assets,background,data,sdmtmb}/   # later round
+```
+
+`scaffold_index()` picks the root from its `docs_dir` argument, else `DOCS_DIR` when it is not
+`docs`, else `docs/benchmark` when `ASSESSMENT_MODEL` is set, else `docs`. R code builds paths as
+`here::here(cfg$DOCS_DIR %||% "docs", "assets", ...)`; YAML paths inside documents stay relative
+(`../assets/...` from `data/` and `background/`, `../../assets/...` from `sdmtmb/<report>/`), so
+they work in both layouts. Paths in this knowledge base such as `docs/sdmtmb/fit/fit.qmd` are
+relative to the document root; read `docs/` as `DOCS_DIR`.
+
 Add `website/` only for projects with a website. Add numbered analysis scripts under `R/`
 as the project develops; do not generate empty compiler scripts that pretend to implement
 the method. All documents and their rendered outputs stay under `docs/`.
@@ -54,7 +75,7 @@ the method. All documents and their rendered outputs stay under `docs/`.
 - **`config.yaml` is the single source of truth** for species, `filter_sp`, surveys, response
   variables, length groups, study area / CRS / grid size / mesh cutoff, gear-width policy, and
   output paths. Documents read from it (via `R/0_setup.R`); they do not hard-code settings.
-- **Multiple species** → one `docs/data-report/<species>/` folder each, sharing earlier reports under `docs/data-report/` where the compiled dataset supports it. Otherwise scaffold one project
+- **Multiple species** → one `docs/sdmtmb/<species>/` folder each, sharing earlier reports under `docs/sdmtmb/` where the compiled dataset supports it. Otherwise scaffold one project
   per species.
 - **Outputs cache to `data/output/`.** Expensive fits, prediction grids, predictions, and
   indices are saved there so re-renders load instead of recomputing (toggle-controlled — see
@@ -110,4 +131,4 @@ AFFILIATIONS:
 ```
 
 Replace the example values with confirmed human metadata. No private database paths belong
-in report metadata. `BASE_SIZE` defaults to 12; `FIGURES_DIR` defaults to `figures/`.
+in report metadata. `BASE_SIZE` defaults to 12; `FIGURES_DIR` defaults to `figures/`; `DOCS_DIR` defaults to `docs`.

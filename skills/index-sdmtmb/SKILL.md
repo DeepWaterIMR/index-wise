@@ -18,7 +18,7 @@ sdmTMB survey index wherever the code lives. It does not scaffold anything and d
 index-wise's folder layout.
 
 **Detect the project first.** A `config.yaml` with `SPECIES_SLUG` and `FILTER_SP` and a
-`docs/data-report/` folder means a scaffolded index-wise project: follow the step skills
+`docs/sdmtmb/` folder means a scaffolded index-wise project: follow the step skills
 (`index-compile-data` → `index-fit-model` → `index-validate-model` → `index-final-report`).
 Otherwise, work in the user's own structure and conventions, and use this skill.
 

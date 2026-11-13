@@ -43,13 +43,16 @@ https://github.com/DeepWaterIMR/index-wise`).
 | Step | Document(s) | index-wise skill |
 |---|---|---|
 | 1. Compile & report data | `docs/data/{{STOCK_SLUG}}-2-survey-selection.qmd`, `docs/data/{{STOCK_SLUG}}-3-data.qmd`; summary `docs/data/{{STOCK_SLUG}}-1-summary.qmd` | `index-compile-data` |
-| 2. Fit first model | `docs/data-report/fit/fit.qmd` | `index-fit-model` |
-| 3. Validate / select | `docs/data-report/validation/validate.qmd` | `index-validate-model` |
-| 4. Final report + export | `docs/data-report/{{SPECIES_SLUG}}/report.qmd` (+ `*-section.qmd`) | `index-final-report` |
-| Optional: commercial CPUE | `docs/data-report/cpue/cpue.qmd` (`CPUE:` block of `config.yaml`) | `index-cpue-data`, `index-cpue-model` |
+| 2. Fit first model | `docs/sdmtmb/fit/fit.qmd` | `index-fit-model` |
+| 3. Validate / select | `docs/sdmtmb/validation/validate.qmd` | `index-validate-model` |
+| 4. Final report + export | `docs/sdmtmb/{{SPECIES_SLUG}}/report.qmd` (+ `*-section.qmd`) | `index-final-report` |
+| Optional: commercial CPUE | `docs/sdmtmb/cpue/cpue.qmd` (`CPUE:` block of `config.yaml`) | `index-cpue-data`, `index-cpue-model` |
 
 Logbook and sales-note records are confidential at the record level: keep the extract in
 `data/source/cpue/`, and show only aggregates (no individual vessels, positions in cells).
+
+The `docs/` paths above are relative to `DOCS_DIR` in `config.yaml` (`docs`, or `docs/benchmark` for
+an index made for a stock-assessment benchmark; `docs/render.R` stays put).
 
 Full rebuild: `Rscript docs/render.R` (slow — see the rendering rules).
 
@@ -70,5 +73,5 @@ For every generated project artifact, read the installed `academic-style`,
 `academic-conventions`, and `academic-data-report` skills. index-wise supplies the
 scientific workflow; wise-writing supplies structure, style, and publishing conventions.
 Follow index-wise's `knowledge/wise-writing.md`. The workflow QMDs are HTML data
-reports under `docs/data-report/`; shared assets belong in `docs/assets/`, project memory in
+reports under `docs/sdmtmb/`; shared assets belong in `docs/assets/`, project memory in
 `ai/memory/`, tests in `ai/tests/`, and reviews in `ai/review/`.

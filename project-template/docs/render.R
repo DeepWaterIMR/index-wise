@@ -28,6 +28,8 @@ Encoding(cfg_txt) <- "UTF-8"
 cfg  <- yaml::yaml.load(cfg_txt, eval.expr = FALSE)
 slug <- cfg$SPECIES_SLUG
 stock <- if (!is.null(cfg$STOCK_SLUG)) cfg$STOCK_SLUG else slug
+# Root of the document folders: "docs", or e.g. "docs/benchmark" (config DOCS_DIR).
+docs_dir <- if (!is.null(cfg$DOCS_DIR)) cfg$DOCS_DIR else "docs"
 
 dir.create("logs", showWarnings = FALSE)
 
@@ -39,13 +41,13 @@ render <- function(path) {
 
 if (stage %in% c("all", "data")) {
   for (part in c("2-survey-selection", "3-data", "1-summary"))
-    render(file.path("docs/data", paste0(stock, "-", part, ".qmd")))
+    render(file.path(docs_dir, "data", paste0(stock, "-", part, ".qmd")))
 }
-if (stage %in% c("all", "fit"))      render("docs/data-report/fit/fit.qmd")
-if (stage %in% c("all", "validate")) render("docs/data-report/validation/validate.qmd")
-if (stage %in% c("all", "report"))   render(file.path("docs", "data-report", slug, "report.qmd"))
+if (stage %in% c("all", "fit"))      render(file.path(docs_dir, "sdmtmb", "fit", "fit.qmd"))
+if (stage %in% c("all", "validate")) render(file.path(docs_dir, "sdmtmb", "validation", "validate.qmd"))
+if (stage %in% c("all", "report"))   render(file.path(docs_dir, "sdmtmb", slug, "report.qmd"))
 cpue_file <- cfg$CPUE$file
 if (identical(stage, "cpue") || (identical(stage, "all") && !is.null(cpue_file) && file.exists(cpue_file)))
-  render("docs/data-report/cpue/cpue.qmd")
+  render(file.path(docs_dir, "sdmtmb", "cpue", "cpue.qmd"))
 
 message("Done: ", stage)

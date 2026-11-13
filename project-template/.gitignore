@@ -53,6 +53,6 @@ Thumbs.db
 .idea/
 
 # Generated assets and exported figures
-/docs/assets/*-software.bib
+/docs/**/assets/*-software.bib
 /figures/*
 !/figures/README.md

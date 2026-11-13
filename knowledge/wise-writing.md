@@ -13,7 +13,7 @@ Do not vendor copies of the skills: read the installed versions so improvements 
 ## Layout and document type
 
 Use `knowledge/project-structure.md`. All five workflow documents are **HTML data reports**
-under `docs/data-report/`, with one directory per report; species-specific final reports
+under `docs/sdmtmb/` (below `DOCS_DIR`; see `project-structure.md`), with one directory per report; species-specific final reports
 keep their optional section includes alongside them. Includes inherit their parent report's
 metadata, format, and style and are not rendered independently. Add a website only when
 requested, under `website/`. Other requested document types use the appropriate

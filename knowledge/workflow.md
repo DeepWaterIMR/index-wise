@@ -13,9 +13,9 @@ IMR-internal) repos:
 |---|---|
 | `docs/data/<stock>-2-survey-selection.qmd` | `ref-index-paper/docs/data/{Redfish bottom trawl, BioticExplorer_database, Compile_all_data}.Rmd` |
 | `docs/data/<stock>-3-data.qmd` | `ref-index-paper/docs/SI files/SI-Text-1-data.qmd` |
-| `docs/data-report/fit/fit.qmd` | `ref-index-paper/docs/SI files/SI-Text-2-sdmTMB.qmd` |
-| `docs/data-report/validation/validate.qmd` | `ref-index-paper/docs/SI files/SI-Text-3-model-selection.qmd` (staged selection, status-coded tables, index per candidate) |
-| `docs/data-report/<species>/report.qmd` (+ `*-section.qmd`) | `ref-assessment-index/docs/benchmark/beaked/*` |
+| `docs/sdmtmb/fit/fit.qmd` | `ref-index-paper/docs/SI files/SI-Text-2-sdmTMB.qmd` |
+| `docs/sdmtmb/validation/validate.qmd` | `ref-index-paper/docs/SI files/SI-Text-3-model-selection.qmd` (staged selection, status-coded tables, index per candidate) |
+| `docs/sdmtmb/<species>/report.qmd` (+ `*-section.qmd`) | `ref-assessment-index/docs/benchmark/beaked/*` |
 
 As the routine is improved, index-wise's documents will diverge from this original
 material — that's expected. Use the table to find *background*, not to decide what the
@@ -101,7 +101,7 @@ consumes.
 ## Optional track — commercial CPUE (skills: `index-cpue-data`, `index-cpue-model`)
 
 A standardised CPUE index from logbook or sales-note records, beside the survey index, in
-`docs/data-report/cpue/cpue.qmd` (config `CPUE:`). The data are not Biotic data and are
+`docs/sdmtmb/cpue/cpue.qmd` (config `CPUE:`). The data are not Biotic data and are
 confidential at the record level. Step 1 maps the extract to the record schema, reconciles it
 with landings, resolves vessel identity and applies the filter cascade (`cpue.md`); step 2 fits
 glmmTMB, mgcv or sdmTMB, predicts at reference conditions over the fished domain, checks

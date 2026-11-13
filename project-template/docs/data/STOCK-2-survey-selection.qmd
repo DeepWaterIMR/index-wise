@@ -551,7 +551,7 @@ source(here::here("R", "report_helpers.R"))
 report_software(
   c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "ggspatial", "DBI", "duckdb", "cowplot",
     "knitr"),
-  here::here("docs", "assets", paste0(stock, "-2-survey-selection-software.bib"))
+  here::here(cfg$DOCS_DIR %||% "docs", "assets", paste0(stock, "-2-survey-selection-software.bib"))
 )
 ```
 

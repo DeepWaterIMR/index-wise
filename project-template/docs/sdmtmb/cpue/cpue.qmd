@@ -382,7 +382,7 @@ source(here::here("R", "report_helpers.R"))
 # Add every additional package that influenced this report, including optional packages.
 report_software(
   c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "sdmTMB", "mgcv", "glmmTMB", "DHARMa", "knitr"),
-  here::here("docs", "assets", "cpue-software.bib")
+  here::here(cfg$DOCS_DIR %||% "docs", "assets", "cpue-software.bib")
 )
 ```
 

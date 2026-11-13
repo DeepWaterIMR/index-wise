@@ -24,7 +24,7 @@ Before producing project files, read `knowledge/wise-writing.md` and the install
 `academic-style`, `academic-conventions`, and `academic-data-report` skills. Apply their
 conventions to every generated artifact; retain index-wise's scientific workflow.
 
-## Work in `docs/data-report/fit/fit.qmd`
+## Work in `docs/sdmtmb/fit/fit.qmd`
 
 1. **Load** the compiled dataset from `data/output/` and build the modelling frame with
    `prepare_model_data(dt, cfg)`: response from `RESPONSE` and `EFFORT` (density, or catch

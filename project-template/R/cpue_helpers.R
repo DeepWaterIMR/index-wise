@@ -1,4 +1,4 @@
-# cpue_helpers.R — project-side helpers for commercial CPUE indices (docs/data-report/cpue).
+# cpue_helpers.R — project-side helpers for commercial CPUE indices (docs/sdmtmb/cpue).
 # Record preparation (vessel activity and identity, filter cascade, landings reconciliation),
 # prediction references, indices from glmmTMB, mgcv and sdmTMB fits, AIC on the catch scale,
 # grouped residual dispersion and the vessel bootstrap. See knowledge/cpue.md and

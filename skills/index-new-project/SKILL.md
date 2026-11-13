@@ -59,7 +59,9 @@ every answer for `ai/memory/scaffold-interview.md`.
    itself; a year effect with AR1 is a third option common in existing indices). If the answer
    is SPiCT, tell the user this now. Does an index already exist? If so, record its
    configuration (family, year effect, fields, domain) and its published values
-   (`PREVIOUS_INDEX_FILE`) for bridging.
+   (`PREVIOUS_INDEX_FILE`) for bridging. An index made for a stock assessment gets its document
+   folders under `docs/benchmark/` (`DOCS_DIR`; a later round uses e.g. `docs/assessment-2027`):
+   confirm this with the user; for a stand-alone index with no assessment model, leave `docs/`.
 10. **Late data** — which data typically arrive after the assessment (a nation's or vessel's
     hauls, a late survey)? Record them as `LATE_COMPONENTS` and agree how the terminal year is
     handled (`knowledge/data-filtering.md`).
@@ -95,7 +97,10 @@ definition when seasons are combined, or how late-arriving data are handled).
    ```
 
    This copies `project-template/` into the target and stamps every `{{PLACEHOLDER}}`. Confirm
-   no `{{...}}` remains afterwards.
+   no `{{...}}` remains afterwards. The document folders (`assets`, `background`, `data`,
+   `sdmtmb`) go to `docs/`, or to `docs/benchmark/` when `ASSESSMENT_MODEL` is set; override with
+   `DOCS_DIR` in the config or `scaffold_index(..., docs_dir = "docs")` (see the `scaffold.R`
+   header). The choice is written to `DOCS_DIR` in the project's `config.yaml`.
 
 4. Initialize local Git in the new project if needed, with no remote. Commit or push only
    when authorized by the user. Keep the scaffolded `VERSION` and `.here` files.

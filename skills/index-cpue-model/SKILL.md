@@ -39,7 +39,7 @@ conventions to every generated artifact; retain index-wise's scientific workflow
 Fitting more than one engine on the same records is a useful check: where they disagree, the
 spatial weighting is doing the work.
 
-## Work in `docs/data-report/cpue/cpue.qmd` (model sections)
+## Work in `docs/sdmtmb/cpue/cpue.qmd` (model sections)
 
 1. **Response and family** — positive catch, `Gamma(link = "log")` by default; effort as a
    covariate (`CPUE: effort_treatment: covariate`), reporting the slope; an offset only if the

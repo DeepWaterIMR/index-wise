@@ -19,11 +19,11 @@ Update as steps complete. See the index-wise `workflow.md` knowledge file for de
 Survey qualification is mission-level: build the qualifying `missionid` set from positive target
 catches first, then retain all valid hauls from those missions. Never backfill an entire cruise
 series merely because one of its surveys qualifies.
-- [ ] **Step 2 — First model** (`docs/data-report/fit/fit.qmd`). No length groups. Mesh cutoff,
+- [ ] **Step 2 — First model** (`docs/sdmtmb/fit/fit.qmd`). No length groups. Mesh cutoff,
   sanity result.  _<notes>_
-- [ ] **Step 3 — Validate / select** (`docs/data-report/validation/validate.qmd`). Family,
+- [ ] **Step 3 — Validate / select** (`docs/sdmtmb/validation/validate.qmd`). Family,
   spatiotemporal structure, mesh, retro decisions.  _<notes>_
-- [ ] **Step 4 — Final report + export** (`docs/data-report/{{SPECIES_SLUG}}/report.qmd`). Products,
+- [ ] **Step 4 — Final report + export** (`docs/sdmtmb/{{SPECIES_SLUG}}/report.qmd`). Products,
   selected index, export path.  _<notes>_
 
 **Cached outputs in `data/output/`:** _<list files so re-renders can load them>_.

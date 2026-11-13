@@ -50,10 +50,10 @@ conventions to every generated artifact; retain index-wise's scientific workflow
 
 Record the answers in the project's `ai/memory/`.
 
-## Work in `docs/data-report/cpue/cpue.qmd` (data sections)
+## Work in `docs/sdmtmb/cpue/cpue.qmd` (data sections)
 
 If the project was scaffolded before the CPUE document existed, copy
-`project-template/docs/data-report/cpue/cpue.qmd` and `project-template/R/cpue_helpers.R` into it
+`project-template/docs/sdmtmb/cpue/cpue.qmd` and `project-template/R/cpue_helpers.R` into it
 and add the `CPUE:` block of `project-template/config.yaml`.
 
 1. **Map** the extract to the schema in the `load` chunk (`year`, `month`, `yday`, `vessel_id`,

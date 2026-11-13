@@ -44,7 +44,10 @@ Sys.setenv(HOME = workspace)
 scaffold_index(config_file, file.path(workspace, "default-template-project"), dry = TRUE)
 if (is.na(old_home)) Sys.unsetenv("HOME") else Sys.setenv(HOME = old_home)
 target <- file.path(workspace, "project")
+# The redfish example names an ASSESSMENT_MODEL, so the default layout nests the document
+# folders under docs/benchmark (DOCS_DIR); a flat docs/ layout is checked further down.
 scaffold_index(config_file, target, template = "project-template")
+docs_root <- "docs/benchmark"
 shared_setup <- file.path(dirname(normalizePath(".")), "wise-writing",
                           "project-template", "R", "package_setup.R")
 copied_setup <- file.path(target, "R", "package_setup.R")
@@ -57,7 +60,11 @@ stopifnot(any(grepl('"R", "package_setup.R"', setup_text, fixed = TRUE)),
           any(grepl('R_INDEX_INSTALL_MISSING=true', setup_text, fixed = TRUE)),
           !any(grepl("install.packages(", setup_text, fixed = TRUE)))
 stopifnot(all(dir.exists(file.path(target, c("ai/memory", "ai/tests", "ai/review",
-  "R", "docs/assets", "docs/data-report", "figures", "config", "logs")))))
+  "R", file.path(docs_root, c("assets", "background", "data", "sdmtmb")), "figures", "config",
+  "logs")))))
+stopifnot(.read_yaml_utf8(file.path(target, "config.yaml"))$DOCS_DIR == docs_root,
+          file.exists(file.path(target, "docs", "render.R")),
+          !any(dir.exists(file.path(target, "docs", c("assets", "background", "data", "sdmtmb")))))
 stopifnot(!any(file.exists(file.path(target, c("memory", "review", "R/00_setup.R")))))
 stopifnot(file.exists(file.path(target, ".here")),
           .read_yaml_utf8(file.path(target, "VERSION"))$version == "0.1.0")
@@ -104,6 +111,15 @@ for (path in qmds) {
 }
 for (path in list.files(file.path(target, "R"), "\\.R$", full.names = TRUE)) parse(path)
 invisible(parse(file.path(target, "docs/render.R")))
+# Flat layout: docs_dir = "docs" overrides the assessment default.
+flat <- file.path(workspace, "project-flat")
+scaffold_index(config_file, flat, template = "project-template", docs_dir = "docs")
+stopifnot(all(dir.exists(file.path(flat, "docs", c("assets", "background", "data", "sdmtmb")))),
+          !dir.exists(file.path(flat, "docs", "benchmark")),
+          .read_yaml_utf8(file.path(flat, "config.yaml"))$DOCS_DIR == "docs",
+          length(list.files(file.path(flat, "docs"), "\\.qmd$", recursive = TRUE)) == length(qmds),
+          !any(grepl("\\{\\{(SPECIES|REGION|STOCK|AREA|AUTHORS|AFFILIATIONS)", unlist(lapply(list.files(flat, "\\.(qmd|R|yml|yaml)$", recursive = TRUE,
+            full.names = TRUE), readLines, warn = FALSE, encoding = "UTF-8")))))
 # Bad metadata must fail before creating a destination, including in dry-run mode.
 cfg$AUTHORS[[1]]$affiliation <- "missing"
 write_yaml_utf8(cfg, config_file)
@@ -125,7 +141,7 @@ if ("--render" %in% commandArgs(TRUE)) {
     'knitr::kable(data.frame(value = 1:3))', "```", "",
     "The fixture contained three values (@tbl-check).", "", "# Software and reproducibility", "",
     "```{r}", "#| results: asis", 'source(here::here("R", "report_helpers.R"))',
-    'report_software("knitr", here::here("docs", "assets", "fit-software.bib"))', "```", "",
+    'report_software("knitr", here::here(cfg$DOCS_DIR %||% "docs", "assets", "fit-software.bib"))', "```", "",
     "# References {.unnumbered}", "", "::: {#refs}", ":::")
   writeLines(fixture, path)
   status <- system2("quarto", c("render", shQuote(path), "--to", "html"))

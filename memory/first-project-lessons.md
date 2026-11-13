@@ -11,7 +11,7 @@ metadata:
 
 The generated Step 1 documents have two distinct roles. `compile-data.qmd` selects qualifying
 surveys and documents coverage, catch, gear, timing, filters, and the filtering-script appendix.
-`<species>-<region>-data-report.qmd` documents the compiled station/response data, effort,
+`<species>-<region>-data-report.qmd` (now `docs/data/<stock>-3-data.qmd`; `compile-data.qmd` is now `<stock>-2-survey-selection.qmd`) documents the compiled station/response data, effort,
 length products, and diagnostics. Keep length allocation and length-completeness material out of
 survey selection.
 

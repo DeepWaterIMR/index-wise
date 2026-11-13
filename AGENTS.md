@@ -203,7 +203,7 @@ installed `academic-style`, `academic-conventions`, and `academic-data-report` s
 index-wise supplies the scientific workflow; wise-writing supplies shared style, package
 loading, and publishing conventions. Install/update wise-writing on demand when those skills
 are needed. Follow index-wise's `knowledge/wise-writing.md`. The workflow QMDs are HTML data
-reports under `docs/data-report/`; shared assets belong in `docs/assets/`, project memory in
+reports under `docs/sdmtmb/` (under `DOCS_DIR`, e.g. `docs/benchmark/`, for an assessment index); shared assets belong in `docs/assets/`, project memory in
 `ai/memory/`, tests in `ai/tests/`, and reviews in `ai/review/`.
 
 ## Reporting back

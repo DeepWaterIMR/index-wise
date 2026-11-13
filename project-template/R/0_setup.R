@@ -94,7 +94,7 @@ package_setup(packages, install_missing_packages = install_missing_packages,
 # Documents may be rendered with the working directory at the project root (recommended) or
 # at the qmd's own folder; find config.yaml either way.
 .find_config <- function() {
-  for (p in c("config.yaml", "../config.yaml", "../../config.yaml", "../../../config.yaml"))
+  for (p in c("config.yaml", "../config.yaml", "../../config.yaml", "../../../config.yaml", "../../../../config.yaml"))
     if (file.exists(p)) return(normalizePath(p))
   stop("config.yaml not found. Render from the project root, or set the working directory.")
 }
@@ -120,7 +120,7 @@ rm(.nm)
 
 # Effort, index-year, prediction-reference, balance, bridging and robustness helpers.
 source(here::here("R", "index_helpers.R"))
-# Commercial CPUE helpers (docs/data-report/cpue).
+# Commercial CPUE helpers (docs/sdmtmb/cpue).
 source(here::here("R", "cpue_helpers.R"))
 
 # Derived convenience values.

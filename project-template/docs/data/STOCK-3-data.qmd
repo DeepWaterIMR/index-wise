@@ -266,7 +266,7 @@ base_region <- ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 8, r
 region_map_height <- map_fig_height(base_region, extra = 0.6)
 ```
 
-The models predict density only where `r sp` has been caught. The prediction region is the concave hull of all hauls with `r sp`, buffered by `r cfg$REGION_BUFFER_KM %||% 50` km and cut to `r area_label` (@fig-prediction-region). The buffer is wide enough to merge isolated hauls into the region instead of leaving circles around them. Areas with only zero observations are left out. Within the region, the prediction grid keeps the `r cfg$GRID_KM`-km cells between land and `r max_depth` m depth (GEBCO, `ggOceanMaps::get_depth()`): `r n_fmt(nrow(grid_base))` cells, `r n_fmt(round(grid_km2, -2))` km² of the `r n_fmt(round(region_km2, -2))` km² region. `r if (n_pos_deep == 0) paste0("No haul with ", sp, " is deeper than this limit.") else paste0(n_pos_deep, if (n_pos_deep == 1) " haul" else " hauls", " with ", sp, if (n_pos_deep == 1) " is" else " are", " deeper than this limit; ", if (n_pos_deep == 1) "it stays" else "they stay", " in the model data but outside the prediction area.")` The model fit builds its grid in the same way. `r n_fmt(n_inside)` of the `r n_fmt(nrow(dt))` hauls (`r round(100 * n_inside / nrow(dt))` %) lie inside the region, including `r n_fmt(sum(dt$in_region & dt$biomass > 0))` of the `r n_fmt(nrow(pos))` hauls with `r sp`.
+The models predict density only where `r sp` has been caught. The prediction region is the concave hull of all hauls with `r sp`, buffered by `r cfg$REGION_BUFFER_KM %||% 50` km and cut to `r area_label` (@fig-prediction-region). The buffer is wide enough to merge isolated hauls into the region instead of leaving circles around them, and to take in the zero hauls next to the occupied area, such as those deeper on the continental slope, which inform the depth effect and the low densities at the edge of the distribution. Areas with only zero observations are left out. Within the region, the prediction grid keeps the `r cfg$GRID_KM`-km cells between land and `r max_depth` m depth (GEBCO, `ggOceanMaps::get_depth()`): `r n_fmt(nrow(grid_base))` cells, `r n_fmt(round(grid_km2, -2))` km² of the `r n_fmt(round(region_km2, -2))` km² region. `r if (n_pos_deep == 0) paste0("No haul with ", sp, " is deeper than this limit.") else paste0(n_pos_deep, if (n_pos_deep == 1) " haul" else " hauls", " with ", sp, if (n_pos_deep == 1) " is" else " are", " deeper than this limit; ", if (n_pos_deep == 1) "it stays" else "they stay", " in the model data but outside the prediction area.")` The model fit builds its grid in the same way. `r n_fmt(n_inside)` of the `r n_fmt(nrow(dt))` hauls (`r round(100 * n_inside / nrow(dt))` %) lie inside the region, including `r n_fmt(sum(dt$in_region & dt$biomass > 0))` of the `r n_fmt(nrow(pos))` hauls with `r sp`.
 
 
 ```{r, fig.height = region_map_height}
@@ -606,7 +606,7 @@ checks |>
 source(here::here("R", "report_helpers.R"))
 report_software(
   c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "ggspatial", "cowplot", "ggFishPlots", "scales", "knitr"),
-  here::here("docs", "assets", paste0(stock, "-3-data-software.bib"))
+  here::here(cfg$DOCS_DIR %||% "docs", "assets", paste0(stock, "-3-data-software.bib"))
 )
 ```
 

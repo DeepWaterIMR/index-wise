@@ -59,7 +59,7 @@ dt <- readRDS(file.path(out_dir, "compiled-data.rds"))
 
 Response, effort, index year and projected coordinates (km). Keep true zeros. With `EFFORT: "density"` the response is catch per swept area and there is no offset; with `EFFORT: "offset"` the response is catch and `log(swept_area)` enters as an offset. Either way predictions are made at offset 0, so they are densities per nmi², and `get_index(area =)` scales them once by the grid cell area. `year` is the **index year** (`INDEX_YEAR_START_MONTH`, `INDEX_YEAR_LABEL`); `calendar_year` keeps the survey year.
 
-If Step 1 acquired a broader reporting polygon and added a `region` field, filter that field to the model-domain label here before constructing the mesh. Do not remove the broader stations during survey qualification or data-overview compilation.
+If Step 1 acquired a broader reporting polygon and added a `region` field, filter that field to the model-domain label here before constructing the mesh. Do not remove the broader stations during survey qualification or data compilation.
 
 ```{r prepare, eval=params$refit_model}
 dt <- prepare_model_data(dt, cfg)   # lon/lat, calendar and index year, value, offset, X/Y (km)
@@ -224,7 +224,7 @@ source(here::here("R", "report_helpers.R"))
 # Add every additional package that influenced this report, including optional packages.
 report_software(
   c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "sdmTMB", "sdmTMBexperiments", "knitr"),
-  here::here("docs", "assets", "fit-software.bib")
+  here::here(cfg$DOCS_DIR %||% "docs", "assets", "fit-software.bib")
 )
 ```
 
