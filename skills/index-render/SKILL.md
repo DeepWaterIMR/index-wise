@@ -26,6 +26,10 @@ conventions to every generated artifact; retain index-wise's scientific workflow
 an available code-review tool, then fix issues first. A `/code-review` command is optional and
 may not be installed in every agent environment.
 
+**AI statement.** Every document must carry an AI statement naming the model (wise-writing
+`ai-disclosure.md`). Run `Rscript ai/tests/test-ai-statement.R` from the project root and add
+or complete the statement in any document it reports before rendering.
+
 ## Step 2 — Check the toggles
 
 - First run of a document: compute toggles (`refit_model`, `recompute_grid`, …) `TRUE`.

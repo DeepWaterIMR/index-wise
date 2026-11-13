@@ -229,7 +229,7 @@ report_software(
 ```
 
 <!-- Before release, replace this draft disclosure with the exact researcher-confirmed model names and roles. Append to existing model lists; never claim approval that has not occurred. -->
-AI-assisted drafting and analysis require researcher review. The responsible authors must confirm the AI models used and approve the final content.
+This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. The authors designed the study, specified and checked the analyses, and reviewed, edited and approved the AI-assisted content, for which they take full responsibility. This version has not yet been reviewed by the authors.
 
 # References {.unnumbered}
 

@@ -37,17 +37,26 @@ does not repeat survey selection (stock area, filter, surveys, gear tables, timi
    - *Station-level data*: density map of both products; *Prediction region*
      (`build_stock_region()`: concave hull of positive hauls, `REGION_BUFFER_KM`,
      `REGION_CONCAVITY`, cut to the stock area plus buffered positives; written to
-     `PREDICTION_REGION_FILE`; map and the share of hauls inside); annual share of positive
+     `PREDICTION_REGION_FILE`; `REGION_BUFFER_KM` ≈ 50 km so isolated hauls merge instead of
+     leaving circles; depth-limited grid preview with
+     `sdmTMBexperiments::make_prediction_grid(max_depth = MAX_DEPTH)` drawn as cells, saved as
+     `prediction-grid-base.rds`; map and the share of hauls inside); annual share of positive
      hauls and mean density; *Tow distance* (distance by year and gear type, jittered hauls and
      annual mean ± 95 % CI); depth (scaled depth distribution of all vs positive hauls; density
-     vs depth including zeros on a pseudo-log axis); season and gear.
+     of positive hauls vs depth on a pseudo-log axis with the mean density including zeros in
+     50-m bins as lines; never draw the zero hauls as points or fit a loess through them); season and gear.
    - *Length-based data*: length–weight fit with `ggFishPlots::plot_lw(outlier.sd =
      LW_OUTLIER_SD)` showing removed records; raised length distributions by cruise series;
      annual median and 10–90 % length; source of the length share and annual share above the
      threshold; *Data checks* (`data_checks()`: mean fish weight vs length-based prediction,
-     length coverage of the catch, fishable ≤ total, density = catch / swept area, tow speed,
-     positive hauls outside the prediction region, years without positives; flagged hauls to
-     `ai/review/<stock>-flagged-hauls.csv`).
+     length coverage of the catch, fishable ≤ total, density = catch / swept area, implausible
+     tow speed (duration already set to NA), ICES area code vs position, recorded vs GEBCO
+     depth, positive hauls outside the prediction region or deeper than `MAX_DEPTH`, years
+     without positives, and hauls at the same date and position split by vessel and start
+     time (different vessels = paired/comparison hauls; same vessel, different times =
+     repeated tows; same vessel within 30 min = possible double entry). Checks flag, never
+     remove; flagged hauls to `ai/review/<stock>-flagged-hauls.csv`, same-position hauls to
+     `ai/review/<stock>-same-position-hauls.csv`).
 4. **Results and recommendations**, software, AI statement, references, script appendix.
 
 ## `docs/background/stock-background.qmd`
@@ -58,7 +67,8 @@ section showing how the fishable-length threshold (`OVER_CM`) was derived: comme
 (`FISHABLE_GEAR`, reference fleet; confidential, read at render time and never saved),
 `fishable_length_threshold()` in `R/fishable_length.R` (length where the 5-cm running mean of
 the length frequency first reaches half of its mode), stability by period, and the commercial
-versus survey length distributions. The section states whether the result equals `OVER_CM`. Do not make a separate
+versus survey length distributions (kernel densities with one fixed bandwidth, 3 cm, for both
+sources: the automatic bandwidth is too narrow for large commercial samples). The section states whether the result equals `OVER_CM`. Do not make a separate
 fishable-length document.
 
 ## `<stock>-1-summary.qmd`
@@ -105,13 +115,20 @@ Setup chunks first (`root.dir` in its own chunk, then config/source), then:
    table with mean [min–max]), *Survey timing* (`plot_survey_timing()`: static figure, newest year on top, one label per
    year, cruise series dodged within a year, transparent segments; `interactive = TRUE` gives
    a plotly widget for data documents, but it adds about 3.8 MB and its container height
-   still needs work in Quarto), *Gross-error screening* (table), *Other data in
+   still needs work in Quarto), *Gross-error screening* (table and text: position errors removed by
+   `flag_position_errors()` — GEBCO depth > `POSITION_ERROR_DEPTH` with recorded depth <
+   GEBCO / `POSITION_ERROR_RATIO` or missing; implausible tow speeds handled by
+   `clean_tow_speed()` — distance kept, duration set to NA; length–weight outliers explained as
+   left out of the length–weight regression only), *Other data in
    the database* (counts by mission type and gear; no positions).
 4. **Results and recommendations** — *Ready for downstream use*, *Provisional*, *To decide*.
 5. **Software and reproducibility**, AI statement, References, script appendix.
 
 ## Writing and figure rules
 
+- **Every document has an AI statement** naming the model (wise-writing `ai-disclosure.md`):
+  the summary, survey-selection, data, background, fit, validation and report documents alike.
+  `ai/tests/test-ai-statement.R` checks this; run it before rendering.
 - **Text first.** The paragraph that refers to a figure or table comes before it.
 - Every data-derived number is inline R; interpretive sentences that depend on the data (which
   series dominate, which gear) are computed, not typed, so the document stays true for another

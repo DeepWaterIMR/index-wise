@@ -559,7 +559,7 @@ survey_label <- function(code, short, cruise, cfg) {
 #' @param ratio Concavity ratio for [sf::st_concave_hull()] (`REGION_CONCAVITY`).
 #' @param label Region name.
 #' @return sf polygon with a `region` column.
-build_stock_region <- function(dt, stock_area, crs, buffer_km = 25, ratio = 0.1,
+build_stock_region <- function(dt, stock_area, crs, buffer_km = 50, ratio = 0.1,
                                label = "prediction region") {
   pos <- dplyr::filter(dt, biomass > 0)
   pts <- sf::st_as_sf(pos, coords = c("longitudestart", "latitudestart"), crs = 4326) |>
@@ -577,16 +577,117 @@ build_stock_region <- function(dt, stock_area, crs, buffer_km = 25, ratio = 0.1,
     sf::st_sf(region = label, geometry = _)
 }
 
+#' Tow speed from distance and duration; implausible durations set to NA
+#'
+#' The towed distance is taken as correct, because it defines the swept area. When the speed
+#' implied by distance and duration is outside `limits`, the start/stop times are the likely
+#' error: `duration_min` and `tow_speed` are set to `NA` and `speed_flag` is `TRUE`. The haul
+#' is kept.
+#'
+#' @param dt Stations with `distance` (nmi) and `duration_min`.
+#' @param limits Plausible tow speeds (knots), `TOW_SPEED_LIMITS` in `config.yaml`.
+#' @return `dt` with `tow_speed` (knots) and `speed_flag`.
+clean_tow_speed <- function(dt, limits = c(1.5, 6)) {
+  limits <- as.numeric(unlist(limits))
+  speed <- dt$distance / (dt$duration_min / 60)
+  bad <- !is.na(speed) & (!is.finite(speed) | speed < limits[1] | speed > limits[2])
+  dt$speed_flag <- bad
+  dt$tow_speed <- dplyr::if_else(bad, NA_real_, speed)
+  dt$duration_min[bad] <- NA_real_
+  dt
+}
+
+#' Hauls whose position cannot be right: deep water on GEBCO, shallow recorded depth
+#'
+#' A bottom-trawl haul whose position lies deeper than `min_gebco` m on GEBCO while its
+#' recorded bottom depth is less than `1 / ratio` of that (or missing) has a wrong position:
+#' the trawl did not fish in the deep ocean. Such hauls cannot be placed in space and are
+#' removed in the survey selection (`POSITION_ERROR_DEPTH`, `POSITION_ERROR_RATIO`).
+#'
+#' @param dt Stations with `depth_gebco` and `depth_recorded`.
+#' @param min_gebco GEBCO depth (m) beyond which a position is checked.
+#' @param ratio Factor by which GEBCO depth must exceed the recorded depth.
+#' @return The flagged rows of `dt`.
+flag_position_errors <- function(dt, min_gebco = 1500, ratio = 3) {
+  dplyr::filter(
+    dt, !is.na(depth_gebco), depth_gebco > min_gebco,
+    is.na(depth_recorded) | depth_recorded <= 0 | depth_recorded * ratio < depth_gebco
+  )
+}
+
+#' Hauls at the same date and position, classified by vessel and start time
+#'
+#' @param dt Stations with `station_date`, `start_time`, `platform`, positions.
+#' @param max_minutes Start times closer than this on the same vessel are possible double
+#'   entries.
+#' @return Hauls in groups of more than one with `pair_type`: "different vessels" (paired or
+#'   comparison hauls; not duplicates), "same vessel, repeated tow" (start times differ;
+#'   repeated or experimental tows) or "same vessel, same start time" (possible double entry).
+classify_same_position_hauls <- function(dt, max_minutes = 30) {
+  dt |>
+    dplyr::mutate(key = paste(station_date, round(latitudestart, 2),
+                              round(longitudestart * cos(latitudestart * pi / 180), 2))) |>
+    dplyr::group_by(key) |>
+    dplyr::filter(dplyr::n() > 1) |>
+    dplyr::mutate(n_vessels = dplyr::n_distinct(platform)) |>
+    dplyr::group_by(key, platform) |>
+    dplyr::arrange(start_time, .by_group = TRUE) |>
+    dplyr::mutate(
+      gap = pmin(abs(as.numeric(difftime(start_time, dplyr::lag(start_time), units = "mins"))),
+                 abs(as.numeric(difftime(dplyr::lead(start_time), start_time, units = "mins"))),
+                 na.rm = TRUE),
+      n_same = dplyr::n()
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(pair_type = dplyr::case_when(
+      n_same > 1 & !is.na(gap) & gap < max_minutes ~ "same vessel, same start time",
+      n_same > 1 ~ "same vessel, repeated tow",
+      TRUE ~ "different vessels"
+    ))
+}
+
+#' Hauls whose position lies in another ICES subarea than the recorded area code
+#'
+#' @param dt Stations with `icesarea` and positions.
+#' @param ices_file ICES areas shapefile (`ICES_AREAS_FILE`), with `Area_Full`.
+#' @return The mismatching rows with `ices_position`, or `NULL` without a file.
+ices_area_mismatch <- function(dt, ices_file) {
+  if (is.null(ices_file) || !file.exists(ices_file)) return(NULL)
+  ices <- sf::st_make_valid(sf::read_sf(ices_file))[, "Area_Full"]
+  pts <- sf::st_as_sf(dplyr::select(dt, haul_id, icesarea, longitudestart, latitudestart),
+                      coords = c("longitudestart", "latitudestart"), crs = 4326) |>
+    sf::st_transform(sf::st_crs(ices))
+  hit <- sf::st_join(pts, ices, join = sf::st_intersects, left = TRUE) |>
+    sf::st_drop_geometry() |>
+    dplyr::group_by(haul_id, icesarea) |>
+    dplyr::summarise(ices_position = paste(unique(Area_Full), collapse = ", "), .groups = "drop")
+  # Compare at subarea level (27.1, 27.2, ...), which defines the stocks. Division codes
+  # differ systematically between Biotic and the 2021 polygons along some boundaries (for
+  # example 27.2.b.2 in Biotic vs 27.2.a.2 in the polygons at 73.5-73.8 N), which is a
+  # definition difference rather than a record error.
+  subarea <- function(x) sub("^([0-9]+\\.[0-9]+).*$", "\\1", x)
+  dplyr::filter(hit, !is.na(icesarea), ices_position != "NA",
+                subarea(icesarea) != subarea(ices_position))
+}
+
 #' Data checks for the compiled station and length data
+#'
+#' Checks flag hauls for inspection; none removes data.
 #'
 #' @param dt Compiled station data.
 #' @param lengths Length records with `haul_id`, `length_cm`, `raising`, `catchsampleid`,
 #'   `catchcount`.
 #' @param lw Length–weight fit (`a`, `b`).
 #' @param region Prediction-region polygon (or `NULL`).
+#' @param ices_file ICES areas shapefile for the area-code check (or `NULL`).
+#' @param max_depth Deepest prediction-grid depth (m), `MAX_DEPTH` (or `NULL`).
+#' @param depth_ratio Factor by which recorded and GEBCO depth may differ before a haul is
+#'   flagged.
 #' @return Tibble of checks with the number of flagged hauls or records; attribute
-#'   `flagged` lists the flagged hauls of the weight and speed checks.
-data_checks <- function(dt, lengths, lw, region = NULL) {
+#'   `flagged` lists the flagged hauls and attribute `same_position` the hauls at a shared
+#'   date and position.
+data_checks <- function(dt, lengths, lw, region = NULL, ices_file = NULL, max_depth = NULL,
+                        depth_ratio = 2) {
   pos <- dplyr::filter(dt, biomass > 0)
   # Mean fish weight in the catch against the mean predicted weight of the measured fish
   pred <- lengths |>
@@ -604,53 +705,75 @@ data_checks <- function(dt, lengths, lw, region = NULL) {
     dplyr::summarise(measured_count = sum(catchcount, na.rm = TRUE), .groups = "drop") |>
     dplyr::inner_join(dplyr::select(pos, haul_id, count), by = "haul_id") |>
     dplyr::filter(count > 0)
-  speed <- dt$distance / (dt$duration_min / 60)
+  speed_flag <- if ("speed_flag" %in% names(dt)) dt$speed_flag else rep(NA, nrow(dt))
   outside <- if (is.null(region)) NA_integer_ else {
     pts <- sf::st_as_sf(pos, coords = c("longitudestart", "latitudestart"), crs = 4326) |>
       sf::st_transform(sf::st_crs(region))
     sum(lengths(sf::st_intersects(pts, region)) == 0)
   }
   years <- seq(min(dt$year), max(dt$year))
-  # Possible duplicate hauls: same date and position (rounded to about 1 km) but different ids
-  dup <- dt |>
-    dplyr::mutate(key = paste(station_date, round(latitudestart, 2),
-                              round(longitudestart * cos(latitudestart * pi / 180), 2))) |>
-    dplyr::group_by(key) |>
-    dplyr::filter(dplyr::n() > 1) |>
-    dplyr::ungroup()
+  same_pos <- classify_same_position_hauls(dt)
+  dup <- dplyr::filter(same_pos, pair_type == "same vessel, same start time")
+  ices_mis <- ices_area_mismatch(dt, ices_file)
+  depth_mis <- dplyr::filter(dt, !is.na(depth_ratio),
+                             depth_ratio > !!depth_ratio | depth_ratio < 1 / !!depth_ratio)
+  deep_pos <- if (is.null(max_depth)) pos[0, ] else dplyr::filter(pos, depth > max_depth)
   flagged <- dplyr::bind_rows(
-    dplyr::transmute(dup, haul_id, check = "possible duplicate (same date and position)",
-                     value = NA_real_),
+    dplyr::transmute(dup, haul_id, check = "possible double entry (same vessel, start time and position)",
+                     value = gap),
     dplyr::transmute(dplyr::filter(wcheck, ratio > 3 | ratio < 1 / 3), haul_id,
                      check = "mean fish weight", value = ratio),
-    dplyr::transmute(dplyr::filter(dplyr::mutate(dt, speed = speed), speed < 1.5 | speed > 6),
-                     haul_id, check = "tow speed (knots)", value = speed)
+    dplyr::transmute(dplyr::filter(dt, speed_flag %in% TRUE), haul_id,
+                     check = "tow speed implausible; duration set to NA",
+                     value = distance),
+    if (!is.null(ices_mis)) dplyr::transmute(ices_mis, haul_id,
+                     check = paste0("ICES area code ", icesarea, " but position in ", ices_position),
+                     value = NA_real_),
+    dplyr::transmute(depth_mis, haul_id, check = "recorded depth / GEBCO depth",
+                     value = depth_ratio),
+    dplyr::transmute(deep_pos, haul_id, check = "positive haul deeper than MAX_DEPTH (m)",
+                     value = depth)
   )
+  n_type <- function(x) sum(same_pos$pair_type == x)
   out <- tibble::tibble(
     Check = c(
       "Mean fish weight in the catch differs from the length-based prediction by more than a factor of 3",
       "Length-measured catch samples cover less than 90 % of the haul count",
       "Fishable biomass exceeds total biomass",
       "Density differs from catch / swept area",
-      "Tow speed outside 1.5–6 knots (distance / duration)",
+      "Tow speed (distance / duration) implausible; duration set to NA, distance kept",
+      "Recorded ICES subarea differs from the subarea of the position",
+      paste0("Recorded depth differs from GEBCO depth by more than a factor of ", depth_ratio),
       "Positive hauls outside the prediction region",
+      if (is.null(max_depth)) "Positive hauls deeper than the prediction grid" else
+        paste0("Positive hauls deeper than the prediction grid (", max_depth, " m)"),
       "Years without positive hauls",
-      "Possible duplicate hauls (same date and position within about 1 km)"
+      "Same date and position (about 1 km): different vessels (paired or comparison hauls)",
+      "Same date and position: same vessel, different start times (repeated tows)",
+      "Same date and position: same vessel, start times < 30 min apart (possible double entry)"
     ),
-    Unit = c("hauls", "hauls", "hauls", "hauls", "hauls", "hauls", "years", "hauls"),
+    Unit = c("hauls", "hauls", "hauls", "hauls", "hauls", "hauls", "hauls", "hauls", "hauls",
+             "years", "hauls", "hauls", "hauls"),
     Flagged = c(
       sum(wcheck$ratio > 3 | wcheck$ratio < 1 / 3),
       sum(cover$measured_count / cover$count < 0.9),
       sum(dt$biomass_fishable > dt$biomass + 1e-9),
       sum(abs(dt$rho_biomass - dt$biomass / dt$swept_area) > 1e-6),
-      sum(speed < 1.5 | speed > 6, na.rm = TRUE),
+      sum(speed_flag, na.rm = TRUE),
+      if (is.null(ices_mis)) NA_integer_ else nrow(ices_mis),
+      nrow(depth_mis),
       outside,
+      nrow(deep_pos),
       sum(!years %in% pos$year),
-      nrow(dup)
+      n_type("different vessels"),
+      n_type("same vessel, repeated tow"),
+      n_type("same vessel, same start time")
     ),
-    Of = c(nrow(wcheck), nrow(cover), nrow(dt), nrow(dt), sum(!is.na(speed)), nrow(pos),
-           length(years), nrow(dt))
+    Of = c(nrow(wcheck), nrow(cover), nrow(dt), nrow(dt), sum(!is.na(dt$distance)), nrow(dt),
+           sum(!is.na(dt$depth_ratio)), nrow(pos), nrow(pos), length(years), nrow(dt), nrow(dt),
+           nrow(dt))
   )
   attr(out, "flagged") <- flagged
+  attr(out, "same_position") <- same_pos
   out
 }

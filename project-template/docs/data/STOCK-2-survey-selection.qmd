@@ -81,7 +81,12 @@ con <- DBI::dbConnect(duckdb::duckdb(
 db_meta <- DBI::dbGetQuery(con, "SELECT * FROM metadata")
 
 res <- compile_species_stations(con, cfg, last_year)
-dt <- add_response_and_covariates(res$stations, cfg)
+dt <- add_response_and_covariates(res$stations, cfg) |>
+  clean_tow_speed(cfg$TOW_SPEED_LIMITS %||% c(1.5, 6))
+# Hauls positioned in deep water while the recorded depth is shallow have a wrong position.
+position_errors <- flag_position_errors(dt, cfg$POSITION_ERROR_DEPTH %||% 1500,
+                                        cfg$POSITION_ERROR_RATIO %||% 3)
+dt <- dplyr::filter(dt, !haul_id %in% position_errors$haul_id)
 
 lengths <- collect_lengths(con, cfg, dt)
 length_limits <- unlist(cfg$LENGTH_LIMITS %||% c(5, 200)) # plausible lengths (cm)
@@ -99,6 +104,8 @@ other_data <- other_data_summary(con, cfg)
 DBI::dbDisconnect(con, shutdown = TRUE)
 
 dir.create(here::here("ai", "review"), recursive = TRUE, showWarnings = FALSE)
+readr::write_csv(position_errors,
+                 here::here("ai", "review", paste0(stock, "-position-errors.csv")))
 readr::write_csv(res$diagnostics$duplicates,
                  here::here("ai", "review", paste0(stock, "-duplicate-hauls.csv")))
 readr::write_csv(res$diagnostics$incomplete,
@@ -117,6 +124,11 @@ compile_metadata <- list(
   lw_plot = lw$plot,
   lw_outlier_sd = cfg$LW_OUTLIER_SD %||% 4,
   n_lw_outliers = nrow(lw$outliers),
+  position_errors = dplyr::select(position_errors, haul_id, year, cruiseseries, platformname,
+                                  longitudestart, latitudestart, depth_recorded, depth_gebco,
+                                  biomass, count),
+  n_speed_flag = sum(dt$speed_flag),
+  tow_speed_limits = unlist(cfg$TOW_SPEED_LIMITS %||% c(1.5, 6)),
   length_limits = length_limits,
   n_length_outliers = nrow(length_outliers),
   positive_observations = positive_observations,
@@ -483,7 +495,7 @@ plot_survey_timing(dt, cs_cols)
 
 ## Gross-error screening
 
-Recorded depths, positions and length and weight records were screened for gross errors (@tbl-screening). Depth mismatches are reported but not removed, because the recorded depth is the better measure on steep slopes; they are examined in the data report.
+Recorded depths, positions, tow durations and length and weight records were screened for gross errors (@tbl-screening). Hauls positioned deeper than `r cfg$POSITION_ERROR_DEPTH %||% 1500` m on GEBCO while their recorded bottom depth is shallower than the GEBCO depth divided by `r cfg$POSITION_ERROR_RATIO %||% 3`, or missing, cannot have fished where they are positioned; the trawls were bottom trawls, and neither species lives pelagically. These hauls are removed, because their position is wrong (`r nrow(compile_metadata$position_errors)` hauls, `r sum(compile_metadata$position_errors$biomass > 0)` with `r sp`; listed in `ai/review/`). The towed distance is taken as correct, because it defines the swept area: where distance and duration imply a speed outside `r paste(compile_metadata$tow_speed_limits, collapse = '–')` knots, the duration is set to missing and the haul is kept. The length–weight outliers are individual weights that deviate strongly from the log-length–log-weight regression; they are left out of that regression, which predicts the weight of each measured fish for the fishable share, but the fish stay in the length data. Depth mismatches are reported but not removed, because the recorded depth is the better measure on steep slopes; they are examined in the data report.
 
 ```{r}
 #| label: tbl-screening
@@ -493,12 +505,16 @@ tibble::tibble(
             "Haul on land according to GEBCO (depth ≤ 0)",
             paste0("Length records outside ", compile_metadata$length_limits[1], "–",
                    compile_metadata$length_limits[2], " cm (removed)"),
-            paste0("Length–weight outliers (|standardised residual| > ", compile_metadata$lw_outlier_sd %||% 4, "; excluded from the fit)"),
+            paste0("Hauls with a wrong position (GEBCO depth > ", cfg$POSITION_ERROR_DEPTH %||% 1500, " m, recorded depth < GEBCO / ", cfg$POSITION_ERROR_RATIO %||% 3, " or missing; removed)"),
+            paste0("Tow speed (distance / duration) outside ", paste(compile_metadata$tow_speed_limits, collapse = "–"), " knots (duration set to missing; haul kept)"),
+            paste0("Individual weights with |standardised residual| > ", compile_metadata$lw_outlier_sd %||% 4, " in the log-length–log-weight regression (left out of the length–weight regression used to predict weight at length; fish kept in the length data)"),
             "Positive hauls without length measurements"),
   Count = c(sum(dt$depth_source == "GEBCO"),
             sum(dt$depth_ratio > 2 | dt$depth_ratio < 0.5, na.rm = TRUE),
             sum(dt$depth_gebco <= 0, na.rm = TRUE),
             compile_metadata$n_length_outliers,
+            nrow(compile_metadata$position_errors),
+            compile_metadata$n_speed_flag,
             compile_metadata$n_lw_outliers,
             sum(dt$biomass > 0 & dt$n_measured == 0))
 ) |>

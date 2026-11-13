@@ -248,20 +248,34 @@ pts <- sf::st_as_sf(dt, coords = c("longitudestart", "latitudestart"), crs = 432
   sf::st_transform(cfg$CRS)
 dt$in_region <- lengths(sf::st_intersects(pts, region)) > 0
 n_inside <- sum(dt$in_region)
+# Depth-limited grid preview (the model fit builds the final grid the same way)
+max_depth <- cfg$MAX_DEPTH %||% 1000
+grid_base <- sdmTMBexperiments::make_prediction_grid(region, resolution = cfg$GRID_KM,
+                                                     max_depth = max_depth)
+if (!is.null(cfg$MIN_DEPTH)) grid_base <- grid_base[grid_base$depth >= cfg$MIN_DEPTH, ]
+saveRDS(grid_base, file.path(out_dir, "prediction-grid-base.rds"))
+grid_pts <- data.frame(x = grid_base$X * 1000, y = grid_base$Y * 1000) |>  # grid is in km
+  sf::st_as_sf(coords = c("x", "y"), crs = cfg$CRS) |>
+  sf::st_transform(4326)
+region_km2 <- as.numeric(sf::st_area(sf::st_union(region))) / 1e6
+grid_km2 <- nrow(grid_base) * cfg$GRID_KM^2
+n_pos_deep <- sum(pos$depth > max_depth, na.rm = TRUE)
 base_region <- ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 8, rotate = TRUE,
                                     expand.factor = 1, land.col = "grey85",
                                     land.border.col = "grey60")
 region_map_height <- map_fig_height(base_region, extra = 0.6)
 ```
 
-The models predict density only where `r sp` has been caught. The prediction region is the concave hull of all hauls with `r sp`, buffered by `r cfg$REGION_BUFFER_KM %||% 25` km and cut to `r area_label` (@fig-prediction-region). Areas with only zero observations are left out. Land and depth limits are applied when the prediction grid is built in the model fit. `r n_fmt(n_inside)` of the `r n_fmt(nrow(dt))` hauls (`r round(100 * n_inside / nrow(dt))` %) lie inside the region, including `r n_fmt(sum(dt$in_region & dt$biomass > 0))` of the `r n_fmt(nrow(pos))` hauls with `r sp`.
+The models predict density only where `r sp` has been caught. The prediction region is the concave hull of all hauls with `r sp`, buffered by `r cfg$REGION_BUFFER_KM %||% 50` km and cut to `r area_label` (@fig-prediction-region). The buffer is wide enough to merge isolated hauls into the region instead of leaving circles around them. Areas with only zero observations are left out. Within the region, the prediction grid keeps the `r cfg$GRID_KM`-km cells between land and `r max_depth` m depth (GEBCO, `ggOceanMaps::get_depth()`): `r n_fmt(nrow(grid_base))` cells, `r n_fmt(round(grid_km2, -2))` km² of the `r n_fmt(round(region_km2, -2))` km² region. `r if (n_pos_deep == 0) paste0("No haul with ", sp, " is deeper than this limit.") else paste0(n_pos_deep, if (n_pos_deep == 1) " haul" else " hauls", " with ", sp, if (n_pos_deep == 1) " is" else " are", " deeper than this limit; ", if (n_pos_deep == 1) "it stays" else "they stay", " in the model data but outside the prediction area.")` The model fit builds its grid in the same way. `r n_fmt(n_inside)` of the `r n_fmt(nrow(dt))` hauls (`r round(100 * n_inside / nrow(dt))` %) lie inside the region, including `r n_fmt(sum(dt$in_region & dt$biomass > 0))` of the `r n_fmt(nrow(pos))` hauls with `r sp`.
 
 
 ```{r, fig.height = region_map_height}
 #| label: fig-prediction-region
-#| fig-cap: !expr 'paste0("Prediction region for ", sp, " (blue): concave hull of the hauls with ", sp, " (orange), buffered and cut to ", area_label, ". Grey crosses: hauls without ", sp, ".")'
+#| fig-cap: !expr 'paste0("Prediction region for ", sp, " (blue outline): concave hull of the hauls with ", sp, " (orange), buffered and cut to ", area_label, ". Blue squares: prediction-grid cells shallower than ", max_depth, " m. Grey crosses: hauls without ", sp, ".")'
 (base_region +
-  ggplot2::geom_sf(data = sf::st_transform(region, 4326), fill = "#0072B2", alpha = 0.15,
+  ggplot2::geom_sf(data = grid_pts, shape = 15, size = 0.25, colour = "#0072B2", alpha = 0.35,
+                   inherit.aes = FALSE) +
+  ggplot2::geom_sf(data = sf::st_transform(region, 4326), fill = NA,
                    colour = "#0072B2", linewidth = 0.6, inherit.aes = FALSE) +
   ggspatial::geom_spatial_point(data = dplyr::filter(dt, biomass == 0),
     aes(longitudestart, latitudestart), shape = 3, size = 0.2, colour = "grey50", alpha = 0.4,
@@ -300,7 +314,7 @@ cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v", rel_heights
 
 ### Tow distance
 
-Tow distance enters the response through the swept area. @fig-effort shows the retained tow distances by year and gear type; changes in the typical tow distance change the swept area per haul and therefore the scale of the density values.
+Tow distance enters the response through the swept area. @fig-effort shows the retained tow distances by year and gear type; changes in the typical tow distance change the swept area per haul and therefore the scale of the density values. The distance is taken as correct; for `r n_fmt(sum(dt$speed_flag))` hauls whose distance and duration imply an implausible tow speed, the duration was set to missing in the survey selection.
 
 ```{r}
 #| label: fig-effort
@@ -323,12 +337,12 @@ ggplot(dt, aes(year, distance)) +
 
 ### Depth
 
-Depth enters the models as a smooth term. The hauls with `r sp` cover a narrower depth range than the sampling effort (@fig-depth A), and density, including the zeros, varies with depth (@fig-depth B). The depth range of the data limits the depth range of the prediction grid.
+Depth enters the models as a smooth term. The hauls with `r sp` cover a narrower depth range than the sampling effort (@fig-depth A), and both the density in positive hauls and the mean density including zeros vary with depth (@fig-depth B). The depth range of the data limits the depth range of the prediction grid.
 
 ```{r}
 #| label: fig-depth
 #| fig-height: 6
-#| fig-cap: !expr 'paste0("Depth distribution of the data. A: bottom depth of all hauls and of hauls with ", sp, " (densities scaled to the same maximum; the deepest 0.5 % of hauls are outside the plotted range). B: biomass density against depth in all hauls, including zeros (pseudo-logarithmic y-axis); lines are descriptive loess smooths of all hauls, not the model.")'
+#| fig-cap: !expr 'paste0("Depth distribution of the data. A: bottom depth of all hauls and of hauls with ", sp, " (densities scaled to the same maximum; the deepest 0.5 % of hauls are outside the plotted range). B: biomass density against depth in hauls with ", sp, " (points; pseudo-logarithmic y-axis) and mean density of all hauls including zeros in 50-m depth bins with at least 20 hauls (lines). Zero hauls are not drawn as points.")'
 depth_lim <- c(0, stats::quantile(dt$depth, 0.995, na.rm = TRUE))
 depth_hauls <- dplyr::bind_rows(
   dplyr::mutate(dt, group = "All hauls"),
@@ -340,10 +354,18 @@ p_a <- ggplot(depth_hauls, aes(depth, after_stat(scaled), fill = group)) +
   coord_cartesian(xlim = depth_lim) +
   labs(x = NULL, y = "Scaled density", fill = NULL) +
   theme(legend.position = "top")
+depth_means <- products |>
+  dplyr::filter(!is.na(depth)) |>
+  dplyr::mutate(depth_bin = floor(depth / 50) * 50 + 25) |>
+  dplyr::group_by(product, depth_bin) |>
+  dplyr::summarise(density = mean(density), n = dplyr::n(), .groups = "drop") |>
+  dplyr::filter(n >= 20)
 p_b <- products |>
+  dplyr::filter(density > 0) |>
   ggplot(aes(depth, density, colour = product)) +
   geom_point(size = 0.4, alpha = 0.15) +
-  geom_smooth(method = "loess", formula = y ~ x, se = FALSE, span = 0.5) +
+  geom_line(data = depth_means, aes(depth_bin), linewidth = 0.9) +
+  geom_point(data = depth_means, aes(depth_bin), size = 1.2) +
   scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1, base = 10),
                      breaks = c(0, 1, 10, 100, 1000, 1e4),
                      labels = scales::label_number(drop0trailing = TRUE)) +
@@ -546,11 +568,18 @@ cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v", axis = "lr"
 
 ### Data checks
 
-The automated checks in @tbl-data-checks look for errors that the haul filter cannot catch: unit or subsampling errors in catch weight and count, partly measured catches, inconsistent derived values, implausible tow speeds, positive hauls outside the prediction region and gaps in the time series. Flagged hauls are not removed automatically; they are listed in `ai/review/` for inspection.
+The automated checks in @tbl-data-checks look for errors that the haul filter cannot catch: unit or subsampling errors in catch weight and count, partly measured catches, inconsistent derived values, implausible tow speeds, ICES subareas in the area code that do not match the position (division boundaries differ between Biotic and the ICES polygons, so divisions are not compared), recorded depths that do not match the GEBCO depth, positive hauls outside the prediction region or deeper than the prediction grid, gaps in the time series, and hauls at the same date and position. Hauls at the same date and position are split by vessel and start time: hauls by different vessels are paired or comparison hauls, and hauls by one vessel at different times are repeated tows, often experiments with different tow durations or gear; neither is a duplicate. Only hauls by one vessel starting within 30 minutes of each other are possible double entries. No haul is removed on the basis of these checks; the flagged hauls are listed in `ai/review/` for inspection of the records.
 
 ```{r}
 #| label: tbl-data-checks
-checks <- data_checks(dt, lengths, lw, region)
+checks <- data_checks(dt, lengths, lw, region, ices_file = here::here(cfg$ICES_AREAS_FILE),
+                      max_depth = max_depth)
+readr::write_csv(
+  attr(checks, "same_position") |>
+    dplyr::select(key, pair_type, haul_id, platformname, cruiseseries, gear, start_time,
+                  distance, duration_min, biomass, count, depth),
+  here::here("ai", "review", paste0(stock, "-same-position-hauls.csv"))
+)
 readr::write_csv(
   attr(checks, "flagged") |>
     dplyr::left_join(dplyr::select(dt, haul_id, year, cruiseseries, gearname, biomass, count,

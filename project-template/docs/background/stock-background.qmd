@@ -46,6 +46,7 @@ area_label <- if (length(cfg$STOCK_SUBAREAS)) {
   paste("ICES subareas", paste(unlist(cfg$STOCK_SUBAREAS), collapse = " and "))
 } else cfg$REGION
 n_fmt <- function(x) format(x, big.mark = " ")
+fl_bw <- 3  # kernel bandwidth (cm) for the length densities in fig-survey-vs-commercial
 last_year <- as.integer(cfg$LAST_YEAR %||% (as.integer(format(Sys.Date(), "%Y")) - 1L))
 
 # Reference-fleet records are confidential: read at render time, never saved.
@@ -116,18 +117,18 @@ lapply(split(cl$length_cm, periods), function(x) {
   knitr::kable(caption = "Mode, threshold and median length of the commercial catch by period.")
 ```
 
-The research bottom trawls catch a wider length range than the longline fishery, including small fish (@fig-survey-vs-commercial). The share of the survey catch above the threshold is therefore lower than in the commercial catch, and the fishable-biomass index follows the part of the stock that the fishery exploits.
+The research bottom trawls catch a wider length range than the longline fishery, including small fish (@fig-survey-vs-commercial). The share of the survey catch above the threshold is therefore lower than in the commercial catch, and the fishable-biomass index follows the part of the stock that the fishery exploits. The distributions are kernel density estimates with the same fixed Gaussian bandwidth (`r fl_bw` cm) for both sources; the automatic bandwidth shrinks with sample size and shows the heaping of recorded lengths in large commercial samples as spurious peaks.
 
 ```{r}
 #| label: fig-survey-vs-commercial
-#| fig-cap: !expr 'paste0("Length distributions of ", sp, " in reference-fleet longline catches and in the research bottom-trawl surveys used for the index (raised numbers), scaled to the same area. Dashed line: fishable-length threshold.")'
+#| fig-cap: !expr 'paste0("Length distributions of ", sp, " in reference-fleet longline catches and in the research bottom-trawl surveys used for the index (raised numbers), scaled to the same area (Gaussian kernel, bandwidth ", fl_bw, " cm). Dashed line: fishable-length threshold.")'
 dplyr::bind_rows(
   tibble::tibble(length_cm = cl$length_cm, w = 1, source = "Reference-fleet longlines"),
   tibble::tibble(length_cm = floor(survey_lengths$length_cm), w = survey_lengths$raising,
                  source = "Research bottom trawls")
 ) |>
   ggplot(aes(length_cm, weight = w, fill = source)) +
-  geom_density(alpha = 0.5, colour = NA, adjust = 0.7) +
+  geom_density(alpha = 0.5, colour = NA, bw = fl_bw) +
   geom_vline(xintercept = thr$threshold, linetype = "dashed") +
   scale_fill_manual(values = c("#D55E00", "#0072B2"), name = NULL) +
   labs(x = "Length (cm)", y = "Density") +
@@ -137,6 +138,10 @@ dplyr::bind_rows(
 # Implications for the survey indices
 
 <!-- PLACEHOLDER: what the background implies for the index (area, smoothing, length-based product, comparison with existing indices). -->
+
+# Software and reproducibility
+
+This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. AI was used to search for and summarise the background sources, write code and draft text. The document is compiled with Quarto `r system("quarto --version", intern = TRUE)` and knitr `r packageVersion("knitr")` under `r R.version.string`. The authors specified and checked the analyses and are responsible for reviewing, editing and approving all AI-assisted content. This version has not yet been reviewed by the authors.
 
 # References {.unnumbered}
 
