@@ -57,7 +57,7 @@ con <- DBI::dbConnect(duckdb::duckdb(
 cl <- collect_commercial_lengths(con, cfg, gear_category = cfg$FISHABLE_GEAR %||% "Hooks",
                                  last_year = last_year)
 DBI::dbDisconnect(con, shutdown = TRUE)
-thr <- fishable_length_threshold(cl$length_cm)
+thr <- fishable_length_threshold(cl$length_cm, prop = cfg$FISHABLE_PROP %||% 0.5)
 survey_lengths <- readRDS(file.path(out_dir, "length-data.rds"))
 ```
 
@@ -83,7 +83,7 @@ The fishable-biomass index for `r sp` (*`r cfg$SPECIES_LATIN`*, stock `r cfg$STO
 
 The data are length measurements of `r sp` from the Norwegian reference fleet (Referanseflåten) catches with gear category `r cfg$FISHABLE_GEAR %||% "Hooks"` in `r area_label`, `r min(cl$year)`–`r max(cl$year)`, read from the IMR Biotic database when this document is rendered. The records are confidential; only aggregated length frequencies are shown and nothing is saved. The data contain `r n_fmt(nrow(cl))` measured fish.
 
-Lengths were floored to whole centimetres and counted. The length-frequency distribution was smoothed with a centred `r 5`-cm running mean. The threshold is the smallest length on the ascending limb at which the smoothed frequency reaches half of its maximum (the mode). This approximates the length at which half of the fish are retained by the combined effect of longline selectivity and the availability of fish on the fishing grounds. The rule is implemented in `fishable_length_threshold()` in `R/fishable_length.R` (@lst-fishable-length).
+Lengths were floored to whole centimetres and counted. The length-frequency distribution was smoothed with a centred `r 5`-cm running mean. The threshold is the smallest length on the ascending limb at which the smoothed frequency reaches `r round(100 * (cfg$FISHABLE_PROP %||% 0.5))` % of its maximum (the mode). This approximates the length at which this share of the fish is retained, relative to the fully selected lengths, by the combined effect of longline selectivity and the availability of fish on the fishing grounds. The rule is implemented in `fishable_length_threshold()` in `R/fishable_length.R` (@lst-fishable-length).
 
 The smoothed commercial length distribution has its mode at `r thr$mode` cm and reaches half of the modal frequency at **`r thr$threshold` cm** (@fig-commercial-lengths). `r if (identical(as.numeric(thr$threshold), as.numeric(cfg$OVER_CM))) "This equals the threshold in config.yaml." else paste0("This differs from the threshold in config.yaml (", cfg$OVER_CM, " cm); update OVER_CM or explain the difference.")`
 

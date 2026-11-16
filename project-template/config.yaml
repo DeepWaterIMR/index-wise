@@ -34,6 +34,7 @@ LAST_YEAR: null                       # last year to include; null = the year be
 MAX_COLLECT_ROWS: 2000000              # stop before collecting more candidate stations than this
 LENGTH_LIMITS: [5, 200]               # plausible length range (cm); length records outside are removed
 FISHABLE_GEAR: "Hooks"                # Biotic gear category of the commercial catches used for the fishable length (docs/background)
+FISHABLE_PROP: 0.5                    # fishable length = first length where the smoothed commercial length frequency reaches this share of its mode
 LW_OUTLIER_SD: 4                      # length-weight records with |standardised residual| above this are outliers
 TOW_SPEED_LIMITS: [1.5, 6]            # plausible tow speed (knots); outside: duration set to NA, distance kept
 POSITION_ERROR_DEPTH: 1500            # hauls positioned deeper than this on GEBCO (m) ...

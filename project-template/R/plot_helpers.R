@@ -167,3 +167,41 @@ plot_survey_timing <- function(dt, colours, interactive = FALSE, height = 8) {
     w
   } else p
 }
+
+#' Annual station maps of biomass density
+#'
+#' One panel per year with all retained hauls: zero hauls as grey crosses, positive hauls as
+#' circles with size and colour by density on a common log scale across years (after
+#' ref-assessment-index `bubble_map()`, Figure 1.18 of Compile_all_data). Shows how the
+#' survey coverage and the positive hauls change between years.
+#'
+#' @param x Station data with `year`, `longitudestart`, `latitudestart` and `density`.
+#' @param base A `ggOceanMaps::basemap()` covering the data (build it once and reuse).
+#' @param ncol Facet columns.
+#' @param label Legend title.
+#' @return ggplot.
+plot_annual_density <- function(x, base, ncol = 6, label = "Density (kg/nmi²)") {
+  x <- dplyr::filter(x, !is.na(density))
+  base +
+    ggspatial::geom_spatial_point(
+      data = dplyr::filter(x, density == 0),
+      ggplot2::aes(longitudestart, latitudestart), shape = 3, size = 0.15,
+      colour = "grey55", alpha = 0.6, crs = 4326) +
+    ggspatial::geom_spatial_point(
+      data = dplyr::arrange(dplyr::filter(x, density > 0), density),
+      ggplot2::aes(longitudestart, latitudestart, size = density, fill = density),
+      shape = 21, stroke = 0.1, alpha = 0.8, crs = 4326) +
+    ggplot2::scale_fill_viridis_c(trans = "log10", option = "plasma", direction = -1,
+                                  labels = scales::label_number(drop0trailing = TRUE),
+                                  name = label) +
+    ggplot2::scale_size_area(max_size = 2.5, guide = "none") +
+    ggplot2::facet_wrap(~year, ncol = ncol) +
+    ggplot2::theme(axis.title = ggplot2::element_blank(),
+                   axis.text = ggplot2::element_blank(),
+                   axis.ticks = ggplot2::element_blank(),
+                   strip.text = ggplot2::element_text(size = 7,
+                                                      margin = ggplot2::margin(1, 0, 1, 0)),
+                   panel.spacing = ggplot2::unit(0.05, "lines"),
+                   legend.position = "bottom",
+                   legend.key.width = ggplot2::unit(1.5, "cm"))
+}

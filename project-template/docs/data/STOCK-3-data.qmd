@@ -234,6 +234,34 @@ base_density +
         legend.key.width = unit(1.5, "cm"))
 ```
 
+### Annual distribution
+
+The annual maps show the hauls of each year: where the surveys sampled, and how many positive hauls each year gives the models for total biomass (@fig-density-annual-total) and fishable biomass (@fig-density-annual-fishable). Years with few positive hauls, or with positive hauls only in part of the area, carry little information on the year-specific spatial pattern that the spatiotemporal fields estimate.
+
+```{r density-annual-base}
+annual_ncol <- 6
+base_annual <- ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 6,
+                                    rotate = TRUE, expand.factor = 1,
+                                    land.col = "grey85", land.border.col = "grey60")
+annual_map_height <- map_fig_height(base_annual, ncol = annual_ncol,
+                                    nrow = ceiling(n_years / annual_ncol), extra = 1.2,
+                                    side = 0.2)
+```
+
+```{r, fig.height = annual_map_height}
+#| label: fig-density-annual-total
+#| fig-cap: !expr 'paste0("Annual distribution of the retained hauls with total biomass density of ", sp, ". Grey crosses: zero catch; circles: positive hauls, size and colour by density (kg per nmi², logarithmic colour scale common to all years).")'
+plot_annual_density(dplyr::filter(products, product == "Total"), base_annual,
+                    ncol = annual_ncol)
+```
+
+```{r, fig.height = annual_map_height}
+#| label: fig-density-annual-fishable
+#| fig-cap: !expr 'paste0("Annual distribution of the retained hauls with fishable (≥ ", over_cm, " cm) biomass density of ", sp, ". Grey crosses: zero fishable catch; circles: hauls with fishable ", sp, ", size and colour by density (kg per nmi², logarithmic colour scale common to all years).")'
+plot_annual_density(dplyr::filter(products, product == fish_label), base_annual,
+                    ncol = annual_ncol)
+```
+
 ### Prediction region
 
 ```{r prediction-region}
