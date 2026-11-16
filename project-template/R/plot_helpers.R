@@ -170,31 +170,49 @@ plot_survey_timing <- function(dt, colours, interactive = FALSE, height = 8) {
 
 #' Annual station maps of biomass density
 #'
-#' One panel per year with all retained hauls: zero hauls as grey crosses, positive hauls as
-#' circles with size and colour by density on a common log scale across years (after
-#' ref-assessment-index `bubble_map()`, Figure 1.18 of Compile_all_data). Shows how the
-#' survey coverage and the positive hauls change between years.
+#' One panel per year with all retained hauls: zero hauls as dark crosses, positive hauls as
+#' semi-transparent circles with size and colour binned by quantiles of the positive densities,
+#' common to all years; the largest circles are drawn first so that smaller ones stay visible
+#' (after ref-assessment-index `bubble_map()`, Figure 1.18 of Compile_all_data). Shows how the
+#' survey coverage and the positive hauls change between years. Use a pale land colour in
+#' `base` so that the zero crosses stand out.
 #'
 #' @param x Station data with `year`, `longitudestart`, `latitudestart` and `density`.
 #' @param base A `ggOceanMaps::basemap()` covering the data (build it once and reuse).
 #' @param ncol Facet columns.
 #' @param label Legend title.
+#' @param probs Quantiles of the positive densities used as bin breaks.
+#' @param alpha Transparency of the circles.
+#' @param size_range Circle size range.
 #' @return ggplot.
-plot_annual_density <- function(x, base, ncol = 6, label = "Density (kg/nmi²)") {
+plot_annual_density <- function(x, base, ncol = 6, label = "Density (kg/nmi²)",
+                                probs = c(0.25, 0.5, 0.75, 0.9, 0.99), alpha = 0.5,
+                                size_range = c(0.4, 4)) {
   x <- dplyr::filter(x, !is.na(density))
+  pos <- dplyr::filter(x, density > 0)
+  # Quantile bins of the positive densities, common to all years (after the redfish
+  # bubble_map() in ref-assessment-index/R/bubble_map.R)
+  breaks <- unique(signif(stats::quantile(pos$density, probs, names = FALSE), 2))
+  limits <- c(0, max(pos$density) * 1.001)
+  cols <- viridis::turbo(length(breaks) + 1, begin = 0.12, end = 0.95)
   base +
     ggspatial::geom_spatial_point(
       data = dplyr::filter(x, density == 0),
-      ggplot2::aes(longitudestart, latitudestart), shape = 3, size = 0.15,
-      colour = "grey55", alpha = 0.6, crs = 4326) +
+      ggplot2::aes(longitudestart, latitudestart), shape = 3, size = 0.3, stroke = 0.25,
+      colour = "grey15", alpha = 0.5, crs = 4326) +
     ggspatial::geom_spatial_point(
-      data = dplyr::arrange(dplyr::filter(x, density > 0), density),
+      data = dplyr::arrange(pos, dplyr::desc(density)),
       ggplot2::aes(longitudestart, latitudestart, size = density, fill = density),
-      shape = 21, stroke = 0.1, alpha = 0.8, crs = 4326) +
-    ggplot2::scale_fill_viridis_c(trans = "log10", option = "plasma", direction = -1,
-                                  labels = scales::label_number(drop0trailing = TRUE),
-                                  name = label) +
-    ggplot2::scale_size_area(max_size = 2.5, guide = "none") +
+      shape = 21, stroke = 0.15, colour = "grey20", alpha = alpha, crs = 4326) +
+    ggplot2::binned_scale(
+      aesthetics = "fill", palette = function(n) cols, breaks = breaks, limits = limits,
+      labels = scales::label_number(drop0trailing = TRUE, big.mark = " "),
+      name = label, guide = "legend") +
+    ggplot2::scale_size_binned(
+      breaks = breaks, limits = limits, range = size_range,
+      labels = scales::label_number(drop0trailing = TRUE, big.mark = " "), name = label) +
+    ggplot2::guides(fill = ggplot2::guide_legend(nrow = 1, override.aes = list(alpha = 0.8)),
+                    size = ggplot2::guide_legend(nrow = 1)) +
     ggplot2::facet_wrap(~year, ncol = ncol) +
     ggplot2::theme(axis.title = ggplot2::element_blank(),
                    axis.text = ggplot2::element_blank(),
@@ -202,6 +220,5 @@ plot_annual_density <- function(x, base, ncol = 6, label = "Density (kg/nmi²)")
                    strip.text = ggplot2::element_text(size = 7,
                                                       margin = ggplot2::margin(1, 0, 1, 0)),
                    panel.spacing = ggplot2::unit(0.05, "lines"),
-                   legend.position = "bottom",
-                   legend.key.width = ggplot2::unit(1.5, "cm"))
+                   legend.position = "bottom")
 }

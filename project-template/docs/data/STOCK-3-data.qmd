@@ -240,9 +240,11 @@ The annual maps show the hauls of each year: where the surveys sampled, and how 
 
 ```{r density-annual-base}
 annual_ncol <- 6
-base_annual <- ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 6,
-                                    rotate = TRUE, expand.factor = 1,
-                                    land.col = "grey85", land.border.col = "grey60")
+# Limits from the positive hauls, so that the panels are not dominated by empty survey area
+base_annual <- ggOceanMaps::basemap(data = dplyr::filter(products, density > 0),
+                                    legends = FALSE, base_size = 6, rotate = TRUE,
+                                    expand.factor = 1.05, land.col = "grey95",
+                                    land.border.col = "grey70")
 annual_map_height <- map_fig_height(base_annual, ncol = annual_ncol,
                                     nrow = ceiling(n_years / annual_ncol), extra = 1.2,
                                     side = 0.2)
@@ -250,14 +252,14 @@ annual_map_height <- map_fig_height(base_annual, ncol = annual_ncol,
 
 ```{r, fig.height = annual_map_height}
 #| label: fig-density-annual-total
-#| fig-cap: !expr 'paste0("Annual distribution of the retained hauls with total biomass density of ", sp, ". Grey crosses: zero catch; circles: positive hauls, size and colour by density (kg per nmi², logarithmic colour scale common to all years).")'
+#| fig-cap: !expr 'paste0("Annual distribution of the retained hauls with total biomass density of ", sp, ". Dark crosses: zero catch; circles: positive hauls, size and colour binned by quantiles of the positive densities (kg per nmi², bins common to all years). The map extent covers the positive hauls.")'
 plot_annual_density(dplyr::filter(products, product == "Total"), base_annual,
                     ncol = annual_ncol)
 ```
 
 ```{r, fig.height = annual_map_height}
 #| label: fig-density-annual-fishable
-#| fig-cap: !expr 'paste0("Annual distribution of the retained hauls with fishable (≥ ", over_cm, " cm) biomass density of ", sp, ". Grey crosses: zero fishable catch; circles: hauls with fishable ", sp, ", size and colour by density (kg per nmi², logarithmic colour scale common to all years).")'
+#| fig-cap: !expr 'paste0("Annual distribution of the retained hauls with fishable (≥ ", over_cm, " cm) biomass density of ", sp, ". Dark crosses: zero fishable catch; circles: hauls with fishable ", sp, ", size and colour binned by quantiles of the positive densities (kg per nmi², bins common to all years). The map extent covers the positive hauls.")'
 plot_annual_density(dplyr::filter(products, product == fish_label), base_annual,
                     ncol = annual_ncol)
 ```
