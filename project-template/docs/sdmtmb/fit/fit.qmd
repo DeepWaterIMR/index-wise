@@ -129,6 +129,20 @@ sdmTMB::sanity(fit)
 
 If `sanity()` flags problems (large gradients, non-PD Hessian, range > domain), simplify — coarser mesh, drop a smooth, or change the spatiotemporal structure — rather than pressing on.
 
+### Model output
+
+::: {.content-visible when-format="html"}
+The model output, including the fixed-effect estimates and the random-field parameters, is shown in the folded code block below.
+
+```{r model-output, collapse=TRUE}
+fit
+```
+:::
+
+::: {.content-visible unless-format="html"}
+The full model output, including the fixed-effect estimates and the random-field parameters, is given in the HTML version of this document.
+:::
+
 ## Prediction grid
 
 Depth is extracted per cell and the grid is then trimmed to `MIN_DEPTH`–`MAX_DEPTH`. Never match cells to a bathymetry that was first filtered to a depth band: cells outside the band would inherit the band edge's depth instead of being removed. The table reports cells outside the depth range of the data, where the depth smooth extrapolates.
@@ -220,20 +234,6 @@ plot_fixed_effects(fit)
 
 If the simple model is sane and the index is plausible, proceed to Step 3 (`index-validate-model`). Record the mesh cutoff, formula, and family in `ai/memory/`.
 
-
-## Model output
-
-::: {.content-visible when-format="html"}
-The model output, including the fixed-effect estimates and the random-field parameters, is shown in the folded code block below.
-
-```{r model-output, collapse=TRUE}
-fit
-```
-:::
-
-::: {.content-visible unless-format="html"}
-The full model output, including the fixed-effect estimates and the random-field parameters, is given in the HTML version of this document.
-:::
 
 # Results and recommendations
 
