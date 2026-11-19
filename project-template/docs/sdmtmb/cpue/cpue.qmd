@@ -374,8 +374,6 @@ saveRDS(cpue_handoff, file.path(out_dir, "assessment-index-cpue.rds"))
 
 # Software and reproducibility
 
-This report followed [index-wise](https://github.com/DeepWaterIMR/index-wise), with document structure and conventions from [wise-writing](https://github.com/DeepWaterIMR/wise-writing).
-
 ```{r software-citations}
 #| results: asis
 source(here::here("R", "report_helpers.R"))

@@ -57,7 +57,11 @@ first:
    Jacobian correction.
 6. **Grid resolution** — after the fit: the coarsest grid whose index matches the finer ones.
 
-AIC ranks every ladder; cross-validate a shortlist only. Residuals (DHARMa), retrospectives,
+AIC ranks every ladder; cross-validate a shortlist only, with **space–time block folds** sized
+by the Matérn range of the Step 2 fit (`load_cv_folds()`; never random-haul folds for selection),
+and compare candidates by the paired ΔELPD and its SE (`cv_paired()`). Explain ELPD and the folds
+in the document's methods, and name each stage's incoming and selected model — see
+`knowledge/model-selection.md` (Which cross-validation asks which question). Residuals (DHARMa), retrospectives,
 interval widths and comparison with an existing index are **diagnostics of the final model**
 (Step 4), not selection criteria.
 

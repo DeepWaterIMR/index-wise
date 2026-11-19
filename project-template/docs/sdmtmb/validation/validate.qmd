@@ -21,7 +21,6 @@ params:
   run_mesh: false           # stage 5 — mesh resolution (slow)
   run_mesh_cv: false        # spatial block CV across mesh cutoffs (slow; needs blockCV)
   run_retro: false          # retrospective (slow)
-  cv_folds: 10              # folds for the shortlist CV
   cv_top_n: 3               # how many AIC-ranked candidates to cross-validate
   only: ""                  # compute only this candidate (fan a long stage across R sessions)
 execute:
@@ -58,6 +57,7 @@ resumes. Improve this document directly as the routine matures. Do NOT hard-wrap
 ```{r setup}
 knitr::opts_knit$set(root.dir = here::here())
 source(here::here("R", "0_setup.R"))
+source(here::here("R", "report_helpers.R"))
 
 # Same modelling frame as Step 2: index year, response and offset follow config.yaml.
 dt <- readRDS(file.path(out_dir, "compiled-data.rds")) |>
@@ -121,6 +121,13 @@ mesh_sel <- sdmTMB::make_mesh(dt_sel, xy_cols = c("X", "Y"), cutoff = cfg$MESH_C
 
 cat(attr(dt_sel, "dropped"), "of", nrow(dt), "stations dropped as incomplete for at least",
     "one candidate;", nrow(dt_sel), "used for selection.\n")
+
+# Space-time block folds, sized by the Matérn range of the Step 2 fit, made once and saved so
+# that every cross-validated stage scores the same held-out hauls.
+base_range <- matern_range(readRDS(file.path(out_dir, "model-fit-total.rds")))
+folds <- load_cv_folds(dt_sel, cfg, file.path(out_dir, "model-fit-total.rds"), sel_dir)
+block_km <- attr(folds, "block_km")
+n_folds <- attr(folds, "k")
 ```
 
 ```{r shared-args}
@@ -213,7 +220,7 @@ plot(sel_fixed, type = "index", newdata = grid)
 
 ## Cross-validating the shortlist
 
-AIC rewards fit to the data in hand. For an index feeding an assessment the question is different: how well does the model predict observations it has not seen? Cross-validation answers that, but costs `r params$cv_folds` fits per candidate, so it is applied to a **shortlist** — the `r params$cv_top_n` candidates with the lowest AIC, whatever they turn out to be. No model is designated in advance and none is exempt: re-run the ladder with different covariates and the shortlist follows the evidence.
+AIC rewards fit to the data in hand. For an index feeding an assessment the question is different: how well does the model predict observations it has not seen? Cross-validation answers that, but costs `r n_folds` fits per candidate, so it is applied to a **shortlist** — the `r params$cv_top_n` candidates with the lowest AIC, whatever they turn out to be. No model is designated in advance and none is exempt: re-run the ladder with different covariates and the shortlist follows the evidence.
 
 ```{r, eval=(params$run_cv && params$run_fixed)}
 #| label: tbl-validate-cv
@@ -222,7 +229,7 @@ cat("Shortlist:", paste(short, collapse = ", "), "\n")
 
 # Same cache prefix as the ladder above, deliberately: the shortlisted candidates' whole-frame
 # fits are already cached there, so this call pays only for the folds.
-sel_cv <- run_stage(all_candidates[short], "fixed", cv = params$cv_folds)
+sel_cv <- run_stage(all_candidates[short], "fixed", cv = n_folds, fold_ids = folds)
 selection_kable(sel_cv, "Cross-validated performance of the best-supported specifications. Hold-out log-likelihood is per held-out observation (higher is better); lower RMSE and MAE are better.")
 ```
 
@@ -241,16 +248,24 @@ cat(if (agree) {
 
 The three criteria need not agree, and where they do not the disagreement is informative. Log-likelihood is sensitive to the whole predictive distribution, including the zeros; RMSE squares the errors and so is dominated by the largest catches; MAE weights every station equally and is the most robust to the long right tail. A candidate that wins on log-likelihood but not RMSE predicts the *shape* of the distribution well while missing some large hauls — for an index built by integrating a predicted field, usually the trade worth making.
 
-To measure *extrapolation* into ground the survey did not cover in a given year — the thing the index actually does when it integrates over the grid — pass spatially clustered folds instead of the default random ones:
+### Space–time block folds
 
-```r
-ensure_packages("blockCV")   # installed on demand; see R/0_setup.R
-blocks <- blockCV::cv_spatial(x = sf_dt, column = "presence", k = params$cv_folds)
-sel_cv_spatial <- run_stage(all_candidates[short], "cv-spatial",
-                            cv = params$cv_folds, fold_ids = blocks$folds_ids)
+The folds are **space–time blocks**, not random hauls. Survey hauls are clustered in space and time, and a haul held out at random usually has neighbours from the same year in the training data, so random folds measure interpolation over short distances and favour models that overfit local structure [@roberts2017]. The index, by contrast, predicts the density in grid cells that were not sampled in a given year. The region is divided into squares, every square–year combination is a group, and the groups are assigned to `r n_folds` folds, largest first to the fold with the fewest hauls so far. A fold holds out an area in some years while the same area stays in the training data in other years. Held-out hauls get zero weight in the likelihood instead of being removed [@anderson2022], so every year stays in every fold fit.
+
+The block size follows the spatial correlation of the residuals [@roberts2017; @valavi2019]: blocks narrower than the correlation range leave held-out hauls correlated with training hauls a short distance away, and the score becomes optimistic. The Step 2 model has a Matérn range, the distance at which the spatial correlation falls to about 0.13 ($\sqrt{8\nu}/\kappa$ with $\nu = 1$) [@lindgren2011], of `r paste0(round(base_range$range_km), " km (", base_range$component, ")", collapse = " and ")`; the blocks are `r block_km` km squares, the larger range rounded up to 50 km (`CV_BLOCK_KM` in `config.yaml` overrides it). Every fold fit of a cross-validated candidate should converge with a positive-definite Hessian; a scheme whose fold fits fail is not usable.
+
+### Expected log predictive density
+
+For each haul $i$, $\log p(y_i \mid y_{-k(i)})$ is the log density of the observed response under the model fitted without the fold $k(i)$ that contains it (`cv_loglik` in sdmTMB). The expected log pointwise predictive density is their sum, $\widehat{\mathrm{elpd}} = \sum_i \log p(y_i \mid y_{-k(i)})$ [@vehtari2017]: the negative of an out-of-sample negative log-likelihood, so higher is better. In-sample likelihood always improves with flexibility, and AIC corrects only through the number of fixed parameters, whereas most of the flexibility of these models lies in random fields with thousands of random effects but one or two hyperparameters; AIC therefore under-penalises richer field structures. Out-of-sample prediction needs no parameter count. Two candidates scored on the same hauls are compared by the paired difference $\Delta\widehat{\mathrm{elpd}} = \sum_i d_i$ with $\mathrm{SE} = \sqrt{n}\,\mathrm{sd}(d_i)$; a difference within about one to two SEs is not distinguishable, so prefer the simpler candidate unless the more complex one is better by a stated number of SEs [@yates2023].
+
+```{r, eval=(params$run_cv && params$run_fixed)}
+#| label: tbl-validate-cv-paired
+#| tbl-cap: "Paired cross-validation comparison of the shortlist: ELPD summed over the held-out hauls, its difference from the best candidate and the paired standard error."
+knitr::kable(dplyr::transmute(cv_paired(sel_cv), Candidate = model, ELPD = round(elpd, 1),
+                              `ΔELPD` = round(delta_elpd, 1), SE = round(se_delta, 1)))
 ```
 
-and `lfo = TRUE` scores prediction of unseen *years*, which is the question an assessment update asks and the hardest one for a model whose terminal year sits at the end of an AR1 chain.
+Leave-future-out cross-validation (`lfo = TRUE`) scores prediction of unseen *years*, the question an assessment update asks; it is a useful supplement for a model whose terminal year sits at the end of an AR1 chain.
 
 ## Stage 3 — Family
 
@@ -570,8 +585,6 @@ Record the decision and its evidence in `ai/memory/`, then proceed to Step 4 (`i
 <!-- Summarize supported findings using inline R. Identify provisional outputs, unresolved checks, and the values recommended for the next workflow step. Refer to every figure and table in a short interpretive sentence. -->
 
 # Software and reproducibility
-
-This report followed [index-wise](https://github.com/DeepWaterIMR/index-wise), with document structure and conventions from [wise-writing](https://github.com/DeepWaterIMR/wise-writing).
 
 ```{r software-citations}
 #| results: asis

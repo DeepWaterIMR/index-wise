@@ -369,15 +369,58 @@ spending a day establishing that changes nothing.
 
 ## Which cross-validation asks which question
 
-- **Random folds** (the default, `cv = k`) hold out scattered stations: this measures
-  *interpolation* — predicting a station with others nearby in space and time.
-- **Spatially clustered folds** (`fold_ids` from `blockCV::cv_spatial()`) hold out whole areas:
-  this measures *extrapolation* into ground the survey did not cover that year. That is the
-  harder test, and the relevant one for a model whose entire purpose is to integrate over a
-  grid, including cells nobody sampled.
-- **Leave-future-out** (`lfo = TRUE`) fits to years up to *t* and scores year *t + 1*. This is
-  the question an assessment update actually asks, and it is the hardest one for a model with
-  an AR1 field, whose terminal year sits at the end of the chain.
+**Default: space–time block folds.** The template builds them with `load_cv_folds()`
+(`R/report_helpers.R`) and passes them as `fold_ids`. The region is divided into squares; every
+square–year combination is a group, assigned largest first to the fold with the fewest hauls so
+far. A fold holds out an area in some years while the same area stays in the training data in
+other years — exactly what the index does when it predicts a grid cell that was not sampled in a
+given year.
+
+- **Block size = the Matérn range.** Blocks narrower than the residual correlation range leave
+  held-out hauls correlated with training hauls nearby, and the score turns optimistic (Roberts
+  et al. 2017; Valavi et al. 2019). Use the largest component `range` of the Step 2 fit
+  (`matern_range()`: the distance where the correlation drops to ~0.13, √(8ν)/κ with ν = 1),
+  rounded up to 50 km; `CV_BLOCK_KM` in `config.yaml` overrides it. `blockCV::cv_spatial_autocor()`
+  estimates the same quantity from a variogram; the model-based range is the structure the index
+  model actually fits. In ling/tusk ICES 1–2 (2026) the ranges were 90–350 km, so 100 km blocks
+  were too small.
+- **Usability check.** Every fold fit of the base model must converge with a positive-definite
+  Hessian. If not, the folds (or the model) need changing before any comparison means anything.
+- **Make the folds once and save them** (`cv-folds.rds`), so every stage scores the same hauls
+  and paired differences are valid.
+
+Alternatives, for special questions only:
+
+- **Random folds** (`cv = k` without `fold_ids`) hold out scattered stations: this measures
+  *interpolation* over short distances and favours models that overfit local structure. Do not
+  use it for selecting index models.
+- **Spatial blocks across all years** (`blockCV::cv_spatial()`) hold out whole areas in every
+  year: *extrapolation* into ground never sampled, harsher than what the index does.
+- **Leave-future-out** (`lfo = TRUE`) fits to years up to *t* and scores year *t + 1*: the
+  question an assessment update asks, hardest for an AR1 field whose terminal year ends the chain.
+
+### ELPD in one paragraph (for reports)
+
+For each haul, `cv_loglik` is the log density of the observed response under the model fitted
+without that haul's fold; their sum is the expected log pointwise predictive density (ELPD;
+Vehtari et al. 2017) — the negative of an out-of-sample negative log-likelihood, higher is better.
+In-sample likelihood always improves with flexibility, and AIC penalises only fixed parameters,
+while most of the flexibility of these models sits in random fields (thousands of random effects,
+one or two hyperparameters), so AIC under-penalises richer field structures and is not comparable
+across meshes. Compare candidates by the paired difference over the same hauls,
+ΔELPD = Σ dᵢ with SE = √n · sd(dᵢ) (`cv_paired()`); differences within one to two SEs are noise,
+so prefer the simpler or incoming model unless an alternative is better by a stated number of
+SEs (Yates et al. 2023). Delta-lognormal, delta-gamma and Tweedie candidates are comparable on
+ELPD because they predict the same observed response. Put a short version of this paragraph in
+every validate document's methods: readers are rarely familiar with ELPD.
+
+### Stage vocabulary
+
+Each stage starts from an **incoming model** (the model selected at the previous stage) and ends
+with a **selected model**, which becomes the next stage's incoming model. Report ΔELPD relative to
+the incoming model, name both in the text, and state why the selected model won under the
+stage's rule — including candidates the CV cannot separate from it. Readers get lost when a
+table only says "carried".
 
 `sdmTMB_cv()` down-weights held-out rows to zero rather than deleting them, which is what keeps
 every time step present for an `ar1`/`rw` field. Do not replace it with a loop that subsets the
@@ -552,4 +595,11 @@ paragraph is what a reviewer reads.
   Sciences, 75: 1369–1382. <https://doi.org/10.1139/cjfas-2017-0266>
 - Vehtari, A., Gelman, A., and Gabry, J. 2017. Practical Bayesian model evaluation using
   leave-one-out cross-validation and WAIC. Statistics and Computing, 27: 1413–1432.
+- Roberts, D. R., et al. 2017. Cross-validation strategies for data with temporal, spatial,
+  hierarchical, or phylogenetic structure. Ecography, 40: 913–929.
+- Valavi, R., Elith, J., Lahoz-Monfort, J. J., and Guillera-Arroita, G. 2019. blockCV: an R
+  package for generating spatially or environmentally separated folds for k-fold
+  cross-validation of species distribution models. Methods in Ecology and Evolution, 10: 225–232.
+- Yates, L. A., Aandahl, Z., Richards, S. A., and Brook, B. W. 2023. Cross validation for model
+  selection: a review with examples from ecology. Ecological Monographs, 93: e1557.
   <https://doi.org/10.1007/s11222-016-9696-4>

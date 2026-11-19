@@ -100,6 +100,8 @@ MAP_SHAPEFILES: null                   # optional ggOceanMaps shapefile set; def
 GRID_KM: 10                           # prediction grid cell size (km)
 MESH_CUTOFF_KM: 60                    # make_mesh cutoff (km)
 BARRIER: false                        # add a land barrier mesh?
+CV_FOLDS: 10                          # space-time block cross-validation folds (Step 3)
+CV_BLOCK_KM: null                     # block size (km); null = largest Matérn range of the Step 2 fit, rounded up to 50 km
 MAX_DEPTH: 1400                       # deepest grid cell to keep (m)
 MIN_DEPTH: null                       # shallowest grid cell to keep (m); null = no minimum
 

@@ -73,3 +73,90 @@ format_par_value <- function(x, digits = 3) {
     TRUE ~ trimws(formatC(signif(x, digits), format = "fg", digits = digits))
   )
 }
+
+# --- Space-time block cross-validation -------------------------------------------------------
+
+#' Matérn range of the spatial random field per model component
+#'
+#' The distance (km) at which the spatial correlation falls to about 0.13,
+#' sqrt(8 * nu) / kappa with nu = 1 (sdmTMB's "range"; Lindgren et al. 2011).
+#' @param fit An sdmTMB fit.
+#' @return A tibble with component, range_km and its 95 % confidence limits.
+matern_range <- function(fit) {
+  comps <- if (isTRUE(fit$family$delta)) 1:2 else 1
+  purrr::map_dfr(comps, function(m) {
+    rp <- sdmTMB::tidy(fit, "ran_pars", model = m)
+    rp <- rp[rp$term == "range", ]
+    tibble::tibble(component = if (length(comps) == 2) c("encounter", "positive")[m] else "single",
+                   range_km = rp$estimate[1], lwr = rp$conf.low[1], upr = rp$conf.high[1])
+  })
+}
+
+#' Block size for space-time cross-validation
+#'
+#' `cfg$CV_BLOCK_KM` when set; otherwise the largest Matérn range of the Step 2 fit rounded up to
+#' `round_km`, so that a held-out block is about as wide as the distance over which the
+#' residuals stay correlated (Roberts et al. 2017; Valavi et al. 2019).
+#' @param cfg Project configuration.
+#' @param fit_file Path to the Step 2 base-model fit (.rds).
+#' @param round_km Rounding step (km).
+cv_block_size <- function(cfg, fit_file, round_km = 50) {
+  if (!is.null(cfg$CV_BLOCK_KM)) return(cfg$CV_BLOCK_KM)
+  round_km * ceiling(max(matern_range(readRDS(fit_file))$range_km) / round_km)
+}
+
+#' Space-time block cross-validation folds
+#'
+#' The region is divided into squares of `block_km` (X/Y in km); every square-year combination
+#' is a group, and the groups are assigned greedily, largest first, to the fold with the fewest
+#' hauls so far, which keeps the folds even although the hauls are clustered. A fold holds out
+#' an area in some years while the same area stays in the training data in other years, which
+#' mimics the index predicting a cell that was not sampled in a given year.
+#' @return Integer fold ids with attributes `block_km` and `k`.
+make_spacetime_folds <- function(dt, block_km, k = 10, seed = 1) {
+  set.seed(seed)
+  group <- paste(floor(dt$X / block_km), floor(dt$Y / block_km), dt$year)
+  n <- table(group)
+  n <- n[sample(length(n))]
+  n <- n[order(-n)]
+  load <- numeric(k)
+  fold_of <- integer(length(n))
+  for (i in seq_along(n)) {
+    f <- which.min(load)
+    fold_of[i] <- f
+    load[f] <- load[f] + n[[i]]
+  }
+  structure(unname(fold_of[match(group, names(n))]), block_km = block_km, k = k)
+}
+
+#' Fold assignment saved once, so every stage scores the same held-out hauls
+load_cv_folds <- function(dt, cfg, fit_file, sel_dir) {
+  f <- file.path(sel_dir, "cv-folds.rds")
+  if (!file.exists(f)) {
+    saveRDS(make_spacetime_folds(dt, cv_block_size(cfg, fit_file), k = cfg$CV_FOLDS %||% 10), f)
+  }
+  folds <- readRDS(f)
+  if (length(folds) != nrow(dt)) stop("Saved folds do not match the selection data; delete ", f)
+  folds
+}
+
+#' Paired cross-validation comparison
+#'
+#' Every candidate of a cross-validated sdmTMB_selection() is scored on the same held-out hauls,
+#' so the ELPD difference is summed haul by haul and its standard error is
+#' sqrt(n) * sd of the per-haul differences (Vehtari et al. 2017).
+#' @param sel An sdmTMB_selection() result with `cv`.
+#' @param ref Reference candidate; the best by ELPD when NULL.
+cv_paired <- function(sel, ref = NULL) {
+  ll <- lapply(sel$cv, function(x) if (is.null(x)) NULL else x$data$cv_loglik)
+  ll <- ll[!vapply(ll, is.null, logical(1))]
+  elpd <- vapply(ll, sum, numeric(1), na.rm = TRUE)
+  if (is.null(ref)) ref <- names(which.max(elpd))
+  purrr::imap_dfr(ll, function(x, nm) {
+    d <- x - ll[[ref]]
+    ok <- !is.na(d)
+    tibble::tibble(model = nm, elpd = sum(x, na.rm = TRUE), delta_elpd = sum(d[ok]),
+                   se_delta = if (nm == ref) 0 else sqrt(sum(ok)) * stats::sd(d[ok]),
+                   n = sum(ok))
+  })
+}
