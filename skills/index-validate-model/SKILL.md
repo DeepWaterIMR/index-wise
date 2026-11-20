@@ -58,7 +58,7 @@ first:
    an existing index, include its family. Candidates on different response scales need the
    Jacobian correction.
 6. **Grid resolution** — after the fit: the coarsest grid no coarser than the mesh cutoff whose
-   index is within 1 % of the finest grid in every year, with index time and grid size reported.
+   index is within 2 % of the finest grid in every year, with index time and grid size reported.
 
 AIC ranks every ladder; cross-validate a shortlist only, with **space–time block folds** sized
 by the Matérn range of the Step 2 fit (`load_cv_folds()`; never random-haul folds for selection),

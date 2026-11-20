@@ -335,7 +335,7 @@ Practical notes:
 The prediction grid does not change the fit, but it changes the index (through how well the cells
 follow the coastline and the depth limit) and it dominates the cost of prediction: the predicted
 object grows with cells × years, and `get_index()` with bias correction is the step that runs out
-of memory. Choose the **coarsest grid no coarser than the mesh cutoff whose index stays within 1 % of the
+of memory. Choose the **coarsest grid no coarser than the mesh cutoff whose index stays within 2 % of the
 finest grid in every year**: predict the selected model on a ladder of cell sizes (e.g. 5, 10,
 20, 30, 50, 100, 200 km; the very coarse ones show where the index starts to move), compare the
 indices, and report index time and grid size beside them. A grid much finer than the mesh can
