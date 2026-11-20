@@ -8,4 +8,4 @@ Put here:
 - Any legacy SPD extracts (only if `USE_SPD: true`).
 
 The Biotic database itself is **not** here — it lives outside any repo (BAIT default
-`~/IMR_biotic_BES_database/`) and is reached via BAIT's `biotic-connect`.
+`~/Fiskwise_data/IMR_biotic_BES_database/`) and is reached via BAIT's `biotic-connect`.

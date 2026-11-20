@@ -73,11 +73,7 @@ This document selects the IMR bottom-trawl survey data used for the `r sp` (*`r 
 The document answers which surveys, hauls and catch records enter the indices, and which are excluded and why. Its output is the compiled station dataset in `data/output/`, which is described further in the companion data report ([`r stock`-3-data](`r stock`-3-data.html)) and is the input to the spatiotemporal sdmTMB models [@Vihtakari2026]. Species, survey and model settings are read at run time from `config.yaml`.
 
 ```{r compile, eval=params$recompile}
-con <- DBI::dbConnect(duckdb::duckdb(
-  path.expand(Sys.getenv("BES_DATABASE_PATH",
-                         "~/IMR_biotic_BES_database/bioticexplorer.duckdb")),
-  read_only = TRUE
-))
+con <- DBI::dbConnect(duckdb::duckdb(bes_db_path(), read_only = TRUE))
 db_meta <- DBI::dbGetQuery(con, "SELECT * FROM metadata")
 
 res <- compile_species_stations(con, cfg, last_year)

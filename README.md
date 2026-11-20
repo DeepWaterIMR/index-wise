@@ -3,7 +3,7 @@
 # 📈 index-wise — Build sdmTMB survey indices with AI agents
 
 <!-- version -->
-**Version 0.2.41** (2026-11-20)
+**Version 0.2.42** (2026-11-20)
 <!-- /version -->
 
 **Teach your AI coding agent to build a spatiotemporal survey index for stock assessment — for any species, on your own machine.**
@@ -40,7 +40,7 @@ install https://github.com/DeepWaterIMR/BAIT
 This repo is **public and contains instructions only — never data**:
 
 - **No data and no private paths** are ever committed here. Real data and paths live only in the *project folder the agent generates for you*, where `data/`, `logs/`, and `ai/review/` are git-ignored.
-- The Biotic database lives **outside** any repo (BAIT default: `~/IMR_biotic_BES_database/`).
+- The Biotic database lives **outside** any repo (BAIT default: `~/Fiskwise_data/IMR_biotic_BES_database/`).
 - During setup, **turn off model training / data retention** for your agent once — BAIT walks you through it and records the onboarding.
 
 ## 🚀 Quickstart

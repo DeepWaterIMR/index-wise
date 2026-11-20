@@ -29,4 +29,4 @@
 /review/
 
 # The Biotic database default location (outside the repo, listed for clarity)
-# ~/IMR_biotic_BES_database/
+# ~/Fiskwise_data/IMR_biotic_BES_database/ (legacy: ~/IMR_biotic_BES_database/)

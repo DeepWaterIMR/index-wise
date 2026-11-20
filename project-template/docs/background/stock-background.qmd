@@ -50,10 +50,7 @@ fl_bw <- 3  # kernel bandwidth (cm) for the length densities in fig-survey-vs-co
 last_year <- as.integer(cfg$LAST_YEAR %||% (as.integer(format(Sys.Date(), "%Y")) - 1L))
 
 # Reference-fleet records are confidential: read at render time, never saved.
-con <- DBI::dbConnect(duckdb::duckdb(
-  path.expand(Sys.getenv("BES_DATABASE_PATH", "~/IMR_biotic_BES_database/bioticexplorer.duckdb")),
-  read_only = TRUE
-))
+con <- DBI::dbConnect(duckdb::duckdb(bes_db_path(), read_only = TRUE))
 cl <- collect_commercial_lengths(con, cfg, gear_category = cfg$FISHABLE_GEAR %||% "Hooks",
                                  last_year = last_year)
 DBI::dbDisconnect(con, shutdown = TRUE)

@@ -24,6 +24,20 @@ survey_short_names <- c(
   `26` = "FjordS", `31` = "CapelinS"
 )
 
+#' Path to the Biotic DuckDB database
+#'
+#' `BES_DATABASE_PATH` when set, else the BAIT default under the shared Fiskwise data folder,
+#' else the legacy location directly in the home folder (installs before `Fiskwise_data`).
+#' @return Character path to `bioticexplorer.duckdb`.
+bes_db_path <- function() {
+  env <- Sys.getenv("BES_DATABASE_PATH")
+  if (nzchar(env)) return(path.expand(env))
+  home <- if (.Platform$OS.type == "windows") Sys.getenv("USERPROFILE") else path.expand("~")
+  path <- file.path(home, "Fiskwise_data", "IMR_biotic_BES_database", "bioticexplorer.duckdb")
+  if (file.exists(path)) return(path)
+  file.path(home, "IMR_biotic_BES_database", "bioticexplorer.duckdb")
+}
+
 #' Cruise-series labels: config.yaml CRUISE_SERIES_LABELS when set, else the defaults
 series_labels <- function() {
   lab <- if (exists("cfg", inherits = TRUE)) cfg$CRUISE_SERIES_LABELS else NULL
