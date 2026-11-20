@@ -33,9 +33,9 @@ short, start from the Step 2 model and settle the most expensive, most condition
 first:
 
 1. **Mesh resolution** — a cutoff ladder, cross-validated with space–time block folds; choose the
-   **coarsest mesh within one paired SE of the best ELPD** (the one-SE rule of every stage).
-   Report the index difference from the finest mesh as a check: in the terminal year, over the
-   last five years (the mesh Δρ, after Mohn's rho) and over the whole series. Show the
+   **fastest mesh that is within one paired SE of the best ELPD and whose mean-scaled index is
+   stable within 5 %** of the finest (terminal year, last-five-year mean Δρ, MARD; every finer
+   cutoff stable too). Report the level difference beside it. Show the
    four-panel selection figure (ΔELPD, Δρ, fit time, index). Without block folds, select by the
    5 % index-stability rule instead (`knowledge/model-selection.md`).
 2. **Random-field structure** — spatial field on/off per component, `ar1`/`rw`/`iid`, and the
@@ -57,8 +57,8 @@ first:
    and converges; Tweedie with an offset is the other coherent-effort baseline. When replacing
    an existing index, include its family. Candidates on different response scales need the
    Jacobian correction.
-6. **Grid resolution** — after the fit: the coarsest grid no coarser than the mesh cutoff whose
-   index is within 2 % of the finest grid in every year, with index time and grid size reported.
+6. **Grid resolution** — after the fit: the fastest grid whose index (level included) is stable
+   within the same 5 % of the finest grid, with index time and grid size reported.
 
 AIC ranks every ladder; cross-validate a shortlist only, with **space–time block folds** sized
 by the Matérn range of the Step 2 fit (`load_cv_folds()`; never random-haul folds for selection),

@@ -101,9 +101,14 @@ memory, and more chances for a variance parameter to collapse. What matters is w
 mesh predicts unsampled places and years better, and whether it changes **the index the
 assessment will read**, above all its terminal years.
 
-Select the cutoff by **space–time block cross-validation with the one-standard-error rule**:
-the coarsest cutoff whose ELPD is within one paired SE of the best (the same rule as every
-other stage). With random-haul folds, held-out log-likelihood keeps improving as the mesh is
+Select the cutoff by **prediction, index stability and cost together**: among the cutoffs whose
+space–time block ELPD is within one paired SE of the best (the one-SE rule of every stage) and
+whose mean-scaled index is stable within $\tau = 5$ % of the finest cutoff (below, with every
+finer cutoff stable too), take the fastest. If no cutoff meets both, take the best by ELPD and
+say so. Compute the mesh stability on indices divided by their series mean: different meshes
+are different models of the fields, and the assessment estimates catchability, so the trend is
+what carries over; coarser meshes often shift the level by 10–40 % while the trend moves by
+under 4 % (ling and tusk ICES 1–2, 2026). Report the level difference beside it. With random-haul folds, held-out log-likelihood keeps improving as the mesh is
 refined, because a finer field fits local, station-scale structure that neighbouring training
 hauls share with the held-out ones; that would push the mesh towards the finest one tested. Block
 folds sized by the Matérn range remove those neighbours, and the finer meshes then often predict
@@ -335,10 +340,15 @@ Practical notes:
 The prediction grid does not change the fit, but it changes the index (through how well the cells
 follow the coastline and the depth limit) and it dominates the cost of prediction: the predicted
 object grows with cells × years, and `get_index()` with bias correction is the step that runs out
-of memory. Choose the **coarsest grid no coarser than the mesh cutoff whose index stays within 2 % of the
-finest grid in every year**: predict the selected model on a ladder of cell sizes (e.g. 5, 10,
-20, 30, 50, 100, 200 km; the very coarse ones show where the index starts to move), compare the
-indices, and report index time and grid size beside them. A grid much finer than the mesh can
+of memory. Choose the grid by the **same stability rule as the mesh, with the same $\tau = 5$ %**: the
+fastest grid whose terminal-year difference, five-year mean difference and MARD from the finest
+grid are all within $\tau$, with every finer grid within it too. Here compute the differences
+on the index itself, level included: the model is the same and only the summation changes, so
+the finest grid is the correct sum. Predict the selected model on a ladder of cell sizes (e.g. 5,
+10, 20, 30, 50, 100, 200 km; the very coarse ones show where the index starts to move) and
+record the index time and grid size. One tolerance for both settings is easier to defend than
+two: 5 % is about a quarter of the accepted Mohn's rho range (Hurtado-Ferro et al. 2015) and an
+order of magnitude below a typical annual index CV. A grid much finer than the mesh can
 resolve adds cells, not information; a grid much coarser than the mesh cutoff starts to
 misrepresent the domain boundary.
 
