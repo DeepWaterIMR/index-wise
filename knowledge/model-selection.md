@@ -101,8 +101,8 @@ memory, and more chances for a variance parameter to collapse. What matters is w
 mesh predicts unsampled places and years better, and whether it changes **the index the
 assessment will read**, above all its terminal years.
 
-Select the cutoff by **prediction, index stability and cost together**: among the cutoffs whose
-space–time block ELPD is within one paired SE of the best (the one-SE rule of every stage) and
+Select the cutoff by **prediction, index stability and cost together**: among the cutoffs that
+pass every `sanity()` check and whose space–time block ELPD is within one paired SE of the best (the one-SE rule of every stage) and
 whose mean-scaled index is stable within $\tau = 5$ % of the finest cutoff (below, with every
 finer cutoff stable too), take the fastest. If no cutoff meets both, take the best by ELPD and
 say so. Compute the mesh stability on indices divided by their series mean: different meshes

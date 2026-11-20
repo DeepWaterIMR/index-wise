@@ -33,7 +33,7 @@ short, start from the Step 2 model and settle the most expensive, most condition
 first:
 
 1. **Mesh resolution** — a cutoff ladder, cross-validated with space–time block folds; choose the
-   **fastest mesh that is within one paired SE of the best ELPD and whose mean-scaled index is
+   **fastest mesh that passes `sanity()`, is within one paired SE of the best ELPD and whose mean-scaled index is
    stable within 5 %** of the finest (terminal year, last-five-year mean Δρ, MARD; every finer
    cutoff stable too). Report the level difference beside it. Show the
    four-panel selection figure (ΔELPD, Δρ, fit time, index). Without block folds, select by the
