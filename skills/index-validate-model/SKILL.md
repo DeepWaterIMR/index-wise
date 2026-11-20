@@ -32,12 +32,11 @@ the species and config. The order and its reasons are in `knowledge/model-select
 short, start from the Step 2 model and settle the most expensive, most conditioning setting
 first:
 
-1. **Mesh resolution** — a cutoff ladder, cross-validated with space–time block folds; choose the
-   **fastest mesh that passes `sanity()`, is within one paired SE of the best ELPD and whose mean-scaled index is
-   stable within 5 %** of the finest (terminal year, last-five-year mean Δρ, MARD; every finer
-   cutoff stable too). Report the level difference beside it. Show the
-   four-panel selection figure (ΔELPD, Δρ, fit time, index). Without block folds, select by the
-   5 % index-stability rule instead (`knowledge/model-selection.md`).
+1. **Mesh resolution** — a cutoff ladder, cross-validated with space–time block folds. Reference:
+   the best ELPD among cutoffs passing `sanity()`. Select the **fastest cutoff that passes
+   `sanity()` and whose index is within 5 % of the reference index** (terminal year, last-five-year
+   mean Δρ, MARD; level included; every cutoff in between within 5 % too). Show the four-panel
+   selection figure (ΔELPD, Δρ, fit time, index).
 2. **Random-field structure** — spatial field on/off per component, `ar1`/`rw`/`iid`, and the
    year-effect pairings (`iid` + year, `ar1` + year). Remember the assessment use-case:
    total/length indices → `ar1` with no year effect; the assessment-selected index for SPiCT →

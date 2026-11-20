@@ -101,14 +101,15 @@ memory, and more chances for a variance parameter to collapse. What matters is w
 mesh predicts unsampled places and years better, and whether it changes **the index the
 assessment will read**, above all its terminal years.
 
-Select the cutoff by **prediction, index stability and cost together**: among the cutoffs that
-pass every `sanity()` check and whose space–time block ELPD is within one paired SE of the best (the one-SE rule of every stage) and
-whose mean-scaled index is stable within $\tau = 5$ % of the finest cutoff (below, with every
-finer cutoff stable too), take the fastest. If no cutoff meets both, take the best by ELPD and
-say so. Compute the mesh stability on indices divided by their series mean: different meshes
-are different models of the fields, and the assessment estimates catchability, so the trend is
-what carries over; coarser meshes often shift the level by 10–40 % while the trend moves by
-under 4 % (ling and tusk ICES 1–2, 2026). Report the level difference beside it. With random-haul folds, held-out log-likelihood keeps improving as the mesh is
+Select the cutoff by **prediction, the index and cost together**. The reference is the cutoff
+with the best space–time block ELPD among those that pass every `sanity()` check. Then take
+the **fastest cutoff that passes `sanity()` and whose index stays within $\tau = 5$ % of the
+reference index** (terminal year, five-year mean Δρ and MARD, level included), with every cutoff
+between it and the reference within $\tau$ too. With many thousands of hauls an ELPD
+difference can be several SEs and still not move the index, so the practical test for this
+computational setting is the index of the best-predicting model, not the one-SE rule (tusk ICES
+1–2, 2026: 15 km best, 20 km 4.5 SE lower but within 4.5 % of its index at less than half the
+fit time, so 20 km; ling: 30 km best and 40 km 7 % away, so 30 km). With random-haul folds, held-out log-likelihood keeps improving as the mesh is
 refined, because a finer field fits local, station-scale structure that neighbouring training
 hauls share with the held-out ones; that would push the mesh towards the finest one tested. Block
 folds sized by the Matérn range remove those neighbours, and the finer meshes then often predict
