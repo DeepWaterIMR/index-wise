@@ -93,24 +93,26 @@ comparison made on it.
 
 Stage 2 has an assessment constraint, not just a statistical one — see the section below.
 
-## Mesh resolution: the coarsest mesh that does not move the index
+## Mesh resolution: the coarsest mesh within one SE of the best
 
 A finer mesh is not a better model by default. It is a larger one: more random-field vertices
 per time step, longer fits (time grows roughly with the square of the vertex count), more
-memory, and more chances for a variance parameter to collapse. And the mesh is a computational
-setting, not a hypothesis about the stock: what matters is whether it changes **the index the
+memory, and more chances for a variance parameter to collapse. What matters is whether a finer
+mesh predicts unsampled places and years better, and whether it changes **the index the
 assessment will read**, above all its terminal years.
 
-Cross-validated predictive skill is the wrong primary criterion for this choice. Held-out
-log-likelihood usually keeps improving as the mesh is refined, because a finer field fits
-local, station-scale structure. That structure mostly integrates out when the field is summed
-over the prediction grid, so a large ELPD gain can come with no change in the index. Selecting
-on ELPD therefore pushes the mesh towards the finest one tested, at many times the cost.
+Select the cutoff by **space–time block cross-validation with the one-standard-error rule**:
+the coarsest cutoff whose ELPD is within one paired SE of the best (the same rule as every
+other stage). With random-haul folds, held-out log-likelihood keeps improving as the mesh is
+refined, because a finer field fits local, station-scale structure that neighbouring training
+hauls share with the held-out ones; that would push the mesh towards the finest one tested. Block
+folds sized by the Matérn range remove those neighbours, and the finer meshes then often predict
+*worse* (ling ICES 1–2, 2026: 30 km best, 20 and 15 km more than two SEs below it). If only
+random folds are available, use the index-stability rule below as the primary criterion.
 
-Select the cutoff instead by the stability of the index, in the spirit of Mohn's rho (Mohn
+Always report the stability of the index as a check, in the spirit of Mohn's rho (Mohn
 1999): treat each coarser mesh as a perturbation of a fine reference mesh and ask how far it
-moves the end of the series.
-
+moves the end of the series. 
 1. **Fit a ladder** of cutoffs from coarse to as fine as is affordable (e.g. 100, 75, 50, 35,
    25 km), with everything else at the Step 2 settings. Predict each fit on the same grid at the
    same reference and compute the index without bias correction.
@@ -138,7 +140,7 @@ moves the end of the series.
 
 Report vertex count, fit time and fitted-object size beside the three summaries, and show the
 selection as one four-panel figure (`plot_mesh_selection()` in the template's `validate.qmd`):
-(a) ΔELPD ± 2 paired SE, when the ladder was cross-validated; (b) the mesh $\Delta\rho$ and the
+(a) ΔELPD ± one paired SE; (b) the mesh $\Delta\rho$ and the
 terminal-year difference against the cutoff, with the tolerance band; (c) fit time labelled with
 the vertex count; (d) the index under every cutoff. The selected mesh is where (b) enters the
 band, read against the cost in (c). Report the cross-validated
@@ -333,9 +335,10 @@ Practical notes:
 The prediction grid does not change the fit, but it changes the index (through how well the cells
 follow the coastline and the depth limit) and it dominates the cost of prediction: the predicted
 object grows with cells × years, and `get_index()` with bias correction is the step that runs out
-of memory. Choose the **coarsest grid whose index is indistinguishable from the finer ones**:
-predict the selected model on a ladder of cell sizes, compare the indices and the total grid area,
-and report prediction time and object size beside them. A grid much finer than the mesh can
+of memory. Choose the **coarsest grid no coarser than the mesh cutoff whose index stays within 1 % of the
+finest grid in every year**: predict the selected model on a ladder of cell sizes (e.g. 5, 10,
+20, 30, 50, 100, 200 km; the very coarse ones show where the index starts to move), compare the
+indices, and report index time and grid size beside them. A grid much finer than the mesh can
 resolve adds cells, not information; a grid much coarser than the mesh cutoff starts to
 misrepresent the domain boundary.
 
@@ -408,9 +411,13 @@ In-sample likelihood always improves with flexibility, and AIC penalises only fi
 while most of the flexibility of these models sits in random fields (thousands of random effects,
 one or two hyperparameters), so AIC under-penalises richer field structures and is not comparable
 across meshes. Compare candidates by the paired difference over the same hauls,
-ΔELPD = Σ dᵢ with SE = √n · sd(dᵢ) (`cv_paired()`); differences within one to two SEs are noise,
-so prefer the simpler or incoming model unless an alternative is better by a stated number of
-SEs (Yates et al. 2023). Delta-lognormal, delta-gamma and Tweedie candidates are comparable on
+ΔELPD = Σ dᵢ with SE = √n · sd(dᵢ) (`cv_paired()`), the SE of the difference itself; select
+with the one-standard-error rule in every stage (Breiman et al. 1984; Hastie et al. 2009; Yates
+et al. 2023): the simplest candidate within one SE of the best, or the incoming one where the
+candidates are not ordered by complexity (families). One rule for all stages keeps the
+decisions comparable; a two-SE threshold is more conservative but has no stronger basis. Report
+ΔELPD, SE(Δ) and Δ/SE in the stage tables, a column marking the candidates within one SE of the
+best, and the MARD of each candidate's mean-scaled index from the incoming model's. Delta-lognormal, delta-gamma and Tweedie candidates are comparable on
 ELPD because they predict the same observed response. Put a short version of this paragraph in
 every validate document's methods: readers are rarely familiar with ELPD.
 

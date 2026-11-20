@@ -32,10 +32,12 @@ the species and config. The order and its reasons are in `knowledge/model-select
 short, start from the Step 2 model and settle the most expensive, most conditioning setting
 first:
 
-1. **Mesh resolution** — a cutoff ladder; choose the **coarsest mesh whose index is within 5 % of
-   the finest mesh** (report whether every finer cutoff is too) in the terminal year,
-   over the last five years (the mesh Δρ, after Mohn's rho) and over the whole series. Show the
-   four-panel selection figure (ΔELPD, Δρ, fit time, index); ELPD is supporting, not decisive.
+1. **Mesh resolution** — a cutoff ladder, cross-validated with space–time block folds; choose the
+   **coarsest mesh within one paired SE of the best ELPD** (the one-SE rule of every stage).
+   Report the index difference from the finest mesh as a check: in the terminal year, over the
+   last five years (the mesh Δρ, after Mohn's rho) and over the whole series. Show the
+   four-panel selection figure (ΔELPD, Δρ, fit time, index). Without block folds, select by the
+   5 % index-stability rule instead (`knowledge/model-selection.md`).
 2. **Random-field structure** — spatial field on/off per component, `ar1`/`rw`/`iid`, and the
    year-effect pairings (`iid` + year, `ar1` + year). Remember the assessment use-case:
    total/length indices → `ar1` with no year effect; the assessment-selected index for SPiCT →
@@ -55,7 +57,8 @@ first:
    and converges; Tweedie with an offset is the other coherent-effort baseline. When replacing
    an existing index, include its family. Candidates on different response scales need the
    Jacobian correction.
-6. **Grid resolution** — after the fit: the coarsest grid whose index matches the finer ones.
+6. **Grid resolution** — after the fit: the coarsest grid no coarser than the mesh cutoff whose
+   index is within 1 % of the finest grid in every year, with index time and grid size reported.
 
 AIC ranks every ladder; cross-validate a shortlist only, with **space–time block folds** sized
 by the Matérn range of the Step 2 fit (`load_cv_folds()`; never random-haul folds for selection),
