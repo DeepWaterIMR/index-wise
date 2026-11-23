@@ -133,8 +133,49 @@ format_months <- function(m) {
 #' @param side Width taken by axis labels and margins (inches).
 map_fig_height <- function(p, width = 6.69, ncol = 1, nrow = 1, extra = 0.6, side = 0.6) {
   lim <- p$coordinates$limits
+  if (is.null(lim$x) || is.null(lim$y)) {  # no stored limits: use the built panel ranges
+    pp <- ggplot2::ggplot_build(p)$layout$panel_params[[1]]
+    lim <- list(x = pp$x_range, y = pp$y_range)
+  }
   aspect <- diff(lim$y) / diff(lim$x)
   round(nrow * ((width - side) / ncol) * aspect + extra, 2)
+}
+
+#' Prediction-grid map coloured by depth
+#'
+#' Wraps the `plot()` method of sdmTMBexperiments for prediction grids
+#' (`plot.sdmTMB_prediction_grid()`: one square per cell, sized to the cell, turbo palette)
+#' and adds the prediction-region outline, depth bins and the figure height.
+#'
+#' @param grid One year of the prediction grid (`X`, `Y` in km, `depth` in m), as built by
+#'   [sdmTMBexperiments::make_prediction_grid()].
+#' @param crs Projected CRS of `X` and `Y` (EPSG code); used when `grid` lacks its `crs`
+#'   attribute.
+#' @param cell_km Grid-cell size (km), used for the symbol size.
+#' @param region Optional prediction-region polygon (sf) drawn as an outline.
+#' @param step Depth-bin width (m).
+#' @return A list with the map (`plot`) and its figure height in inches (`height`).
+plot_grid_depth <- function(grid, crs, cell_km, region = NULL, step = 100) {
+  if (!inherits(grid, "sdmTMB_prediction_grid")) {
+    class(grid) <- c("sdmTMB_prediction_grid", class(grid))
+  }
+  p <- plot(grid, value = "depth", crs = attr(grid, "crs") %||% crs, coord_multiplier = 1000,
+            point_size = 0.11 * cell_km, base_size = 8)
+  height <- map_fig_height(p, extra = 0.9)
+  breaks <- seq(floor(min(grid$depth, na.rm = TRUE) / step) * step,
+                ceiling(max(grid$depth, na.rm = TRUE) / step) * step, by = step)
+  if (!is.null(region)) {
+    p <- p + ggplot2::geom_sf(data = region, fill = NA, colour = "black", linewidth = 0.4,
+                              inherit.aes = FALSE)
+  }
+  p <- suppressMessages(p +  # replaces the method's continuous colour scale
+    ggplot2::scale_colour_viridis_b(option = "turbo", breaks = breaks,
+                                    limits = range(breaks), show.limits = TRUE,
+                                    labels = function(x) ifelse(length(breaks) > 11 & x %% (2 * step) != 0, "", x),
+                                    name = "Depth (m)") +
+    ggplot2::theme(axis.title = ggplot2::element_blank(),
+                   legend.key.width = ggplot2::unit(1.6, "cm")))
+  list(plot = ggOceanMaps::reorder_layers(p), height = height)
 }
 
 #' Standard survey-timing figure

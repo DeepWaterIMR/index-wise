@@ -50,6 +50,7 @@ Do NOT hard-wrap prose. -->
 knitr::opts_knit$set(root.dir = here::here())
 source(here::here("R", "0_setup.R"))
 source(here::here("R", "report_helpers.R"))
+source(here::here("R", "plot_helpers.R"))
 dt <- readRDS(file.path(out_dir, "compiled-data.rds"))
 ```
 
@@ -167,6 +168,18 @@ saveRDS(grid, file.path(out_dir, "prediction-grid.rds"))
 grid <- readRDS(file.path(out_dir, "prediction-grid.rds"))
 ```
 
+```{r grid-depth-map}
+# Map of the prediction grid coloured by depth (plot_grid_depth() in R/plot_helpers.R)
+grid_map <- plot_grid_depth(grid[grid$year == min(grid$year), ], crs = dt_crs,
+                            cell_km = cfg$GRID_KM, region = region)
+```
+
+```{r, fig.height = grid_map$height}
+#| label: fig-fit-grid
+#| fig-cap: !expr 'paste0("Prediction grid for the sdmTMB models: ", cfg$GRID_KM, " × ", cfg$GRID_KM, " km cells coloured by GEBCO bottom depth in 100 m bins (the depths used in the predictions are continuous). Black outline: the prediction region.")'
+grid_map$plot
+```
+
 ```{r}
 #| label: tbl-fit-depth-range
 knitr::kable(
@@ -175,7 +188,7 @@ knitr::kable(
 )
 ```
 
-<!-- Describe the supported finding and refer to @tbl-fit-depth-range. Justify any extrapolated cells or trim the grid. -->
+<!-- Describe the grid (number of cells, area, depth range; @fig-fit-grid) and the supported finding, and refer to @tbl-fit-depth-range. Justify any extrapolated cells or trim the grid. -->
 
 ## Predict and index
 
