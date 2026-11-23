@@ -84,7 +84,7 @@ REGION_CONCAVITY: 0.1                 # sf::st_concave_hull ratio for the predic
 # Stock area for survey selection: ICES subareas (tested on the icesarea code) or, when
 # empty, the REGION_FILE polygon (ACQUISITION_REGION_LAYER if set).
 STOCK_SUBAREAS: []                    # e.g. ["1", "2"]
-ICES_AREAS_FILE: "data/source/ICES_Areas/ICES_Areas_20211101.shp"  # needed with STOCK_SUBAREAS
+ICES_AREAS_FILE: null                  # null = BioticExplorerServer::icesAreas, the polygons that assigned icesarea (keep these; see read_ices_areas())
 MAP_LIMITS: [-15, 60, 57, 81]         # lon/lat limits of the overview map in the survey-selection document
 # Optional broader acquisition polygon and station partition. A Step 1 document can set
 # ACQUISITION_REGION to a reporting feature (for example NS) while retaining REGION as the

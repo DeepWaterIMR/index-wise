@@ -36,7 +36,7 @@ does not repeat survey selection (stock area, filter, surveys, gear tables, timi
      product).
    - *Station-level data*: density map of both products; *Prediction region*
      (`build_stock_region()`: concave hull of positive hauls, `REGION_BUFFER_KM`,
-     `REGION_CONCAVITY`, cut to the stock area plus buffered positives; written to
+     `REGION_CONCAVITY`, cut to the stock-area polygons only (see *Prediction region inside the stock area* below); written to
      `PREDICTION_REGION_FILE`; `REGION_BUFFER_KM` ≈ 50 km so isolated hauls merge instead of
      leaving circles; depth-limited grid preview with
      `sdmTMBexperiments::make_prediction_grid(max_depth = MAX_DEPTH)` drawn as cells, saved as
@@ -151,3 +151,16 @@ Setup chunks first (`root.dir` in its own chunk, then config/source), then:
 - `fig-cap: !expr` captions must be single-quoted YAML strings without apostrophes.
 - Shared code lives in `R/compile_functions.R` and `R/plot_helpers.R`; the documents call
   functions and show them in the appendix rather than repeating code.
+
+## Prediction region inside the stock area
+
+The prediction region must lie inside the polygon of the stock area that the haul filter used, and the model data must be restricted to the same region. Two mistakes are easy to make and both make the model predict where it has no data:
+
+- **Extending the region past the stock boundary.** A hull buffered by `REGION_BUFFER_KM` reaches into neighbouring stock areas. Their hauls were removed by the haul filter, so the region gains grid cells with no observations, and the index adds biomass from them. Do not union the stock polygon with buffered hauls "to keep coastal hauls inside"; cut the buffered hull to the stock polygon only (`build_stock_region()`). Example: ling in ICES 1–2 with a 100 km buffer extended about 50 000 km² south of 62°N, where ling is most abundant, while all hauls south of the boundary had been filtered out.
+- **Filtering hauls by area code but predicting by polygon.** Hauls coded to the stock area (`icesarea`) can be positioned outside the polygon, just across a boundary or in fjords the polygon does not cover. Remove them with the region rule so that data and prediction domain match, and report how many (and how many positive) were removed.
+
+- **Using different ICES polygons from the database.** The haul filter uses the `icesarea` code that BioticExplorerServer assigned from its own polygons (`BioticExplorerServer::icesAreas`, planar point-in-polygon in longitude–latitude). Build the stock polygon from the same polygons (`read_ices_areas()`, `ICES_AREAS_FILE: null`), not from another release: the ICES GIS 2021-11-01 release draws the 4.a/2.a boundary diagonally from 3.5° W, 63° N to the Norwegian coast instead of along 62° N, which put about 30 positive tusk hauls coded to 2.a outside the stock polygon.
+- **Cutting the stock polygon at the map limit.** `read_stock_area()` caps the polygon at the northern `MAP_LIMITS` for maps; use `cap = FALSE` for the region and any data operation, or hauls north of the map limit are dropped.
+
+Check after building the region: the area of the region outside the stock polygon is zero, and every model haul lies inside the region.
+

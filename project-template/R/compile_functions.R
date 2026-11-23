@@ -560,11 +560,14 @@ survey_label <- function(code, short, cruise, cfg) {
 
 #' Prediction region of a stock from its positive hauls
 #'
-#' Concave hull of the hauls that caught the species, buffered and cut to the stock area, so
-#' that the prediction grid does not cover areas with only zero observations. The buffered
-#' positive hauls are added to the stock area so that coastal hauls outside the ICES
-#' polygons stay inside the region. Land and depth
-#' limits are applied later when the prediction grid is built.
+#' Concave hull of the hauls that caught the species, buffered and cut to the stock-area
+#' polygon, so that the prediction grid does not cover areas with only zero observations.
+#' The region never extends outside the stock polygon: the buffer would otherwise carry it
+#' into neighbouring stock areas, where the haul filter has removed the data, and the model
+#' would predict density where it has no observations. Hauls positioned outside the polygon
+#' (coded to the stock area but lying just across its boundary, or in fjords the polygon does
+#' not cover) fall outside the region and must be removed from the model data with it. Land
+#' and depth limits are applied later when the prediction grid is built.
 #'
 #' @param dt Compiled station data (`biomass`, `longitudestart`, `latitudestart`).
 #' @param stock_area Stock-area polygon from [read_stock_area()].
@@ -578,10 +581,8 @@ build_stock_region <- function(dt, stock_area, crs, buffer_km = 50, ratio = 0.1,
   pos <- dplyr::filter(dt, biomass > 0)
   pts <- sf::st_as_sf(pos, coords = c("longitudestart", "latitudestart"), crs = 4326) |>
     sf::st_transform(crs)
-  # The ICES polygons follow the coastline, so hauls in fjords and sounds can lie outside
-  # them; adding the buffered hauls keeps every positive haul inside the region.
-  area <- sf::st_union(sf::st_transform(sf::st_make_valid(stock_area), crs),
-                       sf::st_union(sf::st_buffer(pts, buffer_km * 1000)))
+  # Cut to the stock polygon only: never extend the region outside it (see above).
+  area <- sf::st_union(sf::st_transform(sf::st_make_valid(stock_area), crs))
   pts |>
     sf::st_union() |>
     sf::st_concave_hull(ratio = ratio) |>
@@ -663,11 +664,16 @@ classify_same_position_hauls <- function(dt, max_minutes = 30) {
 #' Hauls whose position lies in another ICES subarea than the recorded area code
 #'
 #' @param dt Stations with `icesarea` and positions.
-#' @param ices_file ICES areas shapefile (`ICES_AREAS_FILE`), with `Area_Full`.
+#' @param ices_file ICES areas as an sf object (from [read_ices_areas()]) or a file path,
+#'   with `Area_Full`.
 #' @return The mismatching rows with `ices_position`, or `NULL` without a file.
 ices_area_mismatch <- function(dt, ices_file) {
-  if (is.null(ices_file) || !file.exists(ices_file)) return(NULL)
-  ices <- sf::st_make_valid(sf::read_sf(ices_file))[, "Area_Full"]
+  if (is.null(ices_file)) return(NULL)
+  if (!inherits(ices_file, "sf")) {
+    if (!file.exists(ices_file)) return(NULL)
+    ices_file <- sf::read_sf(ices_file)
+  }
+  ices <- sf::st_make_valid(ices_file)[, "Area_Full"]
   pts <- sf::st_as_sf(dplyr::select(dt, haul_id, icesarea, longitudestart, latitudestart),
                       coords = c("longitudestart", "latitudestart"), crs = 4326) |>
     sf::st_transform(sf::st_crs(ices))

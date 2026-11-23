@@ -269,7 +269,7 @@ plot_annual_density(dplyr::filter(products, product == fish_label), base_annual,
 ```{r prediction-region}
 region_file <- here::here(cfg$PREDICTION_REGION_FILE %||%
                             file.path(cfg$SOURCE_DIR %||% "data/source", paste0(stock, "-prediction-region.gpkg")))
-stock_area <- read_stock_area(cfg)
+stock_area <- read_stock_area(cfg, cap = FALSE)  # uncut: the map cap would drop northern hauls
 region <- build_stock_region(dt, stock_area, cfg$CRS, buffer_km = cfg$REGION_BUFFER_KM %||% 25,
                              ratio = cfg$REGION_CONCAVITY %||% 0.1, label = cfg$SPECIES_NAME)
 dir.create(dirname(region_file), recursive = TRUE, showWarnings = FALSE)
@@ -602,7 +602,7 @@ The automated checks in @tbl-data-checks look for errors that the haul filter ca
 
 ```{r}
 #| label: tbl-data-checks
-checks <- data_checks(dt, lengths, lw, region, ices_file = here::here(cfg$ICES_AREAS_FILE),
+checks <- data_checks(dt, lengths, lw, region, ices_file = read_ices_areas(cfg),
                       max_depth = max_depth)
 readr::write_csv(
   attr(checks, "same_position") |>

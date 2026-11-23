@@ -117,7 +117,10 @@ code in the documents.
 - `<stock>-2-survey-selection.qmd` runs the compilation and documents the stock-area map,
   haul filter (criteria table and filter listing), surveys and cruise series, catch and effort,
   positions, gear, timing, gross-error screening and other data types. No prediction-region map
-  here; the prediction region belongs to the fit document.
+  here; the prediction region belongs to the fit document. Whichever document builds it, the
+  prediction region must be cut to the stock-area polygon only, and hauls outside it removed
+  from the model data (`knowledge/data-documents.md`, *Prediction region inside the stock
+  area*): a buffer must never carry the region into areas whose data were filtered out.
 - `<stock>-3-data.qmd` is the compiled-data report: final station map, effort through time,
   depth and response distributions, trawl parameters, length products and diagnostics. Begin it
   with a dynamic **Data collation** explanation covering station-level and individual-level

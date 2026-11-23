@@ -50,16 +50,39 @@ order_cruise_series <- function(x, year) {
   factor(x, levels = c(setdiff(lev, "Other"), intersect("Other", lev)))
 }
 
+#' ICES statistical areas used to assign `icesarea` in the Biotic database
+#'
+#' `ICES_AREAS_FILE: null` (default) returns `BioticExplorerServer::icesAreas`, the polygons
+#' that coded the `icesarea` column, so that the area-code filter and any polygon operation
+#' agree. A file is read only when one is configured. Do not substitute another release:
+#' the ICES GIS 2021-11-01 release draws the 4.a/2.a boundary diagonally from 3.5° W, 63° N
+#' to the Norwegian coast instead of along 62° N (Regulation (EC) No 218/2009, Annex III).
+#'
+#' @param cfg Project configuration with `ICES_AREAS_FILE`.
+#' @return sf polygons (EPSG:4326) with `Major_FA`, `SubArea`, `Area_Full`.
+read_ices_areas <- function(cfg) {
+  if (is.null(cfg$ICES_AREAS_FILE)) {
+    x <- BioticExplorerServer::icesAreas
+    suppressWarnings(sf::st_crs(x) <- 4326)
+    return(x)
+  }
+  sf::st_read(here::here(cfg$ICES_AREAS_FILE), quiet = TRUE)
+}
+
 #' Stock-area polygon: combined ICES subareas, or the REGION_FILE polygon
 #'
 #' Dissolves the stock subareas in a polar stereographic projection (a small positive and
-#' negative buffer closes slivers between neighbouring divisions) and cuts the polygon at
-#' the northern map limit so that the pole does not distort the map.
+#' negative buffer closes slivers between neighbouring divisions). For maps, the polygon is
+#' cut at the northern map limit so that the pole does not distort the map; use
+#' `cap = FALSE` for any data or region operation, or hauls north of the map limit are lost.
+#' `ICES_AREAS_FILE` should hold the polygons the Biotic database used to assign `icesarea`
+#' (BioticExplorerServer `icesAreas`), so that the area-code filter and the polygon agree.
 #'
 #' @param cfg Project configuration with `ICES_AREAS_FILE`, `STOCK_SUBAREAS`, `MAP_LIMITS`.
 #' @param crs Projected CRS for dissolving (default Arctic polar stereographic).
+#' @param cap Cut the polygon at the northern map limit (maps only).
 #' @return sf polygon (EPSG:4326) with column `area`.
-read_stock_area <- function(cfg, crs = 3995) {
+read_stock_area <- function(cfg, crs = 3995, cap = TRUE) {
   if (!length(cfg$STOCK_SUBAREAS)) {
     layer <- cfg$ACQUISITION_REGION_LAYER %||% cfg$REGION_LAYER
     return(sf::st_read(here::here(cfg$REGION_FILE), layer = layer, quiet = TRUE) |>
@@ -69,11 +92,11 @@ read_stock_area <- function(cfg, crs = 3995) {
   }
   lim <- unlist(cfg$MAP_LIMITS)
   lon <- seq(-180, 180, by = 1)
-  cap <- sf::st_sfc(sf::st_polygon(list(rbind(
+  cap_poly <- sf::st_sfc(sf::st_polygon(list(rbind(
     cbind(lon, lim[3] - 10), cbind(rev(lon), lim[4]), c(-180, lim[3] - 10)
   ))), crs = 4326) |>
     sf::st_transform(crs)
-  sf::st_read(here::here(cfg$ICES_AREAS_FILE), quiet = TRUE) |>
+  read_ices_areas(cfg) |>
     dplyr::filter(.data$Major_FA == "27", .data$SubArea %in% cfg$STOCK_SUBAREAS) |>
     densify_lonlat() |>
     sf::st_transform(crs) |>
@@ -81,7 +104,7 @@ read_stock_area <- function(cfg, crs = 3995) {
     sf::st_union() |>
     sf::st_buffer(2000) |>
     sf::st_buffer(-2000) |>
-    sf::st_intersection(cap) |>
+    (\(x) if (cap) sf::st_intersection(x, cap_poly) else x)() |>
     sf::st_transform(4326) |>
     sf::st_sf(area = paste("ICES", paste(cfg$STOCK_SUBAREAS, collapse = " and ")), geometry = _)
 }
