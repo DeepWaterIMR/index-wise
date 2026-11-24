@@ -147,7 +147,7 @@ plot_annual_density(bubble_dat, bubble_base)
 
 ### Model structure
 
-The indices are estimated with spatiotemporal generalised linear mixed models fitted with the R package sdmTMB [@anderson2022]. The models use the `r family_txt`. A delta model splits each haul's catch into two parts that are modelled separately and multiplied in prediction; each part has its own fixed effects and random fields, so a field can be included in one part and not in the other. The fixed effects are a penalised smooth of bottom depth (`s(depth)`)`r if ("fmonth" %in% final$TERMS) " and a factor for the month of the haul (fmonth)" else ""`, plus a factor for the year (`fyear`) in the two SPiCT candidates. The random fields are Gaussian Markov random fields with a Matérn correlation [@lindgren2011], estimated on a triangulation mesh: a **spatial field** ($\omega$) describes where `r sp_lc` is consistently more or less abundant than the fixed effects predict, and **spatiotemporal fields** ($\epsilon_t$) describe how that pattern changes from year to year.
+The indices are estimated with spatiotemporal generalised linear mixed models fitted with the R package sdmTMB [@anderson2025]. The models use the `r family_txt`. A delta model splits each haul's catch into two parts that are modelled separately and multiplied in prediction; each part has its own fixed effects and random fields, so a field can be included in one part and not in the other. The fixed effects are a penalised smooth of bottom depth (`s(depth)`)`r if ("fmonth" %in% final$TERMS) " and a factor for the month of the haul (fmonth)" else ""`, plus a factor for the year (`fyear`) in the two SPiCT candidates. The random fields are Gaussian Markov random fields with a Matérn correlation [@lindgren2011], estimated on a triangulation mesh: a **spatial field** ($\omega$) describes where `r sp_lc` is consistently more or less abundant than the fixed effects predict, and **spatiotemporal fields** ($\epsilon_t$) describe how that pattern changes from year to year.
 
 For the two SPiCT candidates, the linear predictor of component $j$ (encounter or positive density) at location $s$ in year $t$ is
 
@@ -214,7 +214,7 @@ grid_map$plot
 
 ### Survey indices
 
-The annual index is the sum over the grid cells of the predicted density times the cell area (`sdmTMB::get_index()`; @anderson2022), in tonnes in the prediction region. Its uncertainty is the standard error of the log index from the delta method, and the 95 % confidence interval is the estimate times $\exp(\pm 1.96\,\mathrm{SE})$. The coefficient of variation (CV) is $\sqrt{\exp(\mathrm{SE}^2) - 1}$.
+The annual index is the sum over the grid cells of the predicted density times the cell area (`sdmTMB::get_index()`; @anderson2025), in tonnes in the prediction region. Its uncertainty is the standard error of the log index from the delta method, and the 95 % confidence interval is the estimate times $\exp(\pm 1.96\,\mathrm{SE})$. The coefficient of variation (CV) is $\sqrt{\exp(\mathrm{SE}^2) - 1}$.
 
 ### Sensitivity analyses
 

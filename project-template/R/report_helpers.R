@@ -4,12 +4,24 @@
 #'
 #' Adds the citation() entries of the packages to the project's single bibliography
 #' (references.bib) and emits narrative citations with the installed versions. Entries already
-#' in the file are left as they are, so hand edits survive; only missing keys are appended.
+#' in the file are left as they are, so hand edits survive; only missing keys are appended. A
+#' citation whose DOI is already in the file (a published paper) is cited by that entry instead.
 #' @param packages Character vector of packages that influenced this report.
 #' @param bibliography Path to the project's references.bib.
 #' @return Invisibly, the keys that were added.
 report_software <- function(packages, bibliography) {
   packages <- unique(c("base", packages))
+  bib <- if (file.exists(bibliography)) readLines(bibliography, encoding = "UTF-8", warn = FALSE) else character()
+  # Keys already in the file, and the key of each DOI, so that a package whose citation is a
+  # paper already in the library (e.g. a journal article) is cited by that entry.
+  is_head <- grepl("^\\s*@[A-Za-z]+\\{", bib)
+  head_key <- trimws(sub("^\\s*@[A-Za-z]+\\{\\s*([^,]+),.*$", "\\1", bib))
+  entry_key <- head_key[is_head][cumsum(is_head)[cumsum(is_head) > 0]]
+  entry_lines <- bib[cumsum(is_head) > 0]
+  doi_rows <- grepl("^\\s*doi\\s*=", entry_lines, ignore.case = TRUE)
+  doi_key <- stats::setNames(entry_key[doi_rows],
+    tolower(gsub("^\\s*doi\\s*=\\s*[{\"]|[}\"],?\\s*$", "", entry_lines[doi_rows], ignore.case = TRUE)))
+  present <- head_key[is_head]
   entries <- character()
   prose <- character()
   for (package in packages) {
@@ -17,6 +29,11 @@ report_software <- function(packages, bibliography) {
     keys <- paste0("software-", gsub("[^A-Za-z0-9]", "", package), "-", seq_along(refs))
     for (i in seq_along(refs)) {
       ref <- refs[i]
+      doi <- tolower(ref$doi %||% "")
+      if (nzchar(doi) && doi %in% names(doi_key)) {
+        keys[i] <- doi_key[[doi]]
+        next
+      }
       ref$key <- keys[i]
       entries[keys[i]] <- paste(as.character(utils::toBibtex(ref)), collapse = "\n")
     }
@@ -26,9 +43,7 @@ report_software <- function(packages, bibliography) {
     prose <- c(prose, paste0(label, " ", version, " [",
                             paste0("@", keys, collapse = "; "), "]"))
   }
-  bib <- if (file.exists(bibliography)) readLines(bibliography, encoding = "UTF-8", warn = FALSE) else character()
-  present <- sub("^\\s*@[A-Za-z]+\\{\\s*([^,]+),.*$", "\\1", grep("^\\s*@[A-Za-z]+\\{", bib, value = TRUE))
-  missing <- setdiff(names(entries), trimws(present))
+  missing <- setdiff(names(entries), present)
   if (length(missing)) {
     dir.create(dirname(bibliography), recursive = TRUE, showWarnings = FALSE)
     con <- file(bibliography, open = "a", encoding = "UTF-8")
