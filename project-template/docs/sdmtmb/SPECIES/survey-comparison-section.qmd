@@ -1,26 +1,126 @@
-<!-- Included by report.qmd. Shares its params. Per-survey indices vs the compiled index:
-filter to one cruiseseries, build a survey-specific mesh and grid, compute the index, and
-compare with compare_surveys(). -->
+<!-- Included by report.qmd. Single-survey indices and leave-one-survey-out refits of the total
+biomass (IID) model. -->
 
-```{r, eval=params$include_survey}
-#| label: fig-survey-comparison-section-survey-section
-#| fig-cap: "Survey-specific and compiled indices shown as time series and pairwise comparisons."
-#| output: asis
-cat("## Survey comparison\n\n")
-fit_total   <- readRDS(file.path(out_dir, "model-fit-total.rds"))
-index_total <- readRDS(file.path(out_dir, "index-total.rds"))
+## Survey comparison {#sec-survey}
 
-sc <- compare_surveys(
-  data          = fit_total$data,
-  compiled_index = index_total,
-  compiled_model = fit_total,
-  surveys        = cfg$SURVEYS,       # one index per cruiseseries
-  newdata        = grid,
-  survey_col     = "cruiseseries",
-  mesh_cutoff    = cfg$MESH_CUTOFF_KM
-)
-print(plot(sc, type = "index"))
-print(plot(sc, type = "scatter"))
+```{r survey-comp}
+survey_comp <- read_report_cache(ctx, "surveys")
+survey_loo <- read_report_cache(ctx, "loso")
+if (!is.null(survey_comp)) {
+  ref_lab <- attributes(survey_comp)$reference_label
+  sc_surveys <- attributes(survey_comp)$surveys
+  sc_fam <- attr(survey_comp, "families")
+  ref_index <- survey_comp$index |> dplyr::filter(model == ref_lab, domain == "full") |> dplyr::select(year, ref_est = est)
+  survey_cor <- survey_comp$index |>
+    dplyr::filter(model != ref_lab, domain == "survey", !is.na(est)) |>
+    dplyr::inner_join(ref_index, by = "year") |>
+    dplyr::summarise(r = stats::cor(log(est), log(ref_est)), years = dplyr::n(), .by = "model")
+  same_area <- survey_comp$index |>
+    dplyr::filter(domain == "shared") |>
+    dplyr::mutate(source = ifelse(model == ref_lab, "est_compiled", "est_survey")) |>
+    dplyr::select(survey, year, source, est) |>
+    tidyr::pivot_wider(names_from = source, values_from = est) |>
+    dplyr::filter(!is.na(est_survey), !is.na(est_compiled)) |>
+    dplyr::filter(dplyr::n() >= 3, .by = "survey") |>
+    dplyr::summarise(r = stats::cor(log(est_survey), log(est_compiled)),
+                     ratio = exp(mean(log(est_survey / est_compiled))), .by = "survey")
+  # A survey model without a fit has NA in every sanity check.
+  sc_nofit <- names(survey_comp$sanity)[vapply(survey_comp$sanity, function(col) all(is.na(col)), logical(1))]
+  sc_failed <- setdiff(names(survey_comp$sanity)[!vapply(survey_comp$sanity, function(col) isTRUE(col[rownames(survey_comp$sanity) == "all_ok"]), logical(1))], sc_nofit)
+  sc_checks <- vapply(sc_failed, function(m) {
+    x <- survey_comp$sanity[[m]]
+    paste(setdiff(rownames(survey_comp$sanity)[x %in% FALSE], "all_ok"), collapse = ", ")
+  }, character(1))
+  # Drop survey models without a fit from the object, so that the plot methods see only fits.
+  if (length(sc_nofit)) {
+    sc_attr <- attributes(survey_comp)
+    survey_comp$index <- dplyr::filter(survey_comp$index, !model %in% sc_nofit, !survey %in% sc_nofit)
+    survey_comp$grid <- survey_comp$grid[setdiff(names(survey_comp$grid), sc_nofit)]
+    survey_comp$sanity <- survey_comp$sanity[setdiff(names(survey_comp$sanity), sc_nofit)]
+    if ("settings" %in% names(survey_comp) && "survey" %in% names(survey_comp$settings)) {
+      survey_comp$settings <- dplyr::filter(survey_comp$settings, !survey %in% sc_nofit)
+    }
+    attr(survey_comp, "surveys") <- setdiff(sc_attr$surveys, sc_nofit)
+    attr(survey_comp, "families") <- sc_attr$families[setdiff(names(sc_attr$families), sc_nofit)]
+  }
+}
+sr <- function(s, tab = survey_cor, col = "r", key = "model") round(tab[[col]][tab[[key]] == s], 2)
 ```
 
-<!-- Base any "these surveys follow the compiled index" statement on the correlations, survey by survey; do not group a coastal or fjord survey with the shelf surveys. Describe the supported finding and refer to @fig-survey-comparison-section-survey-section. Confirm caption units, sample size, and interval definitions against the generated result. -->
+The compiled index combines all survey series in one model. To see how much the main series support its trend, separate indices were fitted to `r if (!is.null(survey_comp)) list_values(sc_surveys) else "the main survey series"` and compared with the compiled total biomass index (`sdmTMBexperiments::compare_surveys()`). Each survey model was fitted to the hauls of that series only, with its own mesh (`r final$MESH_CUTOFF_KM` km cutoff) and a prediction grid cut to the survey's footprint (a concave hull around its hauls). The survey models have a depth smooth, a spatial field and AR1 spatiotemporal fields without a year factor, so that years with few catches in a single series borrow from their neighbours`r if (!is.null(survey_comp)) if (any(sc_fam == "tweedie")) paste0("; they use the ", final$FAMILY, " family, except ", list_values(names(sc_fam)[sc_fam == "tweedie"]), ", which caught ", sp_lc, " in fewer than 100 hauls and uses the Tweedie family") else paste0("; they all use the ", final$FAMILY, " family of the compiled model") else ""`. The survey indices are therefore smoother than the compiled IID index, and the comparison is about trends, not about single years. The compiled model was also predicted over the same cells as each survey model, which separates a difference in area from a difference in trend.
+
+`r if (!is.null(survey_comp)) paste0("Over the years each survey has data, the log survey indices correlate with the log compiled index by r = ", paste0(sr(survey_cor$model), " (", survey_cor$model, ")", collapse = ", "), " (@fig-report-survey-index, @fig-report-survey-scatter). Over the same cells, the correlations are ", paste0(sr(same_area$survey, same_area, key = "survey"), " (", same_area$survey, ")", collapse = ", "), ", and the survey indices are on average ", paste0(round(same_area$ratio, 2), " times (", same_area$survey, ")", collapse = ", "), " the compiled index over the same area (@fig-report-survey-same-area). ", if (length(sc_nofit)) paste0("The ", list_values(sc_nofit), " model failed to fit and has no index; it is left out of the comparison. ") else "", if (length(sc_failed)) paste0("Not all survey models passed the sanity checks (failed checks: ", paste0(sc_failed, ": ", sc_checks, collapse = "; "), "). ", if (any(grepl("range_ok", sc_checks))) "A failed range check means that the estimated Matérn range exceeds the extent of the survey data, which is common for a survey that covers a narrow area. " else "", "The survey indices are therefore indicative. ") else if (length(sc_nofit)) "The other survey models passed the sanity checks. " else "All survey models passed the sanity checks. ", "@fig-report-survey-spatial shows where each survey model predicts higher or lower densities than the compiled model.") else "The survey comparison has not been computed yet."`
+
+```{r}
+#| label: fig-report-survey-index
+#| eval: !expr '!is.null(survey_comp)'
+#| fig-height: 5
+#| fig-cap: !expr 'paste0("Compiled total biomass (IID) index of ", sp_lc, " (black) and indices fitted to single survey series, each over its own area (t). Bands: 95 % confidence intervals.")'
+plot(survey_comp, type = "index", index_divisor = 1000, unit = "t", base_size = 9)
+```
+
+```{r}
+#| label: fig-report-survey-scatter
+#| eval: !expr '!is.null(survey_comp)'
+#| fig-height: 3.5
+#| fig-cap: "Single-survey indices against the compiled total biomass (IID) index; each point is one year and the lines are linear regressions."
+plot(survey_comp, type = "scatter", index_divisor = 1000, unit = "t", base_size = 9)
+```
+
+```{r}
+#| label: fig-report-survey-same-area
+#| eval: !expr '!is.null(survey_comp)'
+#| fig-height: 5
+#| fig-cap: "Single-survey indices (orange) and the compiled total biomass (IID) model (black) predicted over the same cells, the part of each survey's grid inside the compiled grid (t). Bands: 95 % confidence intervals."
+plot(survey_comp, type = "same_area", index_divisor = 1000, unit = "t", base_size = 9)
+```
+
+```{r}
+#| label: fig-report-survey-spatial
+#| eval: !expr '!is.null(survey_comp)'
+#| dev: jpeg
+#| dev-args: !expr list(quality = 85)
+#| fig-height: 4.5
+#| fig-cap: "Difference between the density predicted by each single-survey model and by the compiled model in the same cells, averaged over the years (percent anomaly). Positive values: the survey model predicts more."
+plot(survey_comp, type = "spatial", spatial_response = "pr_mean", base_size = 8)
+```
+
+### Leave-one-survey-out
+
+```{r loso}
+if (!is.null(survey_loo)) {
+  loo_n <- dt |> dplyr::count(id = as.character(cruiseseries), name = "n_hauls") |>
+    dplyr::mutate(haul_share_all = n_hauls / sum(n_hauls))
+  loo_inf <- survey_loo$influence |> dplyr::left_join(loo_n, by = "id")
+  loo_of <- function(s, col) loo_inf[[col]][loo_inf$id == s]
+  loo_top <- loo_inf$id[which.max(abs(loo_inf$influence))]
+  loo_rest <- dplyr::filter(loo_inf, id != loo_top)
+}
+```
+
+The survey comparisons show what each series says on its own. The leave-one-survey-out refits show what each series contributes to the compiled index: the total biomass model was refitted without each survey series in turn, with the same specification and mesh, and the index of each refit was compared with that of a refit to all data (`sdmTMBexperiments::sdmTMB_leave_out()`). The influence of a series is one minus the geometric mean ratio of the index without it to the index with it, over the years the series has data; positive values mean that the series raises the index.
+
+`r if (!is.null(survey_loo)) paste0(if (all(loo_inf$all_ok %in% TRUE)) "All refits passed the sanity checks. " else paste0("The refits without ", list_values(loo_inf$id[!loo_inf$all_ok %in% TRUE]), " did not pass all sanity checks. "), "Leaving out ", loo_top, " (", pct(loo_of(loo_top, "haul_share_all")), " of the hauls) changed the index most: its influence is ", round(loo_of(loo_top, "influence"), 2), ", and the largest change in a single year is ", pct(loo_of(loo_top, "max_abs_change")), " in ", loo_of(loo_top, "year_max_change"), " (@tbl-report-loso, @fig-report-loso). The influence of the other series is between ", round(min(loo_rest$influence, na.rm = TRUE), 2), " and ", round(max(loo_rest$influence, na.rm = TRUE), 2), ".") else "The leave-one-survey-out refits have not been computed yet."`
+
+```{r}
+#| label: tbl-report-loso
+#| eval: !expr '!is.null(survey_loo)'
+#| tbl-cap: "Influence of each survey series on the total biomass (IID) index. Hauls: hauls of the series; haul share: its share of the hauls in the years it has data. Influence: one minus the geometric mean ratio of the index without the series to the index with all data over those years. Leverage: influence divided by haul share. Max change: largest absolute relative change in a year. Sanity: the refit passed all sanity checks."
+loo_inf |>
+  dplyr::transmute(Series = id, Hauls = n_hauls, `Haul share` = round(haul_share, 3),
+                   Years = vapply(id_years, length, integer(1)), Influence = round(influence, 3),
+                   Leverage = round(leverage, 2), `Max change` = round(max_abs_change, 3),
+                   `Year of max change` = year_max_change, Sanity = all_ok) |>
+  knitr::kable()
+```
+
+```{r}
+#| label: fig-report-loso
+#| eval: !expr '!is.null(survey_loo)'
+#| fig-height: 6
+#| fig-cap: "Leave-one-survey-out refits of the total biomass (IID) model. A) Index with all data (black) and without each survey series (t). B) Ratio of the index without each series to the index with all data."
+cowplot::plot_grid(
+  plot(survey_loo, index_divisor = 1000, unit = "t", base_size = 9) + ggplot2::theme(legend.position = "none"),
+  plot(survey_loo, type = "ratio", base_size = 9),
+  ncol = 1, labels = "AUTO", rel_heights = c(1, 1.25))
+```

@@ -1,13 +1,28 @@
-<!-- Included by report.qmd. Shares its params. Retrospective peels + Mohn's rho. -->
+<!-- Included by report.qmd. Retrospective analysis of the two SPiCT candidates. -->
 
-```{r, eval=params$include_retro}
-#| label: fig-retro-section-retro-section
-#| fig-cap: "Retrospective index estimates after successive terminal-year removals."
-#| output: asis
-cat("## Retrospective\n\n")
-fit_total <- readRDS(file.path(out_dir, "model-fit-total.rds"))
-retro <- sdmTMB_retro(fit_total, newdata = grid, nyears = 5)
-print(plot(retro))
+## Retrospective analysis {#sec-retro}
+
+```{r retro}
+retro <- purrr::compact(list(
+  "Total biomass (IID)" = read_report_cache(ctx, "retro-total-iid"),
+  "Fishable biomass (IID)" = read_report_cache(ctx, "retro-fishable-iid")))
+retro_long <- function(x) {
+  dplyr::bind_rows(lapply(seq_along(x), function(i) dplyr::mutate(x[[i]]$index, peel = names(x)[i], .before = 1)))
+}
+retro_rho <- vapply(retro, function(x) sdmTMBexperiments::mohns_rho(retro_long(x), group_col = "peel", reference = names(x)[1]), numeric(1))
+retro_peels <- purrr::imap_dfr(retro, ~ dplyr::mutate(attr(.x, "peels"), model = .y))
+retro_nyears <- if (length(retro)) length(retro[[1]]) - 1 else NA
 ```
 
-<!-- Describe the supported finding and refer to @fig-retro-section-retro-section. Confirm caption units, sample size, and interval definitions against the generated result. -->
+A retrospective analysis shows how much the index of the most recent years changes when more years of data are added, which is what happens to the index in each annual update. The model was refitted after removing the last one to `r retro_nyears` years of data in turn (the "peels"), keeping the specification and the mesh of the full model, and the index of each peel was compared with the index of the full model. The year factor of each peel has only the years that remain. Mohn's ρ [@mohn1999] is the mean relative difference between each peel's terminal-year index and the full model's index for the same year; a value near zero means that the terminal year is not systematically revised up or down when data are added. It was computed for the two SPiCT candidates, whose terminal years enter the assessment.
+
+`r if (length(retro)) paste0("Mohn's ρ is ", paste0(round(retro_rho, 3), " for the ", lc_first(names(retro_rho)), " index", collapse = " and "), " (@fig-report-retro). ", if (all(retro_peels$all_ok %in% TRUE)) "All peels passed the sanity checks. " else paste0("Peels that did not pass the sanity checks: ", paste0(retro_peels$model[!retro_peels$all_ok %in% TRUE], " ", retro_peels$peel[!retro_peels$all_ok %in% TRUE], collapse = ", "), ". "), "For comparison, values between −0.15 and 0.20 are the range that @hurtadoferro2015 found acceptable for the biomass estimates of an assessment of a long-lived species; an index from a model with a year factor and IID fields has no mechanism that carries a revision forward, so its retrospective pattern reflects how much the new years change the shared parameters (the spatial field, the depth effect and the field variances).") else "The retrospective analysis has not been computed yet."`
+
+```{r}
+#| label: fig-report-retro
+#| eval: !expr length(retro) > 0
+#| fig-height: !expr 3.4 * length(retro)
+#| fig-cap: !expr 'paste0("Retrospective analysis of the ", list_values(lc_first(names(retro))), " indices of ", sp_lc, " (t). Each line is the index of a model fitted with the last years removed (peel 0: all data), with its 95 % confidence interval.")'
+purrr::imap(retro, ~ plot(.x, index_divisor = 1000, index_unit = "t", base_size = 9) + ggplot2::ggtitle(.y)) |>
+  cowplot::plot_grid(plotlist = _, ncol = 1)
+```

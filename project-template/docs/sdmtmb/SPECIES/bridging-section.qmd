@@ -9,7 +9,7 @@ explain (new data, late vessels, filters, model change), not an error to tune aw
 #| fig-cap: "New and previous assessment index, each rescaled to its mean over the overlapping years. Points mark years whose relative change exceeds the revision tolerance."
 #| output: asis
 cat("## Comparison with the previous assessment index\n\n")
-index_total <- readRDS(file.path(out_dir, "index-total.rds"))
+index_total <- post[[total]]$index
 previous_path <- here::here(cfg$PREVIOUS_INDEX_FILE)
 previous <- if (grepl("\\.rds$", previous_path)) readRDS(previous_path) else
   utils::read.csv(previous_path)

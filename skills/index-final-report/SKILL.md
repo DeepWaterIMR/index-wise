@@ -1,6 +1,6 @@
 ---
 name: index-final-report
-description: Step 4 of the index workflow — build the final model report with extensions (multiple indices, length groups, and optional mesh/barrier/retro/CV/survey-comparison sections) and export the selected index for assessment. Use after the model is validated (step 3). Modelled on ref-assessment-index/benchmark/beaked. For sdmTMB index work outside a scaffolded index-wise project, use index-sdmtmb.
+description: Step 4 of the index workflow — build the self-contained final model report (multiple indices, diagnostics, regional, retrospective, survey-comparison and influence sections) and export the selected index for assessment. Use after the model is validated (step 3). Modelled on ref-assessment-index/benchmark/beaked. For sdmTMB index work outside a scaffolded index-wise project, use index-sdmtmb.
 ---
 
 <!-- pack-resources:start -->
@@ -45,29 +45,40 @@ conventions to every generated artifact; retain index-wise's scientific workflow
 4. **Export** the selected index as the versioned `assessment-index.rds` hand-off
    (`knowledge/assessment-index-handoff.md`); spict-wise and gadget-wise read it directly.
 
-## Optional include sections
+## Report structure and computation
 
-Each is a `*-section.qmd` included from `report.qmd`, switched by a YAML param plus a compute
-toggle (default off), mirroring the benchmark:
+The report follows the beaked-redfish benchmark document and must stand on its own for a
+reviewer: Introduction (products, assessment use, pointers to the data and validate
+documents), Material and methods (data overview with a table by survey series, hauls per year
+and an annual density bubble map; model structure with the linear predictor written out;
+mesh; model fitting; prediction-grid depth map; index computation; sensitivity analyses),
+Results (sanity table, residual Q-Q, simulated vs observed zero share and mean density,
+density histograms, fixed- and random-effect tables, conditional effects, variance
+partitioning, spatial and spatiotemporal field maps, mean and annual density maps), Survey
+indices (absolute, mean-scaled and CV panels), the sensitivity sections, exported indices,
+and index tables in the appendix. Data selection and model selection are summarised and
+linked, not repeated: mesh, barrier, anisotropy and mesh-CV comparisons belong in
+`validate.qmd`.
 
-- `mesh-section.qmd` — mesh comparison (`compare_meshes`).
-- `barrier-section.qmd` — barrier-mesh comparison.
-- `retro-section.qmd` — retrospective (`sdmTMB_retro`, `mohns_rho`).
-- `cross-validation-section.qmd` — mesh CV (`sdmTMB_mesh_cv`).
-- `survey-comparison-section.qmd` — per-survey indices vs the compiled index
-  (`compare_surveys`): filter to one `cruiseseries`, build a survey-specific mesh and grid,
-  compute the index, compare (`plot(type = "index"|"scatter"|"spatial")`). Add
-  leave-one-survey-out (`sdmTMB_leave_out(id_col = "cruiseseries")`).
-- `bridging-section.qmd` — the new index against the previous assessment's published index
-  (`PREVIOUS_INDEX_FILE`, in index years), both rescaled to their overlap mean; years beyond
-  `REVISION_TOLERANCE` are flagged and each needs an explanation.
-- `robustness-section.qmd` — whole-station subsampling, start-year peels, the terminal year
-  without `LATE_COMPONENTS`, and down-weighted years (`ROBUSTNESS`). Diagnostics only; a
-  barrier mesh is not rebuilt in these refits.
-- `influence-section.qmd` — which hauls and cruises drive the index: region split, density
-  screens, leave-one-out with leverage, and data-filter scenarios for any anomaly
-  (`knowledge/influence-diagnostics.md`). Results are cached before any exclusion; exclusions
-  go in `config.yaml` `EXCLUDE_CRUISES`.
+All slow work runs on a server through `R/report/run_report.sh`, which runs
+`R/report/report_compute.R` step by step (grid, fit and post per product, then retro,
+surveys, loso, influence) and caches each result under `<OUTPUT_DIR>/report/`; the document
+only reads the caches, so it renders in minutes and a failed step reruns alone.
+
+Sensitivity sections (`*-section.qmd`, included from `report.qmd`):
+
+- `region-section.qmd` — regional contributions: the index summed by ICES division
+  (`index_by_region()`), with hauls per division.
+- `retro-section.qmd` — retrospective peels of the assessment candidates with Mohn's rho.
+  Use `run_report_retro()`, not `sdmTMB_retro()`, for models with a year factor (see
+  `knowledge/sdmtmbexperiments.md`).
+- `survey-comparison-section.qmd` — single-survey indices (`compare_surveys()`, survey models
+  with AR1 fields and no year factor, Tweedie for series with < 100 positive hauls) and
+  leave-one-survey-out refits (`sdmTMB_leave_out(id_col = "cruiseseries")`). Report which
+  sanity checks the survey models fail.
+- `influence-section.qmd` — cruises and hauls screened with `density_share()`, then left out
+  one at a time; flag influence ≥ 0.1 with leverage ≥ 2 (`knowledge/influence-diagnostics.md`).
+- `bridging-section.qmd`, `robustness-section.qmd` — optional, behind params.
 
 ## Annual update mode
 

@@ -42,10 +42,14 @@ first:
    total/length indices → `ar1` with no year effect; the assessment-selected index for SPiCT →
    `iid` + `year` as a fixed effect, because SPiCT smooths the series itself
    (`knowledge/model-selection.md`, *The assessment constraint*). If CV prefers `ar1`, report
-   it and carry `iid`. A year effect with `ar1` is a third option, common in existing indices.
-   Confirm with the user which the assessment consumes.
-3. **Barrier, anisotropy and survey fields** — sensitivity of the index to each, on the
-   selected mesh. With combined seasons, also the survey-specific spatial deviation field
+   it and carry `iid`. When the project also delivers a smoothed index, select its structure
+   separately among the AR1/RW candidates without a year factor (cross-validate all of them;
+   fewest parameters within one SE of the best of them). Say in the Purpose section that the
+   selection is tuned for SPiCT. A year effect with `ar1` is a third option, common in existing
+   indices. Confirm with the user which the assessment consumes.
+3. **Barrier, anisotropy and survey fields** — isotropic, anisotropic, and isotropic with a
+   barrier mesh, on the selected mesh. Build and cache the barrier land polygon on a machine
+   with internet, and smoke-test the barrier candidate on the target cluster before the run. With combined seasons, also the survey-specific spatial deviation field
    (`run_survey_field`; `knowledge/model-selection.md` *Combining surveys and seasons*).
 4. **Fixed effects** — the full model, each term dropped in turn, candidate additions
    (catchability covariates such as `hour`/`sun_altitude`). Survey × gear is usually not
@@ -53,15 +57,19 @@ first:
    misrecorded gear there.
 5. **Family re-check** — the Step 3a winner against its runners-up with the selected structure.
    Prefer a Poisson-link delta family with a swept-area offset when it fits at least as well
-   and converges; Tweedie with an offset is the other coherent-effort baseline. When replacing
+   and converges; Tweedie with an offset is the other coherent-effort baseline. Parsimony:
+   Tweedie (one component) if within one SE of the best, else the incoming family if within one
+   SE, else the best; cross-validate every family. When replacing
    an existing index, include its family. Candidates on different response scales need the
    Jacobian correction.
-6. **Grid resolution** — after the fit: the fastest grid whose index (level included) is stable
-   within the same 5 % of the finest grid, with index time and grid size reported.
+6. **Grid resolution** — after the fit: the fastest grid whose index (level included) is
+   within 1 % of the finest grid (terminal, Δρ, MARD; each grid judged on its own), with index
+   time and grid size reported.
 
 AIC ranks every ladder; cross-validate a shortlist only, with **space–time block folds** sized
 by the Matérn range of the Step 2 fit (`load_cv_folds()`; never random-haul folds for selection),
-and compare candidates by the paired ΔELPD and its SE (`cv_paired()`). Explain ELPD and the folds
+and compare candidates by the paired ΔELPD and its SE (`cv_paired()`), reported as the
+difference from the best candidate of the selection set so the one-SE rule reads off one row. Explain ELPD and the folds
 in the document's methods, and name each stage's incoming and selected model — see
 `knowledge/model-selection.md` (Which cross-validation asks which question). Residuals (DHARMa), retrospectives,
 interval widths and comparison with an existing index are **diagnostics of the final model**

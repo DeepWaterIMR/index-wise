@@ -68,8 +68,8 @@ else.
 | Stage | Vary | Typical candidates |
 |---|---|---|
 | 1. Mesh resolution | `cutoff` | A ladder from the Step 2 cutoff down to the finest the machine can afford, e.g. 100, 75, 50, 35, 25 km |
-| 2. Random-field structure | `spatial` (per component), `spatiotemporal` | Spatial on/off in each delta component × `ar1`/`rw`/`iid` |
-| 3. Spatial correlation geometry | barrier mesh, `anisotropy` | Isotropic, anisotropic, barrier (sensitivity, not ranking) |
+| 2. Random-field structure | `spatial` (per component), `spatiotemporal` | Spatial on/off in each delta component × `ar1`/`rw`/`iid`; two selections when the project has both a SPiCT and a smoothed index (below) |
+| 3. Spatial correlation geometry | barrier mesh, `anisotropy` | Isotropic, anisotropic, isotropic with a barrier mesh |
 | 4. Fixed effects | `formula` (drop one term, add one) | Full model, each term dropped in turn, candidate additions such as `s(month)` |
 | 5. Family re-check | `family` | The Step 3a winner against its runners-up, now with the selected structure |
 | 6. Prediction grid | grid cell size | Not a model choice — see *Grid resolution* below |
@@ -213,6 +213,29 @@ from the per-observation differences on one shared fold assignment, which is far
 the SE of either ELPD alone. Apply the same rule to every stage, the formula stage included —
 an exception for "best ELPD" there quietly re-admits the larger model.
 
+- **Separate selection sets.** When one stage serves two products — the IID + year structure
+  for a SPiCT index and the AR1/RW structure without a year factor for a smoothed index — run
+  the rule twice, each set against its own best. A smoothed structure that predicts better
+  does not replace the SPiCT structure (the assessment constraint), and the smoothed index
+  still gets a selected structure. Among smoothed candidates, fewer parameters: a random walk is
+  an AR1 field with the correlation fixed at one, and a model without the spatial field is
+  simpler than one with it. Later stages run on the SPiCT model; the smoothed index takes their
+  fixed effects, geometry and family with its own field structure.
+- **Families have a complexity order too.** Tweedie is the simplest (one linear predictor and
+  one set of fields); the delta families have two, and all have the same number of parameters
+  (the Poisson link adds none). Rule: Tweedie if within one SE of the best; otherwise the
+  incoming family if within one SE; otherwise the best. Cross-validate every family, so the
+  simplest is never left out of the comparison by an AIC shortlist.
+- **Report the difference from the best, not from the incoming model.** Give each
+  cross-validated candidate's ΔELPD from the best candidate of its set and the paired SE of
+  *that* difference: the rule is then readable in one row (within one SE when −ΔELPD ≤ SE).
+  A ΔELPD from the incoming model with its SE cannot be used to check the rule, because the SE
+  of the difference from the best is a different number; a Δ/SE column adds nothing once the
+  difference is from the best.
+- **A missing fit is not a non-convergence.** If a candidate left no fit object (the process
+  crashed), mark it as such in the table and rerun it; do not report it as "converged: FALSE".
+  Keep the server logs of failed candidates until the stage is rerun.
+
 ## Confirm the final specification one setting at a time
 
 The staged search above carries each winner forward, so later stages are conditional on earlier
@@ -341,15 +364,19 @@ Practical notes:
 The prediction grid does not change the fit, but it changes the index (through how well the cells
 follow the coastline and the depth limit) and it dominates the cost of prediction: the predicted
 object grows with cells × years, and `get_index()` with bias correction is the step that runs out
-of memory. Choose the grid by the **same stability rule as the mesh, with the same $\tau = 5$ %**: the
-fastest grid whose terminal-year difference, five-year mean difference and MARD from the finest
-grid are all within $\tau$, with every finer grid within it too. Here compute the differences
-on the index itself, level included: the model is the same and only the summation changes, so
-the finest grid is the correct sum. Predict the selected model on a ladder of cell sizes (e.g. 5,
-10, 20, 30, 50, 100, 200 km; the very coarse ones show where the index starts to move) and
-record the index time and grid size. One tolerance for both settings is easier to defend than
-two: 5 % is about a quarter of the accepted Mohn's rho range (Hurtado-Ferro et al. 2015) and an
-order of magnitude below a typical annual index CV. A grid much finer than the mesh can
+of memory. Choose the grid by the mesh's stability rule with a **stricter tolerance,
+$\tau = 1$ %**: the fastest grid whose terminal-year difference, five-year mean difference and
+MARD from the finest grid are all within $\tau$. Compute the differences on the index itself,
+level included: the model is the same and only the summation changes, so the finest grid is the
+correct sum, up to the resolution of the depth data. The mesh tolerance (5 %) allows for the
+reference mesh being itself an uncertain estimate; the grid reference is known, and a finer
+grid costs only computing time and memory, so 1 % is affordable. Judge each grid on its own,
+without requiring every finer grid to pass: grid differences are not monotone in cell size,
+because they depend on where cell centres fall relative to steep slopes (ling and tusk,
+ICES 1–2, 2026: tusk 10 km MARD 1.3 %, 20 km 0.2 %). Predict the selected model on a ladder of
+cell sizes (e.g. 5, 10, 20, 30, 50, 100, 200 km; the very coarse ones show where the index
+starts to move) and record the index time and grid size. A grid finer than the rule needs is a
+legitimate choice, e.g. one grid for several species. A grid much finer than the mesh can
 resolve adds cells, not information; a grid much coarser than the mesh cutoff starts to
 misrepresent the domain boundary.
 

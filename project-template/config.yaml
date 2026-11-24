@@ -122,6 +122,25 @@ SELECTED_INDEX: "Total biomass"       # exact name in the report's index_product
 ASSESSMENT_INDEX_UNITS: "relative index units"
 ASSESSMENT_INDEX_TYPE: "survey biomass"
 ASSESSMENT_INDEX_TIMING: 0.5          # fraction of the INDEX year; confirm against survey timing
+
+# --- Final report (docs/sdmtmb/<species>/report.qmd, R/report/) -----------------------------
+# FINAL_MODEL: the specification selected in validate.qmd; the report fits the total and the
+# over-OVER_CM biomass with it (IID spatiotemporal fields + year factor, the SPiCT structure).
+# Without it, the report falls back to the config defaults and warns. Example:
+#   FINAL_MODEL:
+#     MESH_CUTOFF_KM: 30
+#     TERMS: ["s(depth)"]
+#     FAMILY: "delta_lognormal"
+#     SPATIAL: "on"
+#     SPATIOTEMPORAL: ["iid", "off"]   # per delta component where they differ
+#     ANISOTROPY: false
+FINAL_MODEL: null
+SMOOTHED_SPATIAL: "off"               # spatial field of the smoothed total-biomass index (no year factor)
+SMOOTHED_SPATIOTEMPORAL: "ar1"        # its spatiotemporal fields (selected among the smoothed candidates in validate.qmd)
+SPICT_CANDIDATE_INDICES: ["Total biomass (IID)", "Fishable biomass (IID)"]  # exported as assessment hand-offs
+REPORT_SURVEYS: null                  # cruise series for the single-survey comparison; null = the three with most hauls
+REPORT_SUBAREAS: null                 # ICES subareas for the regional split, e.g. ["1", "2"]; null = all
+REGION_LABEL: null                    # how the report names the index area, e.g. "ICES subareas 1 and 2"
 N_WORKERS: 1                          # parallel refits (influence, survey comparison); forked on macOS/Linux
 INFLUENCE_REGION_COL: null            # optional grid column for index_by_region() in the influence section
 

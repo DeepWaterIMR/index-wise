@@ -1,98 +1,59 @@
-<!-- Included by report.qmd. Shares its params. Which hauls and cruises drive the index?
-Workflow and decision policy: index-wise knowledge/influence-diagnostics.md. The refits are
-expensive (one per candidate), so results are cached in data/output/; delete the cache file to
-recompute. Run on a server with N_WORKERS > 1. -->
+<!-- Included by report.qmd. Leave-one-out influence of single cruises and hauls on the total
+biomass (IID) index. Method: index-wise knowledge/influence-diagnostics.md. -->
 
-```{r influence-fallback}
-#| echo: false
-# Defined unconditionally so inline R in this section resolves when the section is off.
-influence_flags <- tibble::tibble(id = character(), influence = numeric(), leverage = numeric())
-n_influence_candidates <- NA_integer_
-```
+## Influence of individual cruises and hauls {#sec-influence}
 
-```{r influence-compute, eval=params$include_influence}
-#| output: asis
-cat("## Influence of hauls and cruises\n\n")
-fit_total <- readRDS(file.path(out_dir, "model-fit-total.rds"))
-influence_cache <- file.path(out_dir, "influence-total.rds")
-
-if (file.exists(influence_cache)) {
-  influence <- readRDS(influence_cache)
-} else {
-  d <- fit_total$data
-  # Cruise numbers are reused by different vessels: identify cruises by platform + cruise
-  d$cruise_id <- paste(d$platformname, d$cruise)
-  d$density_obs <- if (identical(cfg$EFFORT, "offset")) d$value / d$swept_area else d$value
-  d$unit_effort <- 1
-  fit_total$data$cruise_id <- d$cruise_id
-
-  cruise_screen <- density_share(d, value_col = "density_obs", effort_col = "unit_effort",
-                                 group_col = "cruise_id", top_n = 3, min_share = 0.1)
-  haul_screen <- density_share(d, value_col = "density_obs", effort_col = "unit_effort",
-                               top_n = 2, min_share = 0.05)
-
-  influence <- list(
-    cruise_screen = cruise_screen,
-    haul_screen = haul_screen,
-    cruise = sdmTMB_leave_out(
-      fit_total, ids = unique(cruise_screen$cruise_id[cruise_screen$candidate]),
-      id_col = "cruise_id", newdata = grid, area = grid_cell_area_nmi2,
-      n_workers = cfg$N_WORKERS %||% 1
-    ),
-    haul = sdmTMB_leave_out(
-      fit_total, ids = unique(haul_screen$haul_id[haul_screen$candidate]),
-      id_col = "haul_id", newdata = grid, area = grid_cell_area_nmi2,
-      n_workers = cfg$N_WORKERS %||% 1
-    ),
-    region = if (!is.null(cfg$INFLUENCE_REGION_COL) &&
-                 cfg$INFLUENCE_REGION_COL %in% names(grid)) {
-      index_by_region(fit_total, grid, region_col = cfg$INFLUENCE_REGION_COL,
-                      area = grid_cell_area_nmi2)
-    }
-  )
-  saveRDS(influence, influence_cache)
+```{r influence}
+infl <- read_report_cache(ctx, "influence")
+flag_infl <- 0.1
+flag_lev <- 2
+if (!is.null(infl)) {
+  cr <- infl$cruise$influence
+  ha <- infl$haul$influence
+  cr_flag <- dplyr::filter(cr, influence >= flag_infl, leverage >= flag_lev)
+  ha_flag <- dplyr::filter(ha, abs(influence) >= flag_infl)
+  cruise_info <- dt |>
+    dplyr::summarise(series = paste(unique(cruiseseries), collapse = "/"), year = min(year),
+                     months = paste(sort(unique(month)), collapse = ", "), hauls = dplyr::n(),
+                     positive = sum(value > 0), .by = "cruise_id")
+  haul_info <- dt |>
+    dplyr::transmute(id = as.character(haul_id), year, series = cruiseseries, depth = round(depth),
+                     density = round(value), lon = round(lon, 2), lat = round(lat, 2))
 }
+```
 
-influence_flags <- influence$cruise$influence |>
-  dplyr::filter(influence >= 0.1, leverage >= 2) |>
-  dplyr::select(id, n_removed, haul_share, influence, leverage, all_ok)
-n_influence_candidates <- nrow(influence$cruise$influence)
+A single cruise or haul can move a survey index when it samples a high-density area that other hauls of the year do not cover. To find such cases, the candidates were first screened without refitting (`sdmTMBexperiments::density_share()`): for cruises, the share of the year's summed haul densities divided by the cruise's share of the year's hauls, and for hauls, the share of the year's summed densities. `r if (!is.null(infl)) paste0("The ", nrow(cr), " cruises with the highest ratio among those holding at least 10 % of a year's summed density, and the ", nrow(ha), " hauls with the largest shares, were then") else "The candidates were then"` left out one at a time and the total biomass model refitted with the same specification and mesh (`sdmTMBexperiments::sdmTMB_leave_out()`). As for the survey series, the influence is one minus the geometric mean ratio of the index without the cruise or haul to the index with all data, over the years it has data. Leverage divides the influence by the cruise's share of the hauls in those years: a value well above one marks a cruise that moves the index far more than its sample size warrants. Cruises with an influence of at least `r flag_infl` and a leverage of at least `r flag_lev` are flagged.
+
+`r if (!is.null(infl)) paste0(if (nrow(cr_flag)) paste0(nrow(cr_flag), " of the ", nrow(cr), " tested cruises are flagged (@tbl-report-cruise-flag): ", list_values(paste0(cr_flag$id, " (influence ", round(cr_flag$influence, 2), ", leverage ", round(cr_flag$leverage, 1), ")")), ". ") else paste0("None of the ", nrow(cr), " tested cruises reaches an influence of ", flag_infl, " with a leverage of ", flag_lev, " (@fig-report-cruise). "), "The largest single-year change from leaving out a cruise is ", pct(max(cr$max_abs_change, na.rm = TRUE)), " (", cr$id[which.max(cr$max_abs_change)], ", ", cr$year_max_change[which.max(cr$max_abs_change)], "). ", if (nrow(ha_flag)) paste0(nrow(ha_flag), " of the ", nrow(ha), " tested hauls change the index of their year by at least ", pct(flag_infl), " (@tbl-report-haul). ") else paste0("No single haul changes the index of its year by ", pct(flag_infl), " or more; the largest change is ", pct(max(abs(ha$influence), na.rm = TRUE)), " (@tbl-report-haul). "), "No cruise or haul is excluded on these results: an exclusion would need a reason in the data, such as a gear or sampling problem, rather than its effect on the index.") else "The influence analysis has not been computed yet."`
+
+```{r}
+#| label: fig-report-cruise
+#| eval: !expr '!is.null(infl)'
+#| fig-height: 4
+#| fig-cap: !expr 'paste0("Leave-one-cruise-out influence of the tested cruises on the total biomass (IID) index against the share of the hauls in its year that the cruise holds. The dotted line marks influence proportional to haul share; cruises beyond the dashed lines (influence ≥ ", flag_infl, ", leverage ≥ ", flag_lev, ") are labelled.")'
+plot(infl$cruise, type = "leverage", influence_limit = flag_infl, leverage_limit = flag_lev, base_size = 9)
 ```
 
 ```{r}
-#| label: fig-influence-leverage
-#| fig-cap: "Leave-one-cruise-out influence on the total-biomass index against each cruise's share of the hauls in its year(s). Influence is one minus the ratio of the index without the cruise to the index with all data. The dotted line marks influence proportional to haul share; cruises above the dashed lines (influence ≥ 0.1, leverage ≥ 2) are labelled."
-#| eval: !expr params$include_influence
-plot(influence$cruise, type = "leverage")
+#| label: tbl-report-cruise-flag
+#| eval: !expr '!is.null(infl)'
+#| tbl-cap: "Tested cruises (platform and cruise number) and their leave-one-out influence on the total biomass (IID) index. Haul share: the cruise's share of the hauls in its year. Max change: largest absolute relative change of the index in a year. Sanity: the refit passed all sanity checks."
+cr |>
+  dplyr::left_join(cruise_info, by = c("id" = "cruise_id")) |>
+  dplyr::transmute(Cruise = id, Series = series, Year = year, Months = months, Hauls = hauls,
+                   `With catch` = positive, `Haul share` = round(haul_share, 3),
+                   Influence = round(influence, 3), Leverage = round(leverage, 2),
+                   `Max change` = round(max_abs_change, 3), Sanity = all_ok) |>
+  knitr::kable()
 ```
 
 ```{r}
-#| label: fig-influence-ratio
-#| fig-cap: "Ratio of the total-biomass index without each flagged cruise to the index with all data."
-#| eval: !expr params$include_influence && nrow(influence_flags) > 0
-plot(influence$cruise, type = "ratio", ids = influence_flags$id)
-```
-
-```{r}
-#| label: fig-influence-region
-#| fig-cap: "Total-biomass index split by region of the prediction grid, as each region's index divided by its own mean."
-#| eval: !expr params$include_influence && !is.null(influence$region)
-plot(influence$region, type = "relative")
-```
-
-<!-- Report: `r n_influence_candidates` screened cruises; `r nrow(influence_flags)` flagged (@fig-influence-leverage). For each flagged cruise, say what it sampled that others did not (area, depth, gear, season) and whether the region split (@fig-influence-region) confirms a coverage effect. Then test general filtering rules against a named exclusion with sdmTMB_data_scenarios() and peak_ratio() before adding anything to EXCLUDE_CRUISES. Do not hard-wrap prose. -->
-
-```{r influence-scenarios, eval=FALSE}
-# Template: general rules first, a named exclusion last (knowledge/influence-diagnostics.md).
-scenarios <- sdmTMB_data_scenarios(
-  fit_total,
-  scenarios = list(
-    "Drop density > 99.9 %" = function(d) d$value <= stats::quantile(d$value, 0.999),
-    "Drop 'Other' cruises" = function(d) d$cruiseseries != "Other",
-    "Drop <cruise>" = function(d) paste(d$platformname, d$cruise) != "<platform> <cruise>"
-  ),
-  newdata = grid, area = grid_cell_area_nmi2, n_workers = cfg$N_WORKERS %||% 1
-)
-peak_ratio(scenarios, year = 2000)  # the anomalous year
-plot(scenarios, type = "ratio")
+#| label: tbl-report-haul
+#| eval: !expr '!is.null(infl)'
+#| tbl-cap: !expr 'paste0("Tested hauls (the largest shares of the summed density of their year) and their leave-one-out influence on the index of their year. Density: haul biomass density (kg/nmi²); depth in m.")'
+ha |>
+  dplyr::left_join(haul_info, by = "id") |>
+  dplyr::transmute(Haul = id, Year = year, Series = series, Lon = lon, Lat = lat, Depth = depth,
+                   Density = n_fmt(density), Influence = round(influence, 3), Sanity = all_ok) |>
+  knitr::kable()
 ```

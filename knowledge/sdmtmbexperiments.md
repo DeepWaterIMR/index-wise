@@ -88,7 +88,7 @@ library(sdmTMBexperiments)   # ATTACH (not just ::) — this attaches ggOceanMap
 
 | Function | Purpose |
 |---|---|
-| `sdmTMB_retro(object, newdata, nyears = 5, refit_meshes = FALSE)` | Analytical retrospective — refits per peel, index per peel via `get_index_split()`. `plot()` annotates Mohn's rho. |
+| `sdmTMB_retro(object, newdata, nyears = 5, refit_meshes = FALSE)` | Analytical retrospective — refits per peel, index per peel via `get_index_split()`. `plot()` annotates Mohn's rho. **Pitfall (0.1.11):** the peel data keep the removed years as empty levels of a year factor (`fyear`), so their coefficients have no data and the peel fits are not identifiable; for models with a year factor drop the levels per peel (the template's `run_report_retro()` does). `sdmTMB_leave_out()` has the same weakness for other factors: when the left-out rows hold the only records of a factor level, the refit stops with a fixed-effect name/length mismatch ("differing number of rows") and, run in parallel, cancels every refit. The template's `report_leave_out()` drops unused levels per refit and records a failed refit instead of stopping. |
 | `sdmTMB_mesh_cv(object, mesh_cutoffs, k = 3)` | Spatial block CV across mesh cutoffs (`blockCV::cv_spatial()` + `sdmTMB_cv()`). `plot(metric = "sum_loglik"|"deltaAIC")`. |
 | `mohns_rho(index_df, group_col, reference)` | Mohn's retrospective bias statistic. |
 

@@ -130,6 +130,26 @@ add_reference_levels <- function(grid, dt, cfg) {
   grid
 }
 
+# Prediction grid for the model data: cells of `resolution` km inside the prediction region
+# between land and MAX_DEPTH (MIN_DEPTH if set), repeated for every year from the first to the
+# last year of the data, with the year factor on the levels of the data and the reference gear,
+# month and catchability levels. Predictions on it are densities (log_swept_area = 0).
+build_model_grid <- function(region, dt, cfg, resolution = cfg$GRID_KM) {
+  grid_base <- sdmTMBexperiments::make_prediction_grid(region, resolution = resolution,
+                                                       max_depth = cfg$MAX_DEPTH)
+  if (!is.null(cfg$MIN_DEPTH)) grid_base <- grid_base[grid_base$depth >= cfg$MIN_DEPTH, ]
+  grid <- tidyr::crossing(as.data.frame(grid_base), year = seq(min(dt$year), max(dt$year)))
+  grid$fyear <- factor(grid$year, levels = levels(dt$fyear))
+  ref_month <- reference_month(dt, cfg)
+  grid$geartype <- reference_gear(dt, cfg)
+  grid$month <- ref_month
+  grid$fmonth <- factor(ref_month, levels = levels(dt$fmonth))
+  grid <- add_reference_levels(grid, dt, cfg)
+  grid$log_swept_area <- 0
+  attr(grid, "grid_km") <- resolution
+  grid
+}
+
 # Grid cells outside the depth range the model was trained on. The depth smooth extrapolates
 # there; report the share, and either trim the grid or justify keeping the cells.
 depth_extrapolation <- function(grid, dt, depth_col = "depth") {

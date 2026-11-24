@@ -17,7 +17,8 @@
 │   ├── plot_helpers.R    # Fixed cruise-series/gear colours, stock-area polygon
 │   ├── index_helpers.R   # Effort, index year, references, balance, bridging, robustness
 │   ├── cpue_helpers.R    # Commercial CPUE records, indices, diagnostics, bootstrap
-│   └── report_helpers.R  # Narrative software citations from citation()
+│   ├── report_helpers.R  # Narrative software citations from citation()
+│   └── report/           # Final-report computations (report_lib.R, report_compute.R, run_report.sh) and figures (report_plots.R); results cached in <OUTPUT_DIR>/report/
 ├── docs/
 │   ├── render.R         # Stage-aware HTML rendering
 │   ├── assets/          # references.bib, ICES JMS CSL, included static assets

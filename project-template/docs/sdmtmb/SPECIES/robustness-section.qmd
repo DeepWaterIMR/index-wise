@@ -11,7 +11,7 @@ model, never criteria for choosing it. -->
 #| fig-height: 8
 #| output: asis
 cat("## Robustness\n\n")
-fit_total <- readRDS(file.path(out_dir, "model-fit-total.rds"))
+fit_total <- fits[[total]]
 rob <- cfg$ROBUSTNESS %||% list()
 rob_index <- function(fit) predict_index(fit, grid, area = grid_cell_area_nmi2,
                                          bias_correct = FALSE)
