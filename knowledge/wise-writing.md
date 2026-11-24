@@ -41,9 +41,11 @@ Project-root `.here` and `_quarto.yml` support editor Preview before Git initial
 - Write Methods and Results in past tense; use inline R for every data-derived value.
   Give each figure/table a caption and an interpretive sentence with a cross-reference.
   Split multi-plot chunks when separate captions or cross-references are needed.
-- Keep verified literature in `docs/assets/references.bib` and use the shared ICES JMS CSL.
-  `report_software()` generates report-specific software BibTeX using installed `citation()`
-  metadata and emits narrative citations and versions. Customize its package list to include
+- Keep every reference, literature and software, in the project's single
+  `docs/assets/references.bib`; every document links to it and to the shared ICES JMS CSL. No
+  per-document bibliographies: one file is easier for humans to maintain.
+  `report_software()` appends the installed `citation()` entries whose keys are missing from
+  references.bib (existing entries are never changed) and emits narrative citations and versions. Customize its package list to include
   every package that influenced that document, including data acquisition and optional analyses.
   Cite Quarto too when used, using verified official citation metadata.
 - Replace draft AI-disclosure instructions with the exact researcher-confirmed model list

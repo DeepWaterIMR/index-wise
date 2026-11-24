@@ -28,7 +28,6 @@ published-title: "Version"
 lang: en-US
 bibliography:
   - ../../assets/references.bib
-  - ../../assets/report-software.bib
 csl: ../../assets/ices_jms.csl
 ---
 
@@ -493,7 +492,7 @@ The two SPiCT candidates are exported as versioned hand-off objects (`assessment
 #| results: asis
 report_software(
   c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "sdmTMB", "sdmTMBexperiments", "cowplot", "knitr"),
-  here::here(cfg$DOCS_DIR %||% "docs", "assets", "report-software.bib")
+  here::here(cfg$DOCS_DIR %||% "docs", "assets", "references.bib")
 )
 ```
 

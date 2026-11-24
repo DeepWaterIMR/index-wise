@@ -2,11 +2,12 @@
 
 #' Cite the installed software used by a report
 #'
-#' Writes report-specific BibTeX from citation() and emits narrative citations with
-#' installed versions. Keep literature references in docs/assets/references.bib.
+#' Adds the citation() entries of the packages to the project's single bibliography
+#' (references.bib) and emits narrative citations with the installed versions. Entries already
+#' in the file are left as they are, so hand edits survive; only missing keys are appended.
 #' @param packages Character vector of packages that influenced this report.
-#' @param bibliography Path to this report's generated software bibliography.
-#' @return Invisibly, the generated BibTeX entries.
+#' @param bibliography Path to the project's references.bib.
+#' @return Invisibly, the keys that were added.
 report_software <- function(packages, bibliography) {
   packages <- unique(c("base", packages))
   entries <- character()
@@ -17,7 +18,7 @@ report_software <- function(packages, bibliography) {
     for (i in seq_along(refs)) {
       ref <- refs[i]
       ref$key <- keys[i]
-      entries <- c(entries, as.character(utils::toBibtex(ref)), "")
+      entries[keys[i]] <- paste(as.character(utils::toBibtex(ref)), collapse = "\n")
     }
     label <- if (package == "base") "R" else package
     version <- if (package == "base") as.character(getRversion()) else
@@ -25,10 +26,17 @@ report_software <- function(packages, bibliography) {
     prose <- c(prose, paste0(label, " ", version, " [",
                             paste0("@", keys, collapse = "; "), "]"))
   }
-  dir.create(dirname(bibliography), recursive = TRUE, showWarnings = FALSE)
-  writeLines(entries, bibliography, useBytes = TRUE)
+  bib <- if (file.exists(bibliography)) readLines(bibliography, encoding = "UTF-8", warn = FALSE) else character()
+  present <- sub("^\\s*@[A-Za-z]+\\{\\s*([^,]+),.*$", "\\1", grep("^\\s*@[A-Za-z]+\\{", bib, value = TRUE))
+  missing <- setdiff(names(entries), trimws(present))
+  if (length(missing)) {
+    dir.create(dirname(bibliography), recursive = TRUE, showWarnings = FALSE)
+    con <- file(bibliography, open = "a", encoding = "UTF-8")
+    writeLines(c("", paste0(entries[missing], "\n")), con)
+    close(con)
+  }
   cat("The analysis and report used ", paste(prose, collapse = ", "), ".\n\n", sep = "")
-  invisible(entries)
+  invisible(missing)
 }
 
 #' Describe sanity() results in a sentence generated from the fits

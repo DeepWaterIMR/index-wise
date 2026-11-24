@@ -127,10 +127,14 @@ bad <- try(scaffold_index(config_file, file.path(workspace, "invalid"),
                           template = "project-template"), silent = TRUE)
 stopifnot(inherits(bad, "try-error"), !dir.exists(file.path(workspace, "invalid")))
 source("project-template/R/report_helpers.R")
-bib <- file.path(workspace, "software.bib")
+bib <- file.path(workspace, "references.bib")
+writeLines(c("@Article{kept2020,", "  title = {Kept by hand},", "}"), bib)
 prose <- capture.output(report_software("knitr", bib))
+invisible(capture.output(report_software("knitr", bib)))   # a second call adds nothing
+bib_lines <- readLines(bib)
 stopifnot(any(grepl("@software-base-1", prose, fixed = TRUE)),
-          any(grepl("@Manual{software-base-1,", readLines(bib), fixed = TRUE)))
+          sum(grepl("@Manual{software-base-1,", bib_lines, fixed = TRUE)) == 1,
+          any(grepl("@Article{kept2020,", bib_lines, fixed = TRUE)))
 if ("--render" %in% commandArgs(TRUE)) {
   path <- main[grepl("/fit/fit.qmd$", main)]
   original <- readLines(path)
@@ -141,7 +145,7 @@ if ("--render" %in% commandArgs(TRUE)) {
     'knitr::kable(data.frame(value = 1:3))', "```", "",
     "The fixture contained three values (@tbl-check).", "", "# Software and reproducibility", "",
     "```{r}", "#| results: asis", 'source(here::here("R", "report_helpers.R"))',
-    'report_software("knitr", here::here(cfg$DOCS_DIR %||% "docs", "assets", "fit-software.bib"))', "```", "",
+    'report_software("knitr", here::here(cfg$DOCS_DIR %||% "docs", "assets", "references.bib"))', "```", "",
     "# References {.unnumbered}", "", "::: {#refs}", ":::")
   writeLines(fixture, path)
   status <- system2("quarto", c("render", shQuote(path), "--to", "html"))

@@ -35,7 +35,6 @@ published-title: "Version"
 lang: en-US
 bibliography:
   - ../../assets/references.bib
-  - ../../assets/validate-software.bib
 csl: ../../assets/ices_jms.csl
 ---
 
@@ -592,7 +591,7 @@ source(here::here("R", "report_helpers.R"))
 # Add every additional package that influenced this report, including optional packages.
 report_software(
   c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "sdmTMB", "sdmTMBexperiments", "knitr"),
-  here::here(cfg$DOCS_DIR %||% "docs", "assets", "validate-software.bib")
+  here::here(cfg$DOCS_DIR %||% "docs", "assets", "references.bib")
 )
 ```
 

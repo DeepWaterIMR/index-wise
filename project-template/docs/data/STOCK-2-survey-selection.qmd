@@ -9,7 +9,6 @@ published-title: "Version"
 lang: en-US
 bibliography:
   - ../assets/references.bib
-  - ../assets/{{STOCK_SLUG}}-2-survey-selection-software.bib
 csl: ../assets/ices_jms.csl
 format:
   html:
@@ -547,7 +546,7 @@ source(here::here("R", "report_helpers.R"))
 report_software(
   c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "ggspatial", "DBI", "duckdb", "cowplot",
     "knitr"),
-  here::here(cfg$DOCS_DIR %||% "docs", "assets", paste0(stock, "-2-survey-selection-software.bib"))
+  here::here(cfg$DOCS_DIR %||% "docs", "assets", "references.bib")
 )
 ```
 
