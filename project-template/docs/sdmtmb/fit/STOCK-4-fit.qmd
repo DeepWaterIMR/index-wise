@@ -1,0 +1,405 @@
+---
+title: "{{SPECIES_NAME}} — first sdmTMB models"
+subtitle: "First feasible models, prediction grid and first indices"
+format:
+  html:
+    toc: true
+    toc-title: "{{SPECIES_NAME}} — first sdmTMB models"
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+    fig-format: jpeg
+    fig-dpi: 160
+    embed-resources: true
+params:
+  refit_model: true      # FALSE → load the fits from data/output instead of refitting
+  recompute_grid: true   # FALSE → load the prediction grid
+  bias_correct: false    # TRUE only for final index runs (slow)
+execute:
+  fig-width: 6.69
+  warning: false
+  message: false
+author: {{AUTHORS_YAML}}
+affiliations: {{AFFILIATIONS_YAML}}
+date: today
+date-format: "YYYY-MM-DD"
+published-title: "Version"
+lang: en-US
+bibliography:
+  - ../../assets/references.bib
+csl: ../../assets/ices_jms.csl
+---
+
+```{r setup}
+knitr::opts_knit$set(root.dir = here::here())
+index_species <- "{{STOCK_KEY}}"
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "report_helpers.R"))
+source(here::here("R", "plot_helpers.R"))
+sp <- cfg$SPECIES_NAME %||% "{{SPECIES_NAME}}"
+n_fmt <- function(x) format(x, big.mark = " ", scientific = FALSE, trim = TRUE)
+dt_all <- readRDS(file.path(out_dir, "compiled-data.rds"))
+region <- read_prediction_region(cfg, dt_crs)
+if (is.null(region)) stop("No prediction region: render the survey-selection document first.")
+```
+
+# Purpose
+
+This document fits the first feasible sdmTMB models for the three `r tolower(sp)` indices in `r area_label` and checks that they converge before the model selection (validation document). The three products are the total biomass and the fishable biomass with independent (IID) spatiotemporal fields and a year fixed effect`r if (!isTRUE(cfg$FISHABLE_YEAR_EFFECT %||% TRUE)) " (the fishable model without the year effect, see below)" else ""`, the two candidate indices for SPiCT, and a smoothed total biomass with first-order autoregressive (AR1) spatiotemporal fields and no year effect. All three use the same mesh, covariates and prediction grid. They differ in the response, the temporal structure and, for the smoothed model, the spatial field; the fishable model also leaves out years without fishable catches. The models are starting points: the mesh, the covariates, the family and the random-field structure are tested in the model selection.
+
+# Data
+
+```{r prepare}
+# The model data of every later step (load_model_data() in R/report_helpers.R: prediction
+# region, depth, year and month factors, fishable response); counted here step by step.
+dt_prep <- prepare_model_data(dt_all, cfg)   # lon/lat, calendar and index year, value, offset, X/Y (km)
+n_outside <- attr(restrict_to_region(dt_prep, region), "n_outside")
+n_no_depth <- sum(is.na(restrict_to_region(dt_prep, region)$depth))
+dt <- load_model_data(cfg, out_dir, dt_crs)
+n_pos <- sum(dt$value > 0)
+n_pos_f <- sum(dt$value_fishable > 0)
+years <- sort(unique(dt$year))
+```
+
+The models use the stations compiled in the survey selection and described in the data report. `r if (n_outside > 0) paste0('Of the ', n_fmt(nrow(dt_all)), ' stations, ', n_fmt(n_outside), ' lie outside the prediction region and are not used. ') else ''``r if (n_no_depth > 0) paste0(n_no_depth, if (n_no_depth == 1) " station" else " stations", " without depth ", if (n_no_depth == 1) "was" else "were", " also left out, because depth is a covariate. ") else ""`The models use `r n_fmt(nrow(dt))` stations from `r min(years)` to `r max(years)`, `r n_fmt(n_pos)` with `r tolower(sp)` and `r n_fmt(n_pos_f)` with fishable `r tolower(sp)` (≥ `r cfg$OVER_CM` cm). The response is the swept-area biomass density (kg nmi⁻²) of all `r tolower(sp)` or of the fishable part, including the zero hauls.
+
+```{r years-fishable}
+pos_year <- dt |>
+  dplyr::group_by(year) |>
+  dplyr::summarise(hauls = dplyr::n(), total = sum(value > 0),
+                   fishable = sum(value_fishable > 0), .groups = "drop")
+years_no_fishable <- pos_year$year[pos_year$fishable == 0]
+dt_fishable <- dplyr::filter(dt, !year %in% years_no_fishable) |>
+  dplyr::mutate(value = value_fishable, fyear = droplevels(fyear), fmonth = droplevels(fmonth))
+```
+
+A year fixed effect in a delta model needs at least one positive haul in every year: in a year without one, the encounter probability goes to zero and the positive-catch mean has no data. `r if (length(years_no_fishable)) paste0("No haul caught fishable ", tolower(sp), " in ", paste(years_no_fishable, collapse = ", "), ", so the fishable model is fitted without ", if (length(years_no_fishable) == 1) "that year" else "those years", " and has no index value for ", if (length(years_no_fishable) == 1) "it" else "them", ". ") else paste0("Every year has hauls with fishable ", tolower(sp), ". ")`The fewest positive hauls in one year are `r min(pos_year$total)` for the total and `r min(pos_year$fishable[pos_year$fishable > 0])` for the fishable biomass`r if (any(pos_year$fishable < 10)) " (@tbl-fit-positives)" else ""`.
+
+```{r}
+#| include: !expr any(pos_year$fishable < 10)
+#| label: tbl-fit-positives
+#| tbl-cap: !expr 'paste0("Hauls in the model data and hauls with ", tolower(sp), " (total) and with fishable ", tolower(sp), " per year, for the years with fewer than 10 hauls with fishable ", tolower(sp), ".")'
+pos_year |>
+  dplyr::filter(fishable < 10) |>
+  dplyr::rename(Year = year, Hauls = hauls, `With total` = total, `With fishable` = fishable) |>
+  knitr::kable()
+```
+
+# Analysis
+
+## Mesh
+
+```{r make-mesh, eval=params$refit_model}
+mesh <- sdmTMB::make_mesh(dt, xy_cols = c("X", "Y"), cutoff = cfg$MESH_CUTOFF_KM)
+if (isTRUE(cfg$BARRIER)) {
+  ensure_packages("sdmTMBextra")   # installed on demand; see R/0_setup.R
+  land <- ggOceanMaps::basemap_data(data = dt, crs = dt_crs)$shapefiles$land
+  mesh <- sdmTMBextra::add_barrier_mesh(mesh, land, proj_scaling = 1000)
+}
+saveRDS(mesh, file.path(out_dir, "mesh.rds"))
+```
+
+```{r load-mesh, eval=!params$refit_model}
+mesh <- readRDS(file.path(out_dir, "mesh.rds"))
+```
+
+The mesh has `r mesh$mesh$n` vertices with a minimum distance of `r cfg$MESH_CUTOFF_KM` km between them (@fig-fit-mesh).
+
+```{r}
+#| label: fig-fit-mesh
+#| fig-cap: !expr 'paste0("Model mesh (cutoff ", cfg$MESH_CUTOFF_KM, " km) and the stations used for ", tolower(sp), ".")'
+plot_mesh(mesh, crs = dt_crs, data = dt)
+```
+
+## Models
+
+```{r formulas}
+terms <- model_terms(cfg, has_multiple_gears = dplyr::n_distinct(dt$geartype) > 1, data = dt)
+form_year <- stats::as.formula(paste("value ~ 0 + fyear +", paste(terms, collapse = " + ")))
+form_smooth <- stats::as.formula(paste("value ~ 0 +", paste(terms, collapse = " + ")))
+fishable_year <- isTRUE(cfg$FISHABLE_YEAR_EFFECT %||% TRUE)
+form_fishable <- if (fishable_year) form_year else form_smooth
+extra_time <- setdiff(seq(min(dt$year), max(dt$year)), years)
+model_specs <- list(
+  "Total biomass (IID)" = list(file = "total-iid", data = dt, formula = form_year,
+                               spatial = model_spatial,
+                               spatiotemporal = cfg$SPATIOTEMPORAL %||% "iid"),
+  "Fishable biomass (IID)" = list(file = "fishable-iid", data = dt_fishable, formula = form_fishable,
+                                  spatial = model_spatial,
+                                  spatiotemporal = cfg$SPATIOTEMPORAL %||% "iid"),
+  "Total biomass (smoothed)" = list(file = "total-ar1", data = dt, formula = form_smooth,
+                                    spatial = cfg$SMOOTHED_SPATIAL %||% model_spatial,
+                                    spatiotemporal = cfg$SMOOTHED_SPATIOTEMPORAL %||% "ar1")
+)
+```
+
+All models use the `r c(delta_lognormal = "delta-lognormal family (a binomial model for encounter and a lognormal model for the positive densities)", delta_gamma = "delta-gamma family (a binomial model for encounter and a gamma model for the positive densities)")[[cfg$FAMILY]]`, the starting family of the model selection, with spatiotemporal fields in both components. The fixed effects are `r paste(terms, collapse = ", ")`: gear type (`r paste(sort(unique(dt$geartype)), collapse = " and ")` trawl) for the difference in catchability, `r switch(month_term(cfg), smooth = "a smooth of month for the seasonal change in catchability and distribution, ", factor = "month as a factor for the seasonal change in catchability and distribution, ", none = "")`and a smooth of depth.`r if (month_term(cfg) == "none") paste0(" Month is not in the ", tolower(sp), " models: few hauls with ", tolower(sp), " were taken between April and July, so a month smooth collapsed to a straight line and a month factor could not be estimated in the first test fits.") else ""` `r if (fishable_year) paste0("The two SPiCT candidates add a year factor, a spatial field and IID spatiotemporal fields, so each year's index is estimated from that year's data alone (", deparse1(form_year), ").") else paste0("The total biomass SPiCT candidate adds a year factor, a spatial field and IID spatiotemporal fields, so each year's index is estimated from that year's data alone (", deparse1(form_year), "). The fishable biomass model has the spatial field and IID spatiotemporal fields but no year factor (", deparse1(form_fishable), "): with the year factor, the spatiotemporal variance went to zero and the model did not converge, while without it the model converged and both spatiotemporal fields were estimated. The IID fields then carry the annual changes, but they are centred on zero each year, so years with few fishable ", tolower(sp), " are pulled toward the long-term mean.")` The smoothed index has no year effect and AR1 spatiotemporal fields, which carry information between neighbouring years (`r deparse1(form_smooth)`)`r if (identical(cfg$SMOOTHED_SPATIAL, "off")) "; it has no separate spatial field, because with an autocorrelation near one the spatiotemporal fields absorb the spatial field and its variance went to zero in the first test fits" else ""``r if (length(extra_time)) paste0("; the years without stations (", paste(extra_time, collapse = ", "), ") are added as extra time steps") else ""`.
+
+```{r fit, eval=params$refit_model}
+fits <- purrr::imap(model_specs, function(s, label) {
+  message("Fitting ", label)
+  t0 <- Sys.time()
+  m <- sdmTMB::make_mesh(s$data, xy_cols = c("X", "Y"), mesh = mesh$mesh)
+  fit <- sdmTMB::sdmTMB(
+    s$formula, data = s$data, mesh = m,
+    family = model_family, offset = model_offset,
+    spatial = s$spatial, spatiotemporal = s$spatiotemporal, time = "year",
+    extra_time = if (s$spatiotemporal %in% c("ar1", "rw") && length(extra_time)) extra_time else NULL,
+    control = sdmTMB::sdmTMBcontrol(newton_loops = 1)
+  )
+  attr(fit, "fit_minutes") <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
+  saveRDS(fit, file.path(out_dir, paste0("model-fit-", s$file, ".rds")))
+  fit
+})
+```
+
+```{r load-fit, eval=!params$refit_model}
+fits <- purrr::map(model_specs, ~ readRDS(file.path(out_dir, paste0("model-fit-", .x$file, ".rds"))))
+```
+
+```{r sanity}
+sanity_tab <- purrr::imap_dfr(fits, function(fit, label) {
+  s <- suppressMessages(sdmTMB::sanity(fit, silent = TRUE))
+  tibble::tibble(Model = label, Hauls = nrow(fit$data),
+                 Converged = fit$model$convergence == 0,
+                 `Max gradient` = signif(max(abs(fit$gradients)), 2),
+                 `Hessian PD` = isTRUE(fit$pos_def_hessian), Sanity = isTRUE(s$all_ok),
+                 Minutes = round(attr(fit, "fit_minutes") %||% NA_real_, 1))
+})
+```
+
+@tbl-fit-sanity gives the convergence and the `sdmTMB::sanity()` checks. `r sanity_sentence(fits)` Max gradient is the largest absolute gradient of the negative log-likelihood with respect to the fixed parameters at the optimum. At a true minimum the gradients are zero, so a small value (below 0.001, the `sanity()` threshold) means that the optimiser stopped at a minimum and not on a slope. The models are not compared by AIC here; they have different responses or temporal structures, and the model selection compares candidate models by cross-validation.
+
+```{r}
+#| label: tbl-fit-sanity
+#| tbl-cap: "Convergence and sanity checks of the three models. Converged: optimiser convergence code 0. Max gradient: largest absolute gradient at the optimum. Hessian PD: positive-definite Hessian. Sanity: all `sdmTMB::sanity()` checks passed. Minutes: fitting time."
+knitr::kable(sanity_tab)
+```
+
+### Model output
+
+::: {.content-visible when-format="html"}
+The model output of the three models, including the fixed-effect estimates and the random-field parameters, is shown in the folded code block below.
+
+```{r model-output, collapse=TRUE}
+fits
+```
+:::
+
+::: {.content-visible unless-format="html"}
+The full model output, including the fixed-effect estimates and the random-field parameters, is given in the HTML version of this document.
+:::
+
+## Prediction grid
+
+```{r grid, eval=params$recompute_grid}
+# The same grid builder as the model selection and the report (R/index_helpers.R): isolated
+# cells dropped, reference gear and month, densities at log_swept_area = 0.
+grid <- build_model_grid(region, dt, cfg)
+ref_gear <- unique(grid$geartype)
+ref_month <- unique(grid$month)
+saveRDS(grid, file.path(out_dir, "prediction-grid.rds"))
+```
+
+```{r load-grid, eval=!params$recompute_grid}
+grid <- readRDS(file.path(out_dir, "prediction-grid.rds"))
+ref_gear <- unique(grid$geartype)
+ref_month <- unique(grid$month)
+```
+
+```{r grid-one}
+grid_one <- grid[grid$year == min(grid$year), ]
+```
+
+The prediction grid has `r n_fmt(nrow(grid_one))` cells of `r cfg$GRID_KM` × `r cfg$GRID_KM` km in the prediction region, between land and `r cfg$MAX_DEPTH` m depth (`r n_fmt(round(nrow(grid_one) * cfg$GRID_KM^2, -2))` km²; @fig-fit-grid). The indices are predicted for `r tolower(ref_gear)` trawl`r if (month_term(cfg) != "none") paste0(" (the most sampled gear) in month ", ref_month, if (!is.null(cfg$REFERENCE_MONTH)) " (REFERENCE_MONTH: the season of the coastal survey, which samples the area that holds most of the biomass)" else " (the most sampled month)", "; these references set") else " (the most sampled gear); this reference sets"` the level of the index, not its trend. `r de <- depth_extrapolation(grid_one, dt); if (de$deeper + de$shallower == 0) "No grid cell lies outside the depth range of the data" else paste0(n_fmt(de$deeper + de$shallower), " cells lie outside the depth range of the data (", round(de$observed_min), "–", round(de$observed_max), " m; @tbl-fit-depth-range)")`.
+
+```{r grid-depth-map}
+grid_map <- plot_grid_depth(grid_one, crs = dt_crs, cell_km = cfg$GRID_KM, region = region)
+```
+
+```{r, fig.height = grid_map$height}
+#| label: fig-fit-grid
+#| fig-cap: !expr 'paste0("Prediction grid for the sdmTMB models: ", cfg$GRID_KM, " × ", cfg$GRID_KM, " km cells coloured by GEBCO bottom depth in ", 100, " m bins (the depths used in the predictions are continuous). Black outline: the prediction region.")'
+grid_map$plot
+```
+
+```{r}
+#| label: tbl-fit-depth-range
+#| tbl-cap: "Prediction-grid cells (one year) outside the depth range of the model data, where the depth smooth extrapolates."
+knitr::kable(depth_extrapolation(grid_one, dt))
+```
+
+## Indices
+
+```{r index}
+indices <- purrr::imap(fits, function(fit, label) {
+  # The year factor of each fit has only the years that fit was given (the fishable model can
+  # lack years without fishable catches), so the grid's factor levels must match the fit's.
+  g <- grid[grid$year %in% unique(fit$data$year), ]
+  g$fyear <- factor(g$year, levels = levels(fit$data$fyear))
+  idx <- predict_index(fit, g, area = grid_cell_area_nmi2, bias_correct = params$bias_correct)
+  saveRDS(idx, file.path(out_dir, paste0("index-", model_specs[[label]]$file, ".rds")))
+  idx
+})
+index_tab <- purrr::imap_dfr(indices, ~ dplyr::mutate(.x, model = .y)) |>
+  dplyr::mutate(model = factor(model, levels = names(model_specs)))
+```
+
+```{r index-summary}
+cv_med <- purrr::map_dbl(indices, ~ stats::median(.x$se, na.rm = TRUE))  # SE of log(est)
+rel_iid <- dplyr::filter(index_tab, model == "Total biomass (IID)")
+rel_ar1 <- dplyr::filter(index_tab, model == "Total biomass (smoothed)")
+cor_iid_ar1 <- stats::cor(log(rel_iid$est), log(rel_ar1$est[match(rel_iid$year, rel_ar1$year)]))
+```
+
+@fig-fit-index shows the three indices. The median standard error of the log index is `r round(cv_med[["Total biomass (IID)"]], 2)` for the total biomass (IID), `r round(cv_med[["Fishable biomass (IID)"]], 2)` for the fishable biomass and `r round(cv_med[["Total biomass (smoothed)"]], 2)` for the smoothed total biomass. The log indices of the IID and smoothed total biomass have a correlation of `r round(cor_iid_ar1, 2)`.
+
+```{r}
+#| label: fig-fit-index
+#| fig-cap: !expr 'paste0("Biomass indices of ", tolower(sp), " from the three first models (tonnes in the prediction region; lines: estimates, bands: 95 % confidence intervals). A: absolute scale. B: each index divided by its mean, which shows the trends on a common scale.")'
+#| fig-height: 6
+p_abs <- ggplot2::ggplot(index_tab, ggplot2::aes(year, est / 1000, colour = model, fill = model)) +
+  ggplot2::geom_ribbon(ggplot2::aes(ymin = lwr / 1000, ymax = upr / 1000), alpha = 0.15,
+                       colour = NA) +
+  ggplot2::geom_line() +
+  ggplot2::labs(x = "Year", y = "Biomass (t)", colour = NULL, fill = NULL)
+p_rel <- index_tab |>
+  dplyr::group_by(model) |>
+  dplyr::mutate(dplyr::across(c(est, lwr, upr), ~ .x / mean(est))) |>
+  ggplot2::ggplot(ggplot2::aes(year, est, colour = model, fill = model)) +
+  ggplot2::geom_ribbon(ggplot2::aes(ymin = lwr, ymax = upr), alpha = 0.15, colour = NA) +
+  ggplot2::geom_line() +
+  ggplot2::labs(x = "Year", y = "Index / mean", colour = NULL, fill = NULL)
+cowplot::plot_grid(p_abs + ggplot2::theme(legend.position = "none"), p_rel +
+                     ggplot2::theme(legend.position = "bottom"),
+                   ncol = 1, labels = "AUTO", rel_heights = c(1, 1.2))
+```
+
+
+## Absolute scale check
+
+```{r scale-check}
+grid_area_nmi2 <- grid_cell_area_nmi2 * nrow(grid_one)
+scale_check <- check_index_scale(indices[["Total biomass (IID)"]], dt, total_area = grid_area_nmi2,
+                                 density_col = "rho_biomass", fit = fits[["Total biomass (IID)"]])
+```
+
+Only the trend of the indices is used in the assessment: their absolute level depends on choices such as the reference month and gear and is not interpreted. A unit error in the swept area or the grid-cell area would change only the level, but an error of an order of magnitude would point to a mistake that could also affect other results. Two simple calculations check that the index is on the right scale. First, the model's predicted density at the sampled hauls should match the observed density there: it is a median `r round(scale_check$unit_ratio, 2)` times the observed density, `r if (isTRUE(scale_check$ok)) "within the tolerance of 1/1.5–1.5, so the swept-area and density units are consistent" else "outside the tolerance of 1/1.5–1.5: check the swept-area units before the model selection"`. Second, the index should be of the same order as a crude swept-area estimate, the mean observed density of the year multiplied by the area of the prediction region (@fig-fit-scale-check). The two are not expected to agree year by year: the model accounts for where and at what depth the hauls were taken, whereas the crude estimate treats the hauls as a random sample of the whole region. The index is a median `r round(scale_check$design_ratio, 2)` times the crude estimate; only a difference of an order of magnitude or more would point to an area or unit error.
+
+```{r}
+#| label: fig-fit-scale-check
+#| fig-cap: !expr 'paste0("Total biomass (IID) index of ", tolower(sp), " (line, with 95 % confidence band) and a crude swept-area estimate, the mean observed density of each year times the area of the prediction region (points). Logarithmic y axis.")'
+#| fig-height: 3
+idx_iid <- indices[["Total biomass (IID)"]]
+ggplot2::ggplot(idx_iid, ggplot2::aes(year, est / 1000)) +
+  ggplot2::geom_ribbon(ggplot2::aes(ymin = lwr / 1000, ymax = upr / 1000), alpha = 0.15) +
+  ggplot2::geom_line() +
+  ggplot2::geom_point(data = scale_check$table, ggplot2::aes(year, design_est / 1000),
+                      colour = "#D55E00", size = 1.2) +
+  ggplot2::scale_y_log10(labels = scales::label_number(big.mark = " ")) +
+  ggplot2::labs(x = "Year", y = "Biomass (t)")
+```
+
+## Diagnostics
+
+```{r residuals}
+resid_stats <- purrr::imap_dfr(fits, function(fit, label) {
+  r <- stats::residuals(fit, type = "mle-mvn", model = 2)
+  r <- r[is.finite(r)]
+  tibble::tibble(model = label, skew = mean((r - mean(r))^3) / stats::sd(r)^3,
+                 low = mean(r < -3))
+})
+```
+
+The residuals in @fig-fit-qq are randomised quantile residuals [@dunn1996] computed with the `mle-mvn` method of `sdmTMB::residuals()`: the random effects are drawn once from their approximate joint distribution given the data and the fixed effects at their maximum-likelihood estimates, which gives residuals that are normally distributed when the model is correct [@waagepetersen2006; @thygesen2017]. Each panel uses one draw, so the extremes vary somewhat between renders. The encounter (binomial) residuals follow the 1:1 line. The positive-catch (lognormal) residuals have a skewness of `r paste0(round(resid_stats$skew, 2), " (", tolower(resid_stats$model), ")", collapse = ", ")`, and `r paste0(round(100 * resid_stats$low, 1), " %", collapse = ", ")` of them lie below −3, against 0.1 % expected. A long lower tail means that the smallest positive catches, typically one or a few small fish, are smaller than the lognormal model allows; a heavy upper tail means more very large catches than it allows. Either points to the positive-catch family or to a missing covariate; the model selection tests the family (for example a delta-gamma family) and whether each covariate is needed, but not new covariates.
+
+```{r}
+#| label: fig-fit-qq
+#| fig-cap: "Quantile–quantile plots of the randomised quantile residuals (mle-mvn) of the three models: encounter (binomial) and positive-catch (lognormal) components."
+#| fig-height: 7
+purrr::imap(fits, ~ plot_residual_qq(.x) + ggplot2::ggtitle(.y)) |>
+  cowplot::plot_grid(plotlist = _, ncol = 1)
+```
+
+```{r effects}
+ref_effects <- list(year = max(dt$year), month = ref_month, geartype = ref_gear)
+effects_file <- file.path(out_dir, "conditional-effects.rds")
+# Confidence intervals need an sdreport per model (several minutes each), so the effects are
+# recomputed only with the fits
+if (params$refit_model || !file.exists(effects_file)) {
+  effects <- purrr::map(fits, sdmTMBexperiments::conditional_effects, ref = ref_effects)
+  saveRDS(effects, effects_file)
+} else {
+  effects <- readRDS(effects_file)
+}
+```
+
+@fig-fit-effects shows how the predicted density changes along each fixed effect when the others are held at reference values. The fixed effects are additive, so each has its own panel and the shape of an effect does not depend on the reference values of the others, only its level does. Depth is shown first because its reference, the depth where the predicted density peaks, is used in the other panels. The predictions combine the encounter probability and the positive-catch density and leave out the spatial and spatiotemporal fields, so they show the population-level relationships, not the density at a particular place.
+
+```{r}
+#| label: fig-fit-effects
+#| fig-cap: !expr 'paste0("Conditional fixed effects of the three ", tolower(sp), " models on the response scale (kg per nmi², encounter probability times positive density, without random fields). Each panel varies one term with the others held at their reference values (grey vertical lines): ", effects_reference_text(effects[[1]]), ". Lines and points: estimates; bands and bars: 95 % confidence intervals. Ticks on the depth axis: hauls with ", tolower(sp), ".")'
+#| fig-height: !expr 2.6 * length(effects)
+purrr::imap(effects, ~ plot(.x, fit = fits[[.y]], data = dt, base_size = 8) + ggplot2::ggtitle(.y)) |>
+  cowplot::plot_grid(plotlist = _, ncol = 1)
+```
+
+@fig-fit-map shows the predicted density of the last year on the response scale with a square-root colour scale, so that areas of low density stand out from those with none while the highest densities do not dominate the colours.
+
+```{r}
+#| label: fig-fit-map
+#| fig-cap: !expr 'paste0("Predicted biomass density (kg per nmi²) of ", tolower(sp), " from the total biomass (IID) model in the last year, ", max(dt$year), ", including the spatial and spatiotemporal fields. Square-root colour scale.")'
+pred_last <- predict(fits[["Total biomass (IID)"]], newdata = grid[grid$year == max(dt$year), ])
+if (!"est" %in% names(pred_last)) pred_last$est <- delta_log_density(pred_last, fits[["Total biomass (IID)"]])
+pred_last$density <- exp(pred_last$est)
+plot_prediction_map(pred_last, crs = dt_crs, column = "density", type = "mean", transform = "sqrt") +
+  ggplot2::labs(fill = "kg/nmi²")
+```
+
+# Results and recommendations
+
+```{r result-values}
+ok <- sanity_tab$Sanity
+```
+
+`r if (all(ok)) paste0("All three models converged and passed the sanity checks (@tbl-fit-sanity), so the method works for ", tolower(sp), " with this mesh and these covariates.") else paste0("Not all models passed the sanity checks (@tbl-fit-sanity): ", paste(sanity_tab$Model[!ok], collapse = ", "), ". These models need a simpler structure before the model selection.")` The residuals, the conditional effects and the density map are first checks; the model selection tests the mesh, the covariates, the family and the random-field structure against the IID base model.
+
+# Software and reproducibility
+
+```{r software-citations}
+#| results: asis
+report_software(
+  c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "sdmTMB", "sdmTMBexperiments", "cowplot", "knitr"),
+  here::here(cfg$DOCS_DIR %||% "docs", "assets", "references.bib")
+)
+```
+
+This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. The authors designed the study and specified and checked the analyses, and they take full responsibility for the content; this version of the AI-assisted text has not yet been reviewed and approved by them.
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+# Appendix: analysis scripts {.appendix}
+
+```{r setup-appendix, code = readLines(here::here("R", "0_setup.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-setup-script
+#| lst-cap: "Complete shared package, configuration, and model setup."
+#| code-fold: true
+#| code-summary: "Show setup script"
+```
+
+```{r index-helpers-appendix, code = readLines(here::here("R", "index_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-index-helpers
+#| lst-cap: "Complete data-preparation, prediction and index helpers."
+#| code-fold: true
+#| code-summary: "Show index helpers"
+```
+
+```{r helpers-appendix, code = readLines(here::here("R", "report_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-report-helpers
+#| lst-cap: "Complete software citation and sanity helpers."
+#| code-fold: true
+#| code-summary: "Show report helpers"
+```

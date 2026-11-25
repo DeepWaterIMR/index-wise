@@ -1,6 +1,6 @@
-# Final survey-index models and their sensitivity analyses for the report document
-# (docs/sdmtmb/<species>/report.qmd). Every slow step runs on a server as its own
-# process and caches its result in data/output/<species>/report/, which the report reads:
+# Final survey-index models and their sensitivity analyses for the report documents
+# (<DOCS_DIR>/sdmtmb/<stock>/<stock>-6-report.qmd). Every slow step runs on a server as its own
+# process and caches its result in data/output/<stock>/report/, which the report reads:
 #
 #   Rscript R/report/report_compute.R <species> grid
 #   Rscript R/report/report_compute.R <species> fit <total-iid|fishable-iid|total-ar1>
@@ -10,10 +10,12 @@
 #   Rscript R/report/report_compute.R <species> surveys [n_workers]
 #   Rscript R/report/report_compute.R <species> loso [n_workers]
 #   Rscript R/report/report_compute.R <species> influence [n_workers]
+#   Rscript R/report/report_compute.R <species> sens <name>   # a SENSITIVITIES entry
+#   Rscript R/report/report_compute.R <species> sens-names    # list the configured names
 #   R/report/run_report.sh <species>          # all steps, in dependency order
 #
 # The model specification comes from config.yaml: FINAL_MODEL, the specification selected in
-# validate.qmd (without it, the config defaults with IID spatiotemporal fields), and SMOOTHED_*
+# <stock>-5-validate.qmd (without it, the config defaults with IID spatiotemporal fields), and SMOOTHED_*
 # for the smoothed index. The final indices (index-bc step) are bias-corrected; the
 # diagnostics and sensitivity analyses use indices without bias correction.
 
@@ -22,11 +24,11 @@
 #' @param cfg Species configuration from R/0_setup.R.
 #' @param out_dir Species output folder.
 #' @param crs Projected CRS of the model coordinates.
-#' @return A list with the model data (`dt`, `dt_fishable`), the three `products` (formula,
+#' @return A list with the configuration (`cfg`), the model data (`dt`, `dt_fishable`), the three `products` (formula,
 #'   data, fields and file stem of each), the `family`, the `final` specification, the
 #'   `extra_time` years and the cache folder `rep_dir`.
 report_context <- function(cfg, out_dir, crs) {
-  dt <- load_report_data(cfg, out_dir)
+  dt <- load_model_data(cfg, out_dir, crs)
   final <- cfg$FINAL_MODEL %||% list(
     MESH_CUTOFF_KM = cfg$MESH_CUTOFF_KM, FAMILY = cfg$FAMILY, SPATIAL = cfg$SPATIAL %||% "on",
     SPATIOTEMPORAL = "iid", ANISOTROPY = FALSE,
@@ -63,30 +65,10 @@ report_context <- function(cfg, out_dir, crs) {
   products <- purrr::compact(products)
   rep_dir <- file.path(out_dir, "report")
   dir.create(rep_dir, showWarnings = FALSE, recursive = TRUE)
-  list(dt = dt, dt_fishable = dt_fishable, pos_year = pos_year, years = years,
+  list(cfg = cfg, dt = dt, dt_fishable = dt_fishable, pos_year = pos_year, years = years,
        years_no_fishable = years_no_fishable, products = products, final = final,
        family = report_family(final$FAMILY), form_year = form_year, form_smooth = form_smooth,
        extra_time = setdiff(seq(min(dt$year), max(dt$year)), years), rep_dir = rep_dir)
-}
-
-#' Model data as the fit and validate documents use them
-#'
-#' Stations inside the prediction region with a depth, the year and month factors, and the
-#' fishable (over OVER_CM) response in `value_fishable` when the compiled data have it.
-#'
-#' @param cfg Species configuration.
-#' @param out_dir Species output folder.
-#' @return The model data.
-load_report_data <- function(cfg, out_dir) {
-  dt <- readRDS(file.path(out_dir, "compiled-data.rds")) |>
-    prepare_model_data(cfg) |>
-    restrict_to_region(read_prediction_region(cfg)) |>
-    dplyr::filter(!is.na(.data$depth))
-  dt$fyear <- factor(dt$year)
-  dt$fmonth <- factor(dt$month)
-  fish_col <- if (identical(effort_mode(cfg), "offset")) "biomass_fishable" else "rho_biomass_fishable"
-  dt$value_fishable <- if (fish_col %in% names(dt)) dt[[fish_col]] else NA_real_
-  dt
 }
 
 #' sdmTMB family object from the FINAL_MODEL family name
@@ -108,7 +90,8 @@ report_family <- function(x) {
 #' The settings are injected as values, so that `fit$call` can be re-evaluated by the refit
 #' helpers of sdmTMBexperiments (leave-one-out, survey comparison) in a fresh session.
 #'
-#' @param s Product from `report_context()$products`; `s$data` may be replaced (retrospective).
+#' @param s Product from `report_context()$products`; `s$data` may be replaced (retrospective,
+#'   sensitivity refits), and `s$family` and `s$offset` override the report family and offset.
 #' @param ctx Report context.
 #' @param mesh Optional mesh; by default a new mesh with the FINAL_MODEL cutoff.
 #' @return A fitted sdmTMB model with the fit time (minutes) in `attr(, "fit_minutes")`.
@@ -120,7 +103,7 @@ fit_report_product <- function(s, ctx, mesh = NULL) {
   t0 <- Sys.time()
   fit <- rlang::inject(sdmTMB::sdmTMB(
     !!s$formula, data = s$data, mesh = m,
-    family = !!ctx$family, offset = !!model_offset,
+    family = !!(s$family %||% ctx$family), offset = !!(s$offset %||% model_offset),
     spatial = !!s$spatial, spatiotemporal = !!s$spatiotemporal,
     anisotropy = !!isTRUE(ctx$final$ANISOTROPY), time = "year",
     extra_time = !!(if (dyn) gaps else NULL),
@@ -128,6 +111,44 @@ fit_report_product <- function(s, ctx, mesh = NULL) {
   ))
   attr(fit, "fit_minutes") <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
   fit
+}
+
+#' Guard the report caches against a changed specification or changed data
+#'
+#' The report steps skip any result whose cache file exists, and the influence step reuses
+#' earlier refits, so caches made with another FINAL_MODEL, grid or model data would be
+#' silently mixed with new results. The first step writes a stamp of the inputs; every later
+#' step stops if the stamp differs (knowledge/pipeline.md).
+#'
+#' @param ctx Report context.
+#' @param cfg Stock configuration.
+#' @return The stamp (invisibly); stops when the cached stamp differs.
+report_check_stamp <- function(ctx, cfg) {
+  stamp <- list(final = ctx$final, grid_km = cfg$GRID_KM, max_depth = cfg$MAX_DEPTH,
+                reference = list(cfg$REFERENCE_MONTH, cfg$REFERENCE_SURVEY,
+                                 cfg[["REFERENCE_GEAR", exact = TRUE]], cfg$REFERENCE_GEAR_MODEL),
+                smoothed = list(cfg$SMOOTHED_SPATIAL, cfg$SMOOTHED_SPATIOTEMPORAL),
+                fishable_year = cfg$FISHABLE_YEAR_EFFECT,
+                hauls = digest_strings(ctx$dt$haul_id),
+                values = digest_strings(c(ctx$dt$value, ctx$dt$value_fishable)))
+  f <- report_cache(ctx, "spec-stamp")
+  if (!file.exists(f)) {
+    saveRDS(stamp, f)
+  } else if (!identical(readRDS(f), stamp)) {
+    stop("The caches in ", ctx$rep_dir, " were made with another specification or other model ",
+         "data. Move the folder away (or delete it) and rerun R/report/run_report.sh.")
+  }
+  invisible(stamp)
+}
+
+# MD5 of the values written as text: the same on every machine and R version. A hash of a
+# serialised R object (rlang::hash(), digest() with serialize = TRUE) is not
+# (knowledge/pipeline.md).
+digest_strings <- function(x) {
+  f <- tempfile()
+  on.exit(unlink(f))
+  writeLines(format(x, digits = 15, trim = TRUE), f, useBytes = TRUE)
+  unname(tools::md5sum(f))
 }
 
 report_passes <- function(fit) {
@@ -141,7 +162,8 @@ read_report_cache <- function(ctx, name) {
   if (file.exists(f)) readRDS(f)
 }
 
-#' Prediction grid of the report (GRID_KM cells), with the ICES division of each cell
+#' Prediction grid of the report (GRID_KM cells), with the ICES division of each cell and, when
+#' REGIONS_FILE is set, the assessment region
 #'
 #' @param ctx Report context.
 #' @param cfg Species configuration.
@@ -155,6 +177,7 @@ report_grid <- function(ctx, cfg, crs) {
   grid <- build_model_grid(region, ctx$dt, cfg)
   cells <- unique(grid[c("X", "Y")])
   cells$division <- ices_division(cells, cfg, crs)
+  cells$region <- assessment_region(cells, cfg, crs)
   grid <- dplyr::left_join(grid, cells, by = c("X", "Y"))
   saveRDS(grid, f)
   grid
@@ -184,19 +207,60 @@ ices_division <- function(xy, cfg, crs) {
 
 read_ices_area_polygons <- function(cfg) read_ices_areas(cfg)
 
+#' Areas of the regional split (REGIONS_FILE with a `region` column), in model coordinates
+#'
+#' Without REGIONS_FILE the ICES divisions of the stock area are the regions.
+#'
+#' @param cfg Stock configuration; `REGIONS` gives the regions to keep and their order (all
+#'   regions of the file when NULL).
+#' @param crs Projected CRS.
+#' @return An sf object with a factor column `region`.
+read_assessment_regions <- function(cfg, crs) {
+  old <- sf::sf_use_s2(FALSE)
+  on.exit(sf::sf_use_s2(old))
+  x <- if (is.null(cfg$REGIONS_FILE)) {
+    read_ices_area_polygons(cfg) |>
+      (\(a) if (is.null(cfg$REPORT_SUBAREAS)) a else dplyr::filter(a, .data$SubArea %in% unlist(cfg$REPORT_SUBAREAS)))() |>
+      dplyr::mutate(region = paste(.data$SubArea, .data$Division, sep = ".")) |>
+      dplyr::group_by(.data$region) |>
+      dplyr::summarise(.groups = "drop")
+  } else sf::read_sf(here::here(cfg$REGIONS_FILE))
+  lev <- unlist(cfg$REGIONS) %||% sort(unique(x$region))
+  x |>
+    dplyr::filter(.data$region %in% lev) |>
+    sf::st_make_valid() |>
+    sf::st_transform(crs) |>
+    dplyr::mutate(region = factor(.data$region, levels = lev))
+}
+
+#' Assessment region of points in model coordinates (km); points outside go to the nearest
+#'
+#' @param xy Data frame with X and Y (km) in `crs`.
+#' @param cfg Stock configuration.
+#' @param crs Projected CRS.
+#' @return Factor of regions.
+assessment_region <- function(xy, cfg, crs) {
+  regions <- read_assessment_regions(cfg, crs)
+  pts <- sf::st_as_sf(data.frame(x = xy$X * 1000, y = xy$Y * 1000), coords = c("x", "y"), crs = crs)
+  regions$region[sf::st_nearest_feature(pts, regions)]
+}
+
 # --- Products -------------------------------------------------------------------------------
 
 #' Fit one product and cache the model
 #'
-#' The fishable data are sparse in some years: if the model with the year factor fails the
-#' sanity checks, it is refitted without it and the fit is flagged.
+#' The fishable data are sparse in some years. With `FISHABLE_YEAR_EFFECT: false` in
+#' config.yaml the fishable model is fitted without the year factor; otherwise, if the model
+#' with the year factor fails the sanity checks, it is refitted without it. Either way the fit
+#' is flagged with `attr(, "year_factor_failed")`.
 #'
 #' @param ctx Report context.
 #' @param label Product name.
 #' @return The fit (invisibly).
 run_report_fit <- function(ctx, label) {
   s <- ctx$products[[label]]
-  fit <- try(fit_report_product(s, ctx))
+  no_year <- label == "Fishable biomass (IID)" && !isTRUE(ctx$cfg$FISHABLE_YEAR_EFFECT %||% TRUE)
+  fit <- if (no_year) NULL else try(fit_report_product(s, ctx))
   if (inherits(fit, "try-error")) fit <- NULL
   if (label == "Fishable biomass (IID)" && !report_passes(fit)) {
     message("Refitting ", label, " without the year factor")
@@ -622,6 +686,131 @@ run_report_loso <- function(ctx, grid, n_workers = 7) {
   invisible(out)
 }
 
+#' Configured sensitivity refits
+#'
+#' `SENSITIVITIES` in config.yaml lists the refits, each with a `name` (cache
+#' `sens-<name>.rds`), a `label` for the report and a `type`:
+#'
+#' * `drop`: refit `product` without the hauls that match every column of `filter`
+#'   (e.g. `{cruiseseries: ["CoastalS"], samplequality: ["2"]}`);
+#' * `keep`: refit `product` with only those hauls (e.g. the major survey series);
+#' * `offset`: the response as catch with a log swept-area offset and the Poisson-link version
+#'   of the selected delta family, so that tow length also enters the encounter probability;
+#' * `fishable_threshold`: the fishable product with another length threshold (`over_cm`,
+#'   default `SENSITIVITY_OVER_CM`), the fishable share recomputed from the length data.
+#'
+#' `product` defaults to "Total biomass (IID)" (the fishable product for `fishable_threshold`).
+#' Without `SENSITIVITIES`, the `offset` refit and, when `SENSITIVITY_OVER_CM` is set, the
+#' `fishable_threshold` refit run. Only the trend of a refit is interpreted
+#' (knowledge/index-level-and-trend.md).
+#'
+#' @param cfg Stock configuration.
+#' @return A named list of sensitivity definitions.
+report_sensitivities <- function(cfg) {
+  x <- cfg$SENSITIVITIES
+  if (is.null(x)) {
+    x <- list(list(name = "offset", label = "Catch with swept-area offset", type = "offset"))
+    if (!is.null(cfg$SENSITIVITY_OVER_CM))
+      x <- c(x, list(list(name = "fishable-threshold", type = "fishable_threshold",
+                          label = paste0("Fishable threshold ", cfg$SENSITIVITY_OVER_CM, " cm"))))
+  }
+  stats::setNames(x, vapply(x, `[[`, "", "name"))
+}
+
+# Rows of `d` matching every column of `filter` (a list of column = allowed values).
+match_filter <- function(d, filter) {
+  hit <- rep(TRUE, nrow(d))
+  for (col in names(filter)) {
+    if (!col %in% names(d)) stop("Sensitivity filter column '", col, "' is not in the model data.")
+    hit <- hit & as.character(d[[col]]) %in% as.character(unlist(filter[[col]]))
+  }
+  hit
+}
+
+#' Sensitivity refit of a report index
+#'
+#' Refits one product with the same specification and mesh after changing the data, the
+#' response or the family (see `report_sensitivities()`), and compares its index with the
+#' product's index.
+#'
+#' @param ctx Report context.
+#' @param grid Report grid.
+#' @param name Name of a configured sensitivity.
+#' @return A list (cached as sens-<name>.rds) with the refit index, the product's index, the
+#'   label, the product, the hauls (and positive hauls) removed, and the sanity result.
+run_report_sensitivity <- function(ctx, grid, name) {
+  def <- report_sensitivities(ctx$cfg)[[name]]
+  if (is.null(def)) stop("No sensitivity '", name, "' in SENSITIVITIES.")
+  type <- match.arg(def$type, c("drop", "keep", "offset", "fishable_threshold"))
+  product <- def$product %||% if (type == "fishable_threshold") "Fishable biomass (IID)" else "Total biomass (IID)"
+  s <- ctx$products[[product]]
+  if (is.null(s)) stop("No product '", product, "' in the report.")
+  fit <- readRDS(report_fit_file(ctx, s$file))
+  if (isTRUE(attr(fit, "year_factor_failed"))) s$formula <- ctx$form_smooth
+  full <- readRDS(report_cache(ctx, paste0("post-", s$file)))$index
+  d <- fit$data
+  removed <- 0L
+  removed_positive <- NA_integer_
+  switch(type,
+    drop = , keep = {
+      hit <- match_filter(d, def$filter)
+      out <- if (type == "drop") hit else !hit
+      removed <- sum(out)
+      removed_positive <- sum(out & d$value > 0)
+      d <- d[!out, , drop = FALSE]
+    },
+    offset = {
+      d$value <- if (grepl("fishable", s$file)) d$biomass_fishable else d$biomass
+      d$log_swept_area <- log(d$swept_area)
+      s$offset <- "log_swept_area"
+      s$family <- switch(ctx$final$FAMILY,
+        delta_lognormal = , delta_lognormal_poisson_link = sdmTMB::delta_lognormal(type = "poisson-link"),
+        delta_gamma = , delta_gamma_poisson_link = sdmTMB::delta_gamma(type = "poisson-link"),
+        stop("No Poisson-link version of ", ctx$final$FAMILY))
+    },
+    fishable_threshold = {
+      over_cm <- as.numeric(def$over_cm %||% ctx$cfg$SENSITIVITY_OVER_CM)
+      if (!length(over_cm)) stop("Set over_cm or SENSITIVITY_OVER_CM in config.yaml.")
+      lengths <- readRDS(file.path(out_dir, "length-data.rds"))
+      lw <- readRDS(file.path(out_dir, "compile-metadata.rds"))$lw
+      all <- dplyr::select(ctx$dt, -dplyr::any_of(c("fishable_fraction", "fishable_imputed", "n_measured",
+                                                    "biomass_fishable", "rho_biomass_fishable")))
+      all <- add_fishable_biomass(all, lengths, lw, over_cm)
+      all$value <- all$rho_biomass_fishable
+      pos_years <- unique(all$year[all$value > 0])
+      d <- droplevels(all[all$year %in% pos_years, , drop = FALSE])
+    })
+  s$data <- drop_empty_levels(d)
+  mesh <- sdmTMB::make_mesh(s$data, xy_cols = c("X", "Y"), mesh = fit$spde$mesh)
+  m <- fit_report_product(s, ctx, mesh = mesh)
+  g <- grid_for_fit(grid, m)
+  for (v in intersect(names(g), names(m$data))) {
+    if (is.factor(m$data[[v]]) && v != "fyear") g[[v]] <- factor(as.character(g[[v]]), levels = levels(m$data[[v]]))
+  }
+  out <- list(variant = name, label = def$label %||% name, product = product,
+              index = predict_index(m, g, area = grid_cell_area_nmi2, bias_correct = FALSE),
+              full = full, removed = removed, removed_positive = removed_positive,
+              all_ok = report_passes(m), fit_minutes = attr(m, "fit_minutes"))
+  saveRDS(out, report_cache(ctx, paste0("sens-", name)))
+  invisible(out)
+}
+
+#' Level ratio and trend change of a sensitivity refit against the product's index
+#'
+#' @param sens Result of `run_report_sensitivity()`.
+#' @return A one-row tibble: `level_ratio` (geometric mean ratio over the shared years),
+#'   `trend_change` (geometric mean absolute deviation of the centred log ratios) and the year
+#'   of the largest deviation.
+sensitivity_change <- function(sens) {
+  r <- dplyr::inner_join(dplyr::select(as.data.frame(sens$full), "year", full = "est"),
+                         dplyr::select(as.data.frame(sens$index), "year", "est"), by = "year") |>
+    dplyr::filter(is.finite(.data$est), .data$est > 0)
+  lr <- log(r$est / r$full)
+  dev <- lr - mean(lr)
+  tibble::tibble(level_ratio = exp(mean(lr)), trend_change = exp(mean(abs(dev))) - 1,
+                 year_max = r$year[which.max(abs(dev))])
+}
+
 #' Influence of individual cruises and hauls on the total biomass (IID) index
 #'
 #' Candidates are screened without refitting with `density_share()`: the cruises with the
@@ -705,4 +894,23 @@ leave_out_mean_change <- function(lo) {
     dplyr::filter(purrr::map2_lgl(.data$year, .data$id_years, ~ .x %in% .y),
                   !is.na(.data$ratio), .data$ratio > 0) |>
     dplyr::summarise(mean_abs_change = exp(mean(abs(log(.data$ratio)))) - 1, .by = "id")
+}
+
+#' Change in the trend of the index without each unit of a leave-out analysis
+#'
+#' A unit can move the level of the index without changing its trend, when it informs a
+#' parameter shared by all years (for example the month effect at the reference month). The
+#' trend change removes the level: the yearly log ratios are centred on their mean over all
+#' years, so a pure level shift gives zero (knowledge/index-level-and-trend.md).
+#'
+#' @param lo An `sdmTMB_leave_out` object (with `ratio` in `index`).
+#' @return A tibble with `id`, `level_ratio` (geometric mean ratio over all years) and
+#'   `trend_change`, the geometric mean absolute deviation `exp(mean(abs(d))) - 1` of the
+#'   centred log ratios `d`.
+leave_out_trend_change <- function(lo) {
+  lo$index |>
+    dplyr::filter(!is.na(.data$ratio), .data$ratio > 0) |>
+    dplyr::summarise(level_ratio = exp(mean(log(.data$ratio))),
+                     trend_change = exp(mean(abs(log(.data$ratio) - mean(log(.data$ratio))))) - 1,
+                     .by = "id")
 }

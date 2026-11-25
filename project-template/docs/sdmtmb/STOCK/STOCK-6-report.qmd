@@ -1,0 +1,640 @@
+---
+title: "{{SPECIES_NAME}} — survey indices"
+subtitle: "Final indices, diagnostics and sensitivity analyses"
+format:
+  html:
+    toc: true
+    toc-title: "{{SPECIES_NAME}} — survey indices"
+    toc-depth: 3
+    number-sections: true
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+    fig-format: png
+    fig-dpi: 160
+    embed-resources: true
+params:
+  include_bridging: false      # comparison with the previous assessment's index (PREVIOUS_INDEX_FILE)
+  include_robustness: false    # station subsampling, start-year peels, late data, down-weighting
+execute:
+  fig-width: 6.69
+  warning: false
+  message: false
+author: {{AUTHORS_YAML}}
+affiliations: {{AFFILIATIONS_YAML}}
+date: today
+date-format: "YYYY-MM-DD"
+published-title: "Version"
+lang: en-US
+bibliography:
+  - ../../assets/references.bib
+csl: ../../assets/ices_jms.csl
+---
+
+```{r setup}
+knitr::opts_knit$set(root.dir = here::here())
+index_species <- "{{STOCK_KEY}}"
+source(here::here("R", "0_setup.R"))
+suppressPackageStartupMessages(library(sdmTMBexperiments))  # registers the plot methods
+source(here::here("R", "report_helpers.R"))
+source(here::here("R", "plot_helpers.R"))
+source(here::here("R", "report", "report_lib.R"))
+source(here::here("R", "report", "report_plots.R"))
+sp <- cfg$SPECIES_NAME %||% "{{SPECIES_NAME}}"
+sp_lc <- tolower(sp)
+n_fmt <- function(x) format(x, big.mark = " ", scientific = FALSE, trim = TRUE)
+pct <- function(x, acc = 1) scales::percent(x, accuracy = acc)
+lc_first <- function(x) paste0(tolower(substr(x, 1, 1)), substring(x, 2))
+list_values <- function(x) if (length(x) < 2) x else paste(paste(x[-length(x)], collapse = ", "), "and", x[length(x)])
+ctx <- report_context(cfg, out_dir, dt_crs)
+dt <- ctx$dt
+final <- ctx$final
+products <- ctx$products
+grid <- readRDS(report_cache(ctx, "prediction-grid"))
+grid_one <- grid[grid$year == min(grid$year), ]
+region <- sf::read_sf(here::here(cfg$PREDICTION_REGION_FILE)) |> sf::st_transform(dt_crs)
+post <- purrr::compact(purrr::map(products, ~ read_report_cache(ctx, paste0("post-", .x$file))))
+fits <- purrr::compact(purrr::map(products, function(s) {
+  f <- report_fit_file(ctx, s$file)
+  if (file.exists(f)) readRDS(f)
+}))
+compute_done <- length(post) == length(products)
+fish_no_year <- isTRUE(post[["Fishable biomass (IID)"]]$year_factor_failed)
+if (!compute_done) warning("Not every product has been computed: run R/report/run_report.sh ", index_species)
+total <- "Total biomass (IID)"
+fishable <- "Fishable biomass (IID)"
+smoothed <- "Total biomass (smoothed)"
+rec <- cfg$SPICT_RECOMMENDED_INDEX
+family_txt <- switch(final$FAMILY,
+  delta_lognormal = "delta-lognormal family: a binomial model with a logit link for the probability that a haul catches the species, and a lognormal model for the density in the hauls that do",
+  delta_gamma = "delta-gamma family: a binomial model with a logit link for the probability that a haul catches the species, and a gamma model for the density in the hauls that do",
+  delta_lognormal_poisson_link = "Poisson-link delta-lognormal family [@thorson2018]: the first component models the log number density of groups of fish, from which the encounter probability follows, and the second the biomass per group with a lognormal distribution",
+  delta_gamma_poisson_link = "Poisson-link delta-gamma family [@thorson2018]: the first component models the log number density of groups of fish, from which the encounter probability follows, and the second the biomass per group with a gamma distribution",
+  tweedie = "Tweedie family")
+positive_dist <- if (grepl("gamma", final$FAMILY)) "gamma" else "lognormal"
+st_txt <- function(x) {
+  x <- unlist(x)
+  if (length(x) == 1L) return(paste(toupper(x), "spatiotemporal fields in both components"))
+  on <- x != "off"
+  paste0(paste(toupper(unique(x[on])), collapse = "/"), " spatiotemporal field in the ",
+         c("first (encounter)", "second (positive)")[on], " component only")
+}
+sel_dir <- file.path(out_dir, "selection")
+doc_link <- function(title, path) paste0("[*", title, "*](", path, ")")
+slug <- cfg$STOCK_KEY
+background_link <- doc_link(paste(sp, "—", area_short, "assessment background"), paste0("../../background/", slug, "-0-background.html"))
+summary_link <- doc_link(paste(sp, "—", area_short, "survey index"), paste0("../../data/", slug, "-1-summary.html"))
+selection_link <- doc_link(paste(sp, "—", area_short, "survey selection"), paste0("../../data/", slug, "-2-survey-selection.html"))
+data_link <- doc_link(paste(sp, "—", area_short, "data"), paste0("../../data/", slug, "-3-data.html"))
+validate_link <- doc_link(paste(sp, "— model validation & selection"), paste0("../validation/", slug, "-5-validate.html"))
+# Function names link to their documentation.
+fn_doc <- function(fn, pkg = "sdmTMBexperiments", page = fn) {
+  base <- c(sdmTMBexperiments = "https://deepwaterimr.github.io/sdmTMBexperiments/reference/",
+            sdmTMB = "https://sdmtmb.github.io/sdmTMB/reference/")
+  paste0("[`", pkg, "::", fn, "()`](", base[[pkg]], page, ".html)")
+}
+# Bias-corrected final indices (index-bc step); the uncorrected index of the post step otherwise.
+index_bc <- purrr::compact(purrr::map(products, ~ read_report_cache(ctx, paste0("index-bc-", .x$file))))
+bias_corrected <- length(index_bc) == length(products)
+# Predictions on the cells of the current grid only (the cached predictions may hold cells
+# that the grid no longer has).
+grid_cells <- unique(grid[c("X", "Y")])
+post <- purrr::map(post, function(p) { p$pred <- dplyr::semi_join(p$pred, grid_cells, by = c("X", "Y")); p })
+```
+
+# Introduction
+
+This document gives the bottom-trawl survey indices of `r sp_lc` (*`r cfg$SPECIES_LATIN`*, stock `r cfg$STOCK_CODE`) in `r area_label`. `r cfg$PURPOSE` It describes the data, the models, their diagnostics and the indices in enough detail for a reviewer to follow and reproduce the work; the code of every figure and table is in the folded code blocks and the [Appendix](#appendix).
+
+Three indices are produced. The **total biomass index** and the **fishable biomass index** (`r sp_lc` of at least `r cfg$OVER_CM` cm, the fishable size defined in `r background_link`) are the two candidate indices for the surplus-production model SPiCT`r if (!is.null(rec)) paste0("; the ", lc_first(sub(" \\(IID\\)", "", rec)), " index is recommended, because too few hauls caught fishable ", sp_lc, " for a robust fishable index ([Survey indices](#survey-indices)), and the fishable index is presented alongside it") else ", which of them is used is decided in the SPiCT analyses"`. SPiCT treats each annual index value as an independent observation of the stock and estimates the observation error itself, so these indices are estimated with independent (IID) spatiotemporal random fields and a year factor, so that each year's level comes from that year's hauls only`r if (fish_no_year) "; the fishable model could not be fitted with the year factor and has the IID fields only ([Convergence](#convergence))" else ""`. The **smoothed total biomass index** has autocorrelated (AR1) spatiotemporal fields and no year factor, so that each year borrows information from its neighbours; it shows the underlying trend with less noise and is given as a reference, not as SPiCT input.
+
+The steps before this one are documented in companion documents. `r summary_link` summarises the whole calculation. The surveys and hauls used, and the prediction region, were selected in `r selection_link`, and the compiled haul data, their filtering and checks are described in `r data_link`. The model specification was selected in `r validate_link`, where the mesh, the random-field structure, the spatial correlation geometry, the fixed effects, the family and the prediction grid were compared by space–time block cross-validation. This document applies the selected specification, checks the fitted models and reports sensitivity analyses of the total biomass index: regional contributions, a retrospective analysis, comparisons with indices from single surveys, and the influence of individual surveys, cruises and hauls.
+
+`r if (!compute_done) "**Not all computations have been run; sections without results show what is missing.** " else ""``r if (bias_corrected) "The final indices ([Survey indices](#survey-indices)) are computed with the bias correction of the retransformation of the random effects [@thorson2016], which raises their level more than it changes their trend. The diagnostics and the sensitivity analyses compare indices without bias correction, which is enough to compare models and is much faster." else "The indices in this version are computed without the bias correction of the retransformation of the random effects [@thorson2016]; the final run adds it, which changes the level of the indices more than their trend."`
+
+# Material and methods
+
+## Data
+
+```{r data}
+dt_series <- dt |>
+  dplyr::group_by(Series = as.character(cruiseseries)) |>
+  dplyr::summarise(Years = paste(min(year), max(year), sep = "–"), `Survey years` = dplyr::n_distinct(year),
+                   Hauls = dplyr::n(), `With catch` = sum(value > 0),
+                   `With fishable catch` = sum(value_fishable > 0), .groups = "drop") |>
+  dplyr::arrange(dplyr::desc(Hauls))
+pos_year <- ctx$pos_year
+n_series <- sum(dt_series$Series != "Other")
+```
+
+The data are bottom-trawl hauls from the Norwegian research surveys and other quantitative bottom-trawl sampling in the IMR Biotic database, selected in `r selection_link` and compiled and filtered in `r data_link`. The models use `r n_fmt(nrow(dt))` hauls from `r min(dt$year)` to `r max(dt$year)` inside the prediction region of `r sp_lc`, of which `r n_fmt(sum(dt$value > 0))` (`r pct(mean(dt$value > 0))`) caught `r sp_lc` and `r n_fmt(sum(dt$value_fishable > 0))` caught fishable `r sp_lc` (≥ `r cfg$OVER_CM` cm, the length at which the length distribution of the commercial longline catches reaches `r round(100 * cfg$FISHABLE_PROP)` % of its mode; `r background_link`). Only cruises that caught `r sp_lc` at least once are included, so that the zero catches are true zeros (hauls of surveys that recorded `r sp_lc` when it was caught)`r if (!isTRUE(cfg$INCLUDE_RUSSIAN)) ", and Russian research vessels are excluded" else ""`. The response is the swept-area biomass density of each haul (kg nmi⁻²), the catch divided by the trawled distance and the gear width.
+
+The hauls come from `r n_series` survey series and other surveys (Other; @tbl-report-data, @fig-report-stations, @fig-report-bubble). `r top2 <- dplyr::slice_max(dplyr::filter(dt_series, Series != "Other"), Hauls, n = 2); paste0("The two series with the most hauls, ", top2$Series[1], " and ", top2$Series[2], ", provide ", pct(sum(top2$Hauls) / sum(dt_series$Hauls)), " of the hauls and ", pct(sum(top2[["With catch"]]) / sum(dt_series[["With catch"]])), " of the hauls with ", sp_lc, ".")` <!-- Say where and when each main series samples. -->
+
+```{r}
+#| label: tbl-report-data
+#| tbl-cap: !expr 'paste0("Bottom-trawl hauls in the model data by survey series. With catch: hauls that caught ", sp_lc, "; with fishable catch: hauls that caught ", sp_lc, " of at least ", cfg$OVER_CM, " cm.")'
+knitr::kable(dt_series)
+```
+
+```{r}
+#| label: fig-report-stations
+#| fig-height: 5.5
+#| fig-cap: !expr 'paste0("Hauls in the model data. A) Number of hauls per year by survey series. B) Share of the hauls that caught ", sp_lc, " (black) and fishable ", sp_lc, " (≥ ", cfg$OVER_CM, " cm, orange).")'
+plot_report_stations(dt, sp)
+```
+
+```{r bubble-base}
+bubble_dat <- dplyr::mutate(dt, density = value, longitudestart = lon, latitudestart = lat)
+bubble_base <- ggOceanMaps::basemap(data = dplyr::select(bubble_dat, lon, lat),
+                                    legends = FALSE, base_size = 8, rotate = TRUE, land.col = "grey85",
+                                    land.border.col = "grey60")
+bubble_rows <- ceiling(dplyr::n_distinct(dt$year) / 6)
+```
+
+```{r}
+#| label: fig-report-bubble
+#| dev: jpeg
+#| dev-args: !expr list(quality = 85)
+#| fig-height: !expr 1.25 * bubble_rows + 0.8
+#| fig-cap: !expr 'paste0("Biomass density of ", sp_lc, " in the hauls of the model data by year (kg/nmi²). Circle size and colour show the density in classes of its quantiles; crosses are hauls without ", sp_lc, ".")'
+plot_annual_density(bubble_dat, bubble_base)
+```
+
+## The sdmTMB models
+
+### Model structure
+
+The indices are estimated with spatiotemporal generalised linear mixed models fitted with the R package sdmTMB [@anderson2025]. The models use the `r family_txt`. A delta model splits each haul's catch into two parts that are modelled separately and multiplied in prediction; each part has its own fixed effects and random fields, so a field can be included in one part and not in the other. The fixed effects are a penalised smooth of bottom depth (`s(depth)`)`r if ("fmonth" %in% final$TERMS) " and a factor for the month of the haul (fmonth)" else ""``r if ("fsurvey" %in% final$TERMS) paste0(", a factor for the survey series (fsurvey, predicted for ", cfg$REFERENCE_SURVEY, ")") else ""``r if ("fgear" %in% final$TERMS) paste0(", a factor for the trawl model (fgear, predicted for ", cfg$REFERENCE_GEAR_MODEL, ")") else ""`, plus a factor for the year (`fyear`) in the `r if (fish_no_year) "total biomass model" else "two SPiCT candidates"`. The random fields are Gaussian Markov random fields with a Matérn correlation [@lindgren2011], estimated on a triangulation mesh: a **spatial field** ($\omega$) describes where `r sp_lc` is consistently more or less abundant than the fixed effects predict, and **spatiotemporal fields** ($\epsilon_t$) describe how that pattern changes from year to year.
+
+For the `r if (fish_no_year) "total biomass model" else "two SPiCT candidates"`, the linear predictor of component $j$ (encounter or positive density) at location $s$ in year $t$ is
+
+$$
+\eta_{j}(s, t) = \beta_{j,t} + f_j(\text{depth}_s) `r if ("fmonth" %in% final$TERMS) "+ \\gamma_{j,\\text{month}}" else ""` `r if ("fsurvey" %in% final$TERMS) "+ \\lambda_{j,\\text{series}}" else ""` + \omega_j(s) + \epsilon_{j,t}(s),
+$$
+
+where $\beta_{j,t}$ is the year factor and the fields are switched on as in @tbl-report-spec: `r st_txt(final$SPATIOTEMPORAL)`. With IID spatiotemporal fields, the year-to-year change in the index comes from the year factor and from the field of each year, without any link to the neighbouring years. The smoothed index has no year factor and `r st_txt(cfg$SMOOTHED_SPATIOTEMPORAL %||% "ar1")`, $\epsilon_{t}(s) = \rho\,\epsilon_{t-1}(s) + \delta_t(s)$`r if (identical(cfg$SMOOTHED_SPATIAL, "off")) ", and no separate spatial field, because with an autocorrelation near one the spatiotemporal field also carries the persistent pattern" else ""`; years without hauls are included as extra time steps, which the AR1 process interpolates. `r if (length(ctx$years_no_fishable)) paste0("No haul caught fishable ", sp_lc, " in ", list_values(ctx$years_no_fishable), ", so the fishable model leaves out ", if (length(ctx$years_no_fishable) == 1) "that year" else "those years", ". ") else ""`
+
+The specification was selected in `r validate_link`. In brief: the mesh cutoff was the coarsest whose index stayed within 5 % of the index of the best-predicting cutoff; the random fields, the correlation geometry, the fixed effects and the family were each selected by the one-standard-error rule on the cross-validated expected log predictive density, which chooses the simplest candidate that predicts held-out hauls as well as the best one within the uncertainty of the comparison; and the prediction grid has `r cfg$GRID_KM` km cells, whose index stays within 1 % of the index on a 5 km grid. The selection was made on the total biomass model and is applied to the fishable model`r if (fish_no_year) ", except for the year factor" else ""`; the structure of the smoothed index was selected among the smoothed candidates in the same document.
+
+```{r spec}
+spec_tab <- purrr::imap_dfr(products, function(s, label) {
+  p <- post[[label]]
+  tibble::tibble(Model = label, Formula = if (!is.null(p)) p$formula else deparse1(s$formula),
+                 `Spatial field` = paste(unlist(s$spatial), collapse = "/"),
+                 `Spatiotemporal fields` = paste(unlist(s$spatiotemporal), collapse = "/"),
+                 Hauls = if (!is.null(p)) p$hauls else NA, `With catch` = if (!is.null(p)) p$positive else NA,
+                 `Mesh vertices` = if (!is.null(p)) p$vertices else NA,
+                 NLL = if (!is.null(p)) round(p$nll, 1) else NA, AIC = if (!is.null(p)) round(p$aic, 1) else NA,
+                 `Fit (min)` = if (!is.null(p)) round(p$fit_minutes, 1) else NA)
+})
+```
+
+```{r}
+#| label: tbl-report-spec
+#| tbl-cap: !expr 'paste0("Setup of the three ", sp_lc, " models (", final$FAMILY, " family, ", final$MESH_CUTOFF_KM, " km mesh cutoff, ", if (isTRUE(final$ANISOTROPY)) "anisotropic" else "isotropic", " correlation). Fields are given per delta component (encounter/positive) where they differ. NLL: negative log-likelihood at the optimum, the quantity the fit minimises. Fit: fitting time on one core.")'
+knitr::kable(spec_tab)
+```
+
+### Mesh
+
+The random fields are approximated on a triangulation mesh built with a minimum distance of `r final$MESH_CUTOFF_KM` km between vertices (@fig-report-mesh); the fields are estimated at the vertices and interpolated linearly within the triangles. The cutoff was selected in the model selection (stage 1 of `r validate_link`). The mesh ignores land: the correlation can cross peninsulas and islands. A barrier mesh, which prevents this [@bakka2019], is one of the geometry candidates of the model selection.
+
+```{r}
+#| label: fig-report-mesh
+#| dev: jpeg
+#| dev-args: !expr list(quality = 85)
+#| fig-height: 6
+#| fig-cap: !expr 'paste0("Triangulation mesh of the total biomass model (", final$MESH_CUTOFF_KM, " km cutoff, ", if (length(fits)) fits[[1]]$spde$mesh$n else NA, " vertices). Red dots: haul positions.")'
+if (length(fits)) plot_mesh(fits[[1]]$spde, crs = dt_crs, data = dt, base_size = 9)
+```
+
+### Model fitting
+
+The models are fitted by maximum likelihood with the random effects integrated out by the Laplace approximation in TMB [@kristensen2016], followed by one Newton step from the optimum to reduce the gradient. Each fit is checked with `r fn_doc("sanity", "sdmTMB")`: convergence of the optimiser, a positive-definite Hessian, small gradients of the fixed parameters, no standard errors that are very large relative to their estimates, and no random-field standard deviation that collapsed to zero. `r if (isTRUE(post[[fishable]]$year_factor_failed)) paste0("The fishable model with the year factor did not pass these checks and was refitted without it; its index then follows the IID fields only. ") else ""`
+
+### Prediction grid
+
+The indices are the predicted density summed over a grid of `r n_fmt(nrow(grid_one))` cells of `r cfg$GRID_KM` × `r cfg$GRID_KM` km covering the prediction region of `r sp_lc` between land and `r cfg$MAX_DEPTH` m depth (@fig-report-grid). The prediction region is the area around the hauls that caught `r sp_lc`, cut to `r area_label` (`r selection_link`). Cells without any neighbouring cell, slivers of the region in fjords and at its edges, are left out. The depth of each cell is the GEBCO bottom depth at its centre. The cell size was selected in the model selection: the index on the `r cfg$GRID_KM` km grid stays within 1 % of the index on a 5 km grid (stage 6 of `r validate_link`). `r if ("fmonth" %in% final$TERMS) paste0("The predictions are for month ", unique(grid$month)[1], if (identical(as.numeric(cfg$REFERENCE_MONTH), as.numeric(unique(grid$month)[1]))) " (REFERENCE_MONTH), the season of the coastal survey, which samples the area that holds most of the predicted biomass" else ", the most sampled month", ". The month factor is confounded with the survey series, because each series samples in its own season, so the reference month sets the level of the index; its trend does not depend on it. ") else ""``r de <- depth_extrapolation(grid_one, dt); if (de$deeper + de$shallower == 0) "No cell lies outside the depth range of the hauls." else paste0(n_fmt(de$deeper + de$shallower), " cells lie outside the depth range of the hauls (", round(de$observed_min), "–", round(de$observed_max), " m), where the depth smooth extrapolates.")`
+
+```{r grid-map}
+grid_map <- plot_grid_depth(grid_one, crs = dt_crs, cell_km = cfg$GRID_KM, region = region)
+```
+
+```{r}
+#| label: fig-report-grid
+#| dev: jpeg
+#| dev-args: !expr list(quality = 85)
+#| fig-height: !expr grid_map$height
+#| fig-cap: !expr 'paste0("Prediction grid: ", cfg$GRID_KM, " × ", cfg$GRID_KM, " km cells coloured by GEBCO bottom depth in 100 m bins (the depths used in the predictions are continuous). Black outline: the prediction region.")'
+grid_map$plot
+```
+
+### Survey indices
+
+The annual index is the sum over the grid cells of the predicted density times the cell area (`r fn_doc("get_index", "sdmTMB")`; @anderson2025), in tonnes in the prediction region. Its uncertainty is the standard error of the log index from the delta method, and the 95 % confidence interval is the estimate times $\exp(\pm 1.96\,\mathrm{SE})$. The coefficient of variation (CV) is $\sqrt{\exp(\mathrm{SE}^2) - 1}$.
+
+### Sensitivity analyses
+
+The total biomass index is examined in four ways, each described in its section: how the index divides among areas ([Regional contributions](#sec-regional)); how the index changes when the last years are removed ([Retrospective analysis](#sec-retro)); how it compares with indices fitted to single surveys and how it changes without each survey series ([Survey comparison](#sec-survey)); how it changes with single changes to the data, the response and the fishable threshold ([Sensitivity analyses](#sec-sens)); and how much single cruises and hauls move it ([Influence of individual cruises and hauls](#sec-influence)). These refits use the same specification and mesh as the total biomass model. The retrospective analysis is also run for the fishable biomass index, the other SPiCT candidate.
+
+# Results
+
+## Convergence
+
+```{r sanity}
+sanity_tab <- purrr::imap_dfr(post, function(p, label) {
+  tibble::tibble(Model = label, Converged = p$converged, `Max gradient` = sprintf("%.1e", p$max_gradient),
+                 `Hessian PD` = p$pdHess, Sanity = p$all_ok,
+                 `Failed checks` = paste(setdiff(names(p$sanity)[unlist(p$sanity) %in% FALSE], "all_ok"), collapse = ", "))
+})
+ok <- stats::setNames(sanity_tab$Sanity %in% TRUE, sanity_tab$Model)
+```
+
+`r if (length(ok) && all(ok)) paste0("All ", length(ok), " models converged with a positive-definite Hessian and passed every sanity check (@tbl-report-sanity).") else paste0("Not all models passed the sanity checks (@tbl-report-sanity): ", list_values(names(ok)[!ok]), ". Their results are provisional.")``r if (isTRUE(post[[fishable]]$year_factor_failed)) paste0(" The fishable biomass model with the year factor did not pass the sanity checks, so the fishable index comes from a refit without it (", post[[fishable]]$formula, "). Its year-to-year changes then come from the IID spatiotemporal field alone, which is centred on zero each year, so years with few fishable ", sp_lc, " are pulled toward the long-term mean; this matters for its use in SPiCT.") else ""` Max gradient is the largest absolute gradient of the negative log-likelihood with respect to the fixed parameters at the optimum; values below 0.001 show that the optimiser stopped at a minimum.
+
+```{r}
+#| label: tbl-report-sanity
+#| tbl-cap: "Convergence and sanity checks of the models. Converged: optimiser convergence code 0. Hessian PD: positive-definite Hessian. Sanity: all `sdmTMB::sanity()` checks passed; Failed checks lists those that did not."
+knitr::kable(sanity_tab)
+```
+
+## Residuals
+
+```{r resid-stats}
+resid_stats <- purrr::imap_dfr(post, function(p, label) {
+  r <- p$resid[[length(p$resid)]]
+  r <- r[is.finite(r)]
+  tibble::tibble(model = label, skew = mean((r - mean(r))^3) / stats::sd(r)^3,
+                 low = mean(r < -3), high = mean(r > 3))
+})
+```
+
+The randomised quantile residuals [@dunn1996] are computed with the fixed effects at their maximum-likelihood estimates and the random effects drawn once from their approximate joint distribution given the data (`mle-mvn` in `r fn_doc("residuals", "sdmTMB", "residuals.sdmTMB")`; @waagepetersen2006; @thygesen2017). If the model is right, they follow a standard normal distribution and lie on the dashed line (@fig-report-qq). The encounter residuals of a binomial model are coarse by construction. The positive-density (`r positive_dist`) residuals have a skewness of `r paste0(round(resid_stats$skew, 2), " (", lc_first(resid_stats$model), ")", collapse = ", ")`; `r paste0(pct(resid_stats$low, 0.1), collapse = ", ")` of them lie below −3 and `r paste0(pct(resid_stats$high, 0.1), collapse = ", ")` above 3, against 0.1 % expected on each side.
+
+```{r}
+#| label: fig-report-qq
+#| dev: jpeg
+#| dev-args: !expr list(quality = 85)
+#| fig-height: 7
+#| fig-cap: !expr 'paste0("Normal quantile–quantile plots of the randomised quantile residuals of the encounter (left) and positive-density (", positive_dist, ", right) components of each model (rows). Dashed line: the expected standard normal distribution.")'
+plot_report_qq(post)
+```
+
+```{r resid-series}
+# Diagnostics by survey series for the total biomass (IID) model: the spread of the positive-
+# component residuals and the observed and simulated share of empty hauls (data review 3.1, 3.2).
+series_diag <- if (!is.null(post[[total]]) && !is.null(fits[[total]])) {
+  fd <- fits[[total]]$data
+  r_pos <- post[[total]]$resid[[length(post[[total]]$resid)]]
+  sim_h <- post[[total]]$sims$haul
+  if (length(r_pos) == nrow(fd) && !is.null(sim_h) && nrow(sim_h) == nrow(fd)) {
+    tibble::tibble(series = as.character(fd$cruiseseries), resid = r_pos, obs_zero = fd$value == 0,
+                   sim_zero = sim_h$sim_zero)
+  }
+}
+series_sum <- if (!is.null(series_diag)) {
+  series_diag |>
+    dplyr::summarise(hauls = dplyr::n(), positive = sum(!obs_zero),
+                     resid_sd = stats::sd(resid[is.finite(resid)]),
+                     obs_zero = mean(obs_zero), sim_zero = mean(sim_zero), .by = "series") |>
+    dplyr::arrange(dplyr::desc(hauls))
+}
+```
+
+`r if (!is.null(series_sum)) { big <- dplyr::filter(series_sum, positive >= 30); paste0("By survey series, the standard deviation of the positive-density residuals of the total biomass model ranges from ", sprintf("%.2f", min(big$resid_sd)), " to ", sprintf("%.2f", max(big$resid_sd)), " in the series with at least 30 hauls with ", sp_lc, " (1 if the model is right), and the share of empty hauls simulated from the model differs from the observed share by at most ", round(100 * max(abs(big$sim_zero - big$obs_zero))), " percentage points (@tbl-report-resid-series). ", if (max(big$resid_sd) / min(big$resid_sd) > 1.5) "The residual spread differs between the series, so survey-specific dispersion is worth testing." else "The residual spread is similar in the series, so a common dispersion parameter is adequate.") } else ""`
+
+```{r}
+#| label: tbl-report-resid-series
+#| eval: !expr '!is.null(series_sum)'
+#| tbl-cap: !expr 'paste0("Diagnostics of the total biomass (IID) model by survey series. Residual SD: standard deviation of the randomised quantile residuals of the positive densities (1 if the model is right). Zero share: observed and simulated (mean of 100 simulations) share of hauls without ", sp_lc, ".")'
+series_sum |>
+  dplyr::transmute(Series = series, Hauls = hauls, `With catch` = positive, `Residual SD` = round(resid_sd, 2),
+                   `Zero share, observed` = pct(obs_zero), `Zero share, simulated` = pct(sim_zero)) |>
+  knitr::kable()
+```
+
+## Predicted distributions
+
+To check whether the models reproduce the data as a whole, 100 data sets were simulated from each fitted model at the observed hauls, with the random effects drawn from their joint distribution (`mle-mvn`), and compared with the observed catches: the share of hauls without `r sp_lc` and the mean density by year (@fig-report-sim), and the distribution of the densities (@fig-report-hist).
+
+```{r sim-stats}
+sim_overall <- purrr::imap_dfr(post, ~ if (!is.null(.x$sims)) dplyr::mutate(.x$sims$overall, model = .y))
+sim_year <- purrr::imap_dfr(post, ~ if (!is.null(.x$sims)) dplyr::mutate(.x$sims$year, model = .y))
+zero_out <- sim_year |> dplyr::summarise(out = mean(obs_zero < sim_zero_lwr | obs_zero > sim_zero_upr), .by = "model")
+mean_out <- sim_year |> dplyr::summarise(out = mean(obs_mean < sim_mean_lwr | obs_mean > sim_mean_upr), .by = "model")
+```
+
+Over all years, `r pct(sim_overall$obs_zero[1])` of the hauls caught no `r sp_lc`, against `r paste0(pct(sim_overall$sim_zero), " (", lc_first(sim_overall$model), ")", collapse = ", ")` in the simulations. The observed share of zero catches lies outside the 95 % range of the simulations in `r paste0(pct(zero_out$out), " of the years (", lc_first(zero_out$model), ")", collapse = ", ")`, and the observed mean density in `r paste0(pct(mean_out$out), " (", lc_first(mean_out$model), ")", collapse = ", ")`. The observed mean density is dominated by a few large catches in each year, so it varies more than the zero share.
+
+```{r}
+#| label: fig-report-sim
+#| fig-height: 4.5
+#| fig-cap: !expr 'paste0("Observed (orange points) and simulated (grey line: mean, band: 95 % range of 100 simulations) share of hauls without ", sp_lc, " (top) and mean biomass density (bottom) by year, for each model (columns).")'
+plot_report_simulation(post)
+```
+
+```{r}
+#| label: fig-report-hist
+#| fig-height: 5.5
+#| fig-cap: "Distribution of log(density + 1) in the observed hauls (left), in the mean of the simulations at the same hauls (middle) and in the predictions on the grid cells over all years (right), for each model (rows). Blue line: mean. The count axis is log(x + 1) transformed."
+plot_report_density_hist(post)
+```
+
+## Model output
+
+::: {.content-visible when-format="html"}
+The printed sdmTMB output of the three models, with all parameter estimates, is in the folded block below.
+
+```{r model-output, collapse=TRUE}
+fits
+```
+:::
+
+### Fixed effects
+
+The fixed-effect estimates other than the year factor are given on the link scale of each component (logit or log for the encounter, log for the positive density; @tbl-report-fixed). The smooth of depth is represented by its linear coefficient (`sdepth`) and the standard deviation of its penalised wiggly part (`sds(depth)`, in the random-parameter table). As predicted densities, each panel varies one term with the others held at reference values, without the random fields (@fig-report-effects).
+
+```{r}
+#| label: tbl-report-fixed
+#| tbl-cap: "Fixed-effect estimates (other than the year factor) with 95 % confidence intervals, on the link scale of each model component."
+knitr::kable(report_par_table(post, "fixed"))
+```
+
+```{r effects}
+effects <- purrr::compact(purrr::map(post, "effects"))
+```
+
+```{r}
+#| label: fig-report-effects
+#| fig-height: !expr 2.6 * length(effects)
+#| fig-cap: !expr 'paste0("Conditional fixed effects of the three ", sp_lc, " models on the response scale (kg per nmi², without random fields). Each panel varies one term with the others held at their reference values (grey vertical lines): ", effects_reference_text(effects[[1]]), ". Lines and points: estimates; bands and bars: 95 % confidence intervals. The year panels of the IID models are the year factor, which the index follows; the smoothed model has no year effect. Ticks on the depth axis: hauls with ", sp_lc, ".")'
+purrr::imap(effects, ~ plot(.x, fit = fits[[.y]], data = dt, base_size = 8) + ggplot2::ggtitle(.y)) |>
+  cowplot::plot_grid(plotlist = _, ncol = 1)
+```
+
+### Random effects
+
+The random-effect parameters are the Matérn range (the distance in km at which the correlation of a field falls to about 0.13), the standard deviations of the spatial ($\sigma_O$) and spatiotemporal ($\sigma_E$) fields, the AR1 correlation ($\rho$) of the smoothed model, and the dispersion of the positive component ($\phi$; @tbl-report-random). On the link scale of each component, the variance of the fields can be compared with the observation-level variance of the family [@nakagawa2017]: $\phi^2$ for a lognormal and $\psi'(\phi)$ (the trigamma function of the shape) for a gamma positive component, $\pi^2/3$ for a binomial encounter component with a logit link and $\pi^2/6$ for the encounter component of a Poisson-link model, whose encounter probability $1 - \exp(-n)$ is a complementary log-log link (@fig-report-variance; `r fn_doc("plot_variance_partitioning")`).
+
+```{r}
+#| label: tbl-report-random
+#| tbl-cap: "Random-effect parameters with 95 % confidence intervals. range: Matérn range (km); sigma_O and sigma_E: marginal standard deviations of the spatial and spatiotemporal fields; rho: AR1 correlation; phi: dispersion (lognormal: standard deviation on the log scale; gamma: shape); sds: standard deviation of the depth smooth."
+knitr::kable(report_par_table(post, "ran_pars"))
+```
+
+```{r}
+#| label: fig-report-variance
+#| fig-height: 6.5
+#| fig-cap: "Approximate partitioning of the link-scale variance of each delta component (columns: binomial encounter, positive density) of each model (rows). Spatial (sigma_O): the spatial field; Spatiotemporal (sigma_E): the spatiotemporal fields; Observation: the observation-level variance of the family on the link scale, π²/3 for a binomial with a logit link (binomial, logit), π²/6 for the encounter component of a Poisson-link model (binomial, cloglog), φ² for a lognormal (phi) and the trigamma function of the shape φ for a gamma (Gamma shape)."
+purrr::imap(fits, ~ plot_variance_partitioning(.x, base_size = 8) + ggplot2::ggtitle(.y)) |>
+  cowplot::plot_grid(plotlist = _, ncol = 1)
+```
+
+#### Spatial random fields
+
+The spatial fields (@fig-report-omega) show where `r sp_lc` is consistently more (red) or less (blue) abundant than the fixed effects predict, on the link scale of each component.
+
+```{r omega}
+omega_models <- names(post)[vapply(post, function(p) any(grepl("^omega", names(p$pred))), logical(1))]
+```
+
+```{r}
+#| label: fig-report-omega
+#| dev: jpeg
+#| dev-args: !expr list(quality = 85)
+#| fig-height: !expr 3.6 * length(omega_models)
+#| fig-cap: !expr 'paste0("Spatial random fields (omega) of the ", list_values(lc_first(omega_models)), " models on the link scale; panels omega_s1 and omega_s2 are the encounter and positive components.")'
+purrr::map(omega_models, ~ plot_random_field(post[[.x]]$pred, crs = dt_crs, field = "omega", base_size = 8) +
+             ggplot2::ggtitle(.x)) |>
+  cowplot::plot_grid(plotlist = _, ncol = 1)
+```
+
+#### Spatiotemporal random fields
+
+The spatiotemporal fields of the total biomass model (@fig-report-epsilon) show how the distribution deviates from the spatial pattern in each year.
+
+```{r}
+#| label: fig-report-epsilon
+#| dev: jpeg
+#| dev-args: !expr list(quality = 80)
+#| fig-height: 9
+#| fig-cap: "Spatiotemporal random fields (epsilon) of the total biomass (IID) model by year, on the link scale of the component that has them."
+if (!is.null(post[[total]])) plot_random_field(post[[total]]$pred, crs = dt_crs, field = "epsilon", base_size = 7)
+```
+
+## Predicted density
+
+```{r density-pred}
+dens <- purrr::imap_dfr(post, ~ dplyr::mutate(.x$pred[c("X", "Y", "year", "est")], model = .y, density = exp(est)))
+dens_cell_mean <- dens |> dplyr::filter(model == total) |> dplyr::summarise(m = mean(density), .by = c("X", "Y")) |> dplyr::pull(m)
+```
+
+The predicted density averaged over the years includes the random fields (@fig-report-mean-map). The annual maps of the total biomass (IID) model show the difference of each cell from its mean over the years, as a percentage of the largest cell mean, so that the change from year to year is visible across the whole area without being dominated by the densest cells (@fig-report-annual-map; `r fn_doc("plot_prediction_map")`).
+
+```{r}
+#| label: fig-report-mean-map
+#| dev: jpeg
+#| dev-args: !expr list(quality = 85)
+#| fig-height: 4
+#| fig-cap: !expr 'paste0("Predicted biomass density of ", sp_lc, " (kg/nmi²) averaged over the years, for each model. Square-root colour scale.")'
+purrr::map(names(post), function(m) {
+  plot_prediction_map(dplyr::filter(dens, model == m), crs = dt_crs, column = "density", type = "mean",
+                      transform = "sqrt", base_size = 7) +
+    ggplot2::labs(fill = "kg/nmi²", title = m) + ggplot2::theme(legend.position = "bottom")
+}) |>
+  cowplot::plot_grid(plotlist = _, nrow = 1)
+```
+
+```{r}
+#| label: fig-report-annual-map
+#| dev: jpeg
+#| dev-args: !expr list(quality = 80)
+#| fig-height: 9
+#| fig-cap: !expr 'paste0("Annual anomaly of the predicted biomass density of ", sp_lc, " from the total biomass (IID) model: the difference of each cell from its mean over the years, as a percentage of the largest cell mean (", n_fmt(round(max(dens_cell_mean))), " kg/nmi²). Red: denser than the cell mean; blue: less dense. Signed square-root colour scale.")'
+plot_prediction_map(dplyr::filter(dens, model == total), crs = dt_crs, column = "density", type = "anomaly",
+                    transform = "sqrt", base_size = 7)
+```
+
+# Survey indices
+
+```{r index}
+index_src <- if (bias_corrected) index_bc else purrr::map(post, "index")
+index_tab <- purrr::imap_dfr(index_src, ~ dplyr::mutate(as.data.frame(.x), model = .y)) |>
+  dplyr::mutate(model = factor(model, levels = names(products)))
+se_med <- index_tab |> dplyr::summarise(se = stats::median(se, na.rm = TRUE), .by = "model")
+cor_log <- function(a, b) {
+  x <- dplyr::filter(index_tab, model == a); y <- dplyr::filter(index_tab, model == b)
+  yr <- intersect(x$year, y$year)
+  stats::cor(log(x$est[match(yr, x$year)]), log(y$est[match(yr, y$year)]))
+}
+tot <- dplyr::filter(index_tab, model == total)
+last5 <- mean(tot$est[tot$year > max(tot$year) - 5]) / mean(tot$est)
+fish <- dplyr::filter(index_tab, model == fishable)
+fish_above <- fish$year[fish$est > tot$est[match(fish$year, tot$year)]]
+```
+
+The [Appendix](#appendix) gives the values of the three indices (@fig-report-index)`r if (bias_corrected) ", which are bias-corrected" else ""`. The total biomass index peaked in `r tot$year[which.max(tot$est)]` at `r n_fmt(round(max(tot$est) / 1000))` t and was lowest in `r tot$year[which.min(tot$est)]` at `r n_fmt(round(min(tot$est) / 1000))` t; its mean over the last five years is `r round(last5, 2)` times its mean over the series. The median standard error of the log index is `r paste0(round(se_med$se, 2), " for the ", lc_first(as.character(se_med$model)), collapse = ", ")`. The log indices of the total biomass with IID and with smoothed fields have a correlation of `r round(cor_log(total, smoothed), 2)`, and those of the total and the fishable biomass `r round(cor_log(total, fishable), 2)`. `r if (length(fish_above)) paste0("The fishable index exceeds the total index in ", length(fish_above), " years (", format_ranges(fish_above), "), which is not possible for the stock", if (isTRUE(post[[fishable]]$year_factor_failed)) ": without the year factor, the fishable model pulls years with few fishable fish toward its long-term mean, while the total biomass model follows the data of each year" else "", if (!is.null(rec)) ". This is why the total biomass index is recommended for SPiCT." else ". The total biomass index is therefore the safer SPiCT candidate.") else ""`
+
+```{r}
+#| label: fig-report-index
+#| fig-height: 7.5
+#| fig-cap: !expr 'paste0("Survey indices of ", sp_lc, " in ", area_label, "", if (bias_corrected) ", bias-corrected" else "", ". A) Biomass in the prediction region (kt) with 95 % confidence intervals. B) Each index divided by its mean, which shows the trends on a common scale. C) Coefficient of variation by year.")'
+plot_report_indices(index_tab)
+```
+
+{{< include ../sections/region-section.qmd >}}
+
+{{< include ../sections/retro-section.qmd >}}
+
+{{< include ../sections/survey-comparison-section.qmd >}}
+
+{{< include ../sections/sensitivity-section.qmd >}}
+
+{{< include ../sections/influence-section.qmd >}}
+
+{{< include ../sections/bridging-section.qmd >}}
+
+{{< include ../sections/robustness-section.qmd >}}
+
+# Exported indices
+
+```{r export}
+#| results: hide
+source(here::here("R", "assessment_index_handoff.R"))
+# The index is predicted for the reference month, so its timing is the middle of that month.
+ref_month <- unique(grid$month)[1]
+index_timing <- cfg$ASSESSMENT_INDEX_TIMING %||% round((ref_month - 0.5) / 12, 3)
+# The hand-offs carry the final indices: bias-corrected when the index-bc step has run.
+indices <- if (bias_corrected) index_bc else purrr::map(post, "index")
+git_commit <- tryCatch(
+  system2("git", c("-C", shQuote(here::here()), "rev-parse", "HEAD"), stdout = TRUE, stderr = FALSE),
+  error = function(e) NA_character_
+)
+if (compute_done) {
+  handoff_files <- purrr::map_chr(intersect(unlist(cfg$SPICT_CANDIDATE_INDICES), names(indices)), function(label) {
+    h <- build_assessment_index_handoff(
+      indices[label], label,
+      list(units = cfg$ASSESSMENT_INDEX_UNITS,
+           uncertainty = list(column = "se", scale = "log", measure = "standard_error"),
+           index_type = cfg$ASSESSMENT_INDEX_TYPE,
+           timing = index_timing,
+           spatial_scope = cfg$REGION,
+           provenance = list(project = "lotidae-assessment-index (index-wise)",
+                             source = paste(sp, "survey indices report"),
+                             specification = describe_spec(list(
+                               year = TRUE, terms = final$TERMS, spatial = final$SPATIAL,
+                               spatiotemporal = final$SPATIOTEMPORAL, family = final$FAMILY,
+                               mesh_km = final$MESH_CUTOFF_KM, anisotropy = final$ANISOTROPY)),
+                             bias_correct = bias_corrected, git_commit = git_commit))
+    )
+    f <- file.path(out_dir, paste0("assessment-index-", products[[label]]$file, ".rds"))
+    saveRDS(h, f)
+    f
+  })
+  index_csv <- file.path(out_dir, paste0(cfg$STOCK_KEY, "-survey-indices.csv"))
+  index_tab |>
+    dplyr::select(product = model, year, est, lwr, upr, se) |>
+    readr::write_csv(index_csv)
+  dir.create(file.path(out_dir, "archive"), showWarnings = FALSE)
+  invisible(file.copy(index_csv, file.path(out_dir, "archive", paste0("index-", max(dt$year), ".csv")), overwrite = TRUE))
+}
+```
+
+`r if (!is.null(rec)) paste0("The ", lc_first(sub(" \\(IID\\)", "", rec)), " index is the recommended SPiCT index; both candidates are exported so that the fishable index can be tested as a sensitivity run. ") else ""`The two SPiCT candidates are exported as versioned hand-off objects (`assessment-index-total-iid.rds` and `assessment-index-fishable-iid.rds` in `data/output/`r cfg$STOCK_KEY`/`), which the SPiCT analyses read directly. They hold the annual estimate, the 95 % interval and the standard error of the log index, with the units, the timing within the year and the model specification. All three indices are also written to `r cfg$STOCK_KEY`-survey-indices.csv and archived by the last survey year. The hand-offs give the index timing as `r index_timing` of the year, `r if (is.null(cfg$ASSESSMENT_INDEX_TIMING)) paste0("the middle of the reference month (", month.name[ref_month], ")", if ("fmonth" %in% final$TERMS) ", for which the indices are predicted" else "; the models have no month term, so the timing marks the season of the coastal survey, which holds most of the hauls with the species") else "set in config.yaml (ASSESSMENT_INDEX_TIMING)"`. Only the trend of the indices should be used: their level depends on choices such as the reference month and gear.
+
+# Summary
+
+`r if (length(ok) && all(ok)) paste0("The three ", sp_lc, " models with the selected specification converged and passed the sanity checks, and their residuals and simulations are summarised in the Results. ") else paste0("Not all ", sp_lc, " models passed the sanity checks: ", list_values(names(ok)[!ok]), ". ")`The sensitivity analyses of the total biomass index are summarised in their sections: the regional contributions, the retrospective pattern (Mohn's ρ), the agreement with single-survey indices and the influence of single surveys, cruises and hauls. `r if (!is.null(rec)) paste0("The ", lc_first(sub(" \\(IID\\)", "", rec)), " index is recommended for SPiCT; the fishable index is presented alongside it but rests on too few hauls with fishable ", sp_lc, " to be robust. ") else ""``r if (bias_corrected) "The final indices are bias-corrected." else "The indices in this version have no bias correction, which the final run adds."`
+
+# Software and reproducibility
+
+```{r software-citations}
+#| results: asis
+report_software(
+  c("tidyverse", "ggplot2", "sf", "ggOceanMaps", "sdmTMB", "sdmTMBexperiments", "cowplot", "knitr"),
+  here::here(cfg$DOCS_DIR %||% "docs", "assets", "references.bib")
+)
+```
+
+The models and sensitivity analyses were run on a server with `R/report/run_report.sh` (@lst-report-lib), which caches every result in `data/output/`r cfg$STOCK_KEY`/report/`; this document reads the caches. <!-- Name the server (and any cluster used for the model selection). -->
+
+This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. The authors designed the study and specified and checked the analyses, and they take full responsibility for the content; this version of the AI-assisted text has not yet been reviewed and approved by them.
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+# Appendix {#appendix}
+
+```{r appendix-tables}
+index_kt <- function(label) {
+  dplyr::filter(index_tab, model == label) |>
+    dplyr::transmute(Year = year, `Index (t)` = n_fmt(round(est / 1000)),
+                     `Lower 95 %` = n_fmt(round(lwr / 1000)), `Upper 95 %` = n_fmt(round(upr / 1000)),
+                     `SE (log)` = round(se, 3), CV = round(sqrt(exp(se^2) - 1), 3))
+}
+```
+
+```{r}
+#| label: tbl-report-index-total
+#| tbl-cap: !expr 'paste0("Total biomass (IID) index of ", sp_lc, " in ", area_label, " (tonnes in the prediction region), a SPiCT candidate.")'
+knitr::kable(index_kt(total))
+```
+
+```{r}
+#| label: tbl-report-index-fishable
+#| tbl-cap: !expr 'paste0("Fishable biomass (IID) index of ", sp_lc, " (≥ ", cfg$OVER_CM, " cm) in ", area_label, " (tonnes in the prediction region), a SPiCT candidate.")'
+knitr::kable(index_kt(fishable))
+```
+
+```{r}
+#| label: tbl-report-index-smoothed
+#| tbl-cap: !expr 'paste0("Smoothed total biomass index of ", sp_lc, " in ", area_label, " (tonnes in the prediction region), a reference for the trend.")'
+knitr::kable(index_kt(smoothed))
+```
+
+## Analysis scripts
+
+```{r setup-appendix, code = readLines(here::here("R", "0_setup.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-setup-script
+#| lst-cap: "Shared package, configuration and model setup."
+#| code-fold: true
+#| code-summary: "Show setup script"
+```
+
+```{r report-lib-appendix, code = readLines(here::here("R", "report", "report_lib.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-report-lib
+#| lst-cap: "Model fits and sensitivity analyses of this report."
+#| code-fold: true
+#| code-summary: "Show report computations"
+```
+
+```{r report-plots-appendix, code = readLines(here::here("R", "report", "report_plots.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-report-plots
+#| lst-cap: "Figures and tables of this report."
+#| code-fold: true
+#| code-summary: "Show report figures"
+```
+
+```{r index-helpers-appendix, code = readLines(here::here("R", "index_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-index-helpers
+#| lst-cap: "Data-preparation, prediction and index helpers."
+#| code-fold: true
+#| code-summary: "Show index helpers"
+```
+
+```{r helpers-appendix, code = readLines(here::here("R", "report_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-report-helpers
+#| lst-cap: "Report helpers."
+#| code-fold: true
+#| code-summary: "Show report helpers"
+```
+
+```{r handoff-appendix, code = readLines(here::here("R", "assessment_index_handoff.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-handoff
+#| lst-cap: "Assessment-index hand-off."
+#| code-fold: true
+#| code-summary: "Show hand-off helper"
+```

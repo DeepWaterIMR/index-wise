@@ -106,4 +106,21 @@ stopifnot(all.equal(rh$paired_se(d), sqrt(5) * sd(d[1:5])),
           identical(rh$cv_groups(data.frame(X = c(10, 260), Y = c(0, 0), year = 2020), 250),
                     c("0 0 2020", "1 0 2020")))
 
+# --- Stock selection --------------------------------------------------------------------
+flat <- list(SPECIES_SLUG = "cod", OUTPUT_DIR = "data/output", OVER_CM = 30)
+stopifnot(identical(select_stock(flat)$STOCK_KEY, "cod"),
+          identical(select_stock(flat)$OUTPUT_DIR, "data/output/cod"),
+          identical(select_stock(modifyList(flat, list(STOCK_SLUG = "cod-n62")))$STOCK_KEY, "cod-n62"))
+multi <- list(OUTPUT_DIR = "data/output", OVER_CM = 30, FINAL_MODEL = list(FAMILY = "tweedie", MESH_CUTOFF_KM = 50),
+              SPECIES_SETTINGS = list(ling = list(SPECIES_NAME = "Ling", OVER_CM = 67,
+                                                  FINAL_MODEL = list(MESH_CUTOFF_KM = 30)),
+                                      tusk = list(SPECIES_NAME = "Tusk")))
+l <- select_stock(multi, "ling")
+t <- select_stock(multi, "tusk")
+stopifnot(identical(l$OVER_CM, 67), identical(t$OVER_CM, 30),
+          identical(l$FINAL_MODEL, list(FAMILY = "tweedie", MESH_CUTOFF_KM = 30)),   # nested merge
+          identical(t$OUTPUT_DIR, "data/output/tusk"), identical(l$STOCK_KEYS, c("ling", "tusk")),
+          inherits(try(select_stock(multi), silent = TRUE), "try-error"),       # key needed
+          inherits(try(select_stock(multi, "cod"), silent = TRUE), "try-error"))
+
 message("Synthetic index-helper checks passed.")

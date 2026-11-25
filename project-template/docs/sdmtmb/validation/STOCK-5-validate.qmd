@@ -1,0 +1,473 @@
+---
+title: "{{SPECIES_NAME}} — model validation & selection"
+subtitle: "Selection of mesh, random fields, fixed effects, family and grid"
+format:
+  html:
+    toc: true
+    toc-title: "{{SPECIES_NAME}} — model validation & selection"
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+    fig-format: jpeg
+    fig-dpi: 160
+    embed-resources: true
+params:
+  run_mesh: true            # stage 1 — mesh cutoff ladder, every cutoff cross-validated
+  n_workers: 10             # parallel cross-validation folds
+  only: ""                  # compute only this candidate (fan a long stage across R sessions)
+execute:
+  fig-width: 6.69
+  warning: false
+  message: false
+author: {{AUTHORS_YAML}}
+affiliations: {{AFFILIATIONS_YAML}}
+date: today
+date-format: "YYYY-MM-DD"
+published-title: "Version"
+lang: en-US
+bibliography:
+  - ../../assets/references.bib
+csl: ../../assets/ices_jms.csl
+---
+
+```{r setup}
+knitr::opts_knit$set(root.dir = here::here())
+index_species <- "{{STOCK_KEY}}"
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "report_helpers.R"))
+library(sdmTMBexperiments)
+sp <- cfg$SPECIES_NAME %||% "{{SPECIES_NAME}}"
+n_fmt <- function(x) format(x, big.mark = " ", scientific = FALSE, trim = TRUE)
+dt <- load_model_data(cfg, out_dir, dt_crs)
+# VALIDATE_CACHED_DATA=1 renders the cached selection with the model data it was fitted to (the
+# data of the first-model fit), for text revisions between a data change and the rerun.
+cached_data <- nzchar(Sys.getenv("VALIDATE_CACHED_DATA"))
+if (cached_data) dt <- readRDS(file.path(out_dir, "model-fit-total-iid.rds"))$data
+grid <- readRDS(file.path(out_dir, "prediction-grid.rds"))
+sel_dir <- file.path(out_dir, "selection")
+dir.create(sel_dir, recursive = TRUE, showWarnings = FALSE)
+only <- if (nzchar(params$only)) params$only else NULL
+
+terms <- model_terms(cfg, has_multiple_gears = dplyr::n_distinct(dt$geartype) > 1, data = dt)
+tol_txt <- function(x) paste0(100 * x, " %")
+sel_mesh_tol <- cfg$SELECTION$MESH_TOL %||% 0.05
+sel_grid_tol <- cfg$SELECTION$GRID_TOL %||% 0.01
+form_base <- stats::as.formula(paste("value ~ 0 + fyear +", paste(terms, collapse = " + ")))
+
+# Spatial range of the base model from the first-model document; it sets the CV block size.
+base_range <- matern_range(readRDS(file.path(out_dir, "model-fit-total-iid.rds")))
+# Fold assignments are made once and saved, so every stage scores the same held-out hauls.
+folds <- load_cv_folds(dt, cfg, out_dir, sel_dir)
+block_km <- attr(folds, "block_km")
+n_folds <- attr(folds, "k")
+
+# Everything the stages hold constant. Only what a stage varies differs between its rows.
+sel_args <- list(
+  data = dt, formula = form_base, family = model_family, time = "year",
+  spatial = model_spatial, spatiotemporal = "iid", cutoff = cfg$MESH_CUTOFF_KM,
+  cache_dir = sel_dir, complete_cases = FALSE, only = only, n_workers = params$n_workers,
+  cv = n_folds, fold_ids = folds
+)
+sel_args$offset <- model_offset
+run_stage <- function(candidates, prefix, ...) {
+  do.call(sdmTMB_selection, utils::modifyList(sel_args, c(list(candidates = candidates, cache_prefix = prefix), list(...))))
+}
+stage_mesh_km <- if (file.exists(file.path(sel_dir, "decisions.rds"))) readRDS(file.path(sel_dir, "decisions.rds"))$mesh_km else cfg$MESH_CUTOFF_KM
+range_text <- function(r) paste0(round(r$range_km), " km (95 % CI ", round(r$lwr), "–", round(r$upr), ")")
+# Height of the fold map (4 x 2 panels with equal axes at 6.69 in width) from the extent of the
+# block squares, so the figure has no empty space above and below.
+fold_yrs <- utils::tail(sort(unique(dt$year)), 8)
+fold_ext <- function(v) c(floor(min(v) / block_km), floor(max(v) / block_km) + 1) * block_km
+fold_xr <- fold_ext(dt$X[dt$year %in% fold_yrs])
+fold_yr <- fold_ext(dt$Y[dt$year %in% fold_yrs])
+fold_fig_height <- 2 * (6.69 - 0.8) / 4 * diff(fold_yr) / diff(fold_xr) + 1.7
+```
+
+# Purpose
+
+This document describes the sdmTMB model selection for the `r tolower(sp)` survey indices in `r area_label`. The selection starts from the base model of the first-model document ([*`r sp` — first sdmTMB models*](../fit/`r index_species`-4-fit.html)): the total biomass with a spatial field, independent (IID) spatiotemporal fields and a year factor (`r deparse1(form_base)`, `r cfg$FAMILY` family, `r cfg$MESH_CUTOFF_KM` km mesh). It changes one setting at a time: the mesh, the random-field structure, the correlation geometry, the fixed effects and the family, and finally checks the prediction grid. The selected fixed effects, geometry and family are applied to the fishable index and to the smoothed index afterwards.
+
+The selection is tuned for SPiCT, the assessment model that will use the total and fishable biomass indices. SPiCT treats each annual index value as an independent observation of the biomass, with an observation error that it estimates, and models the dynamics between years itself. The SPiCT indices therefore have IID spatiotemporal fields and a year factor, so that each year is estimated from its own hauls, and the selection keeps this structure in every stage, even where a smoothed structure (AR1 or random-walk fields without a year factor) predicts the held-out hauls better. A smoothed index borrows information from the neighbouring years: the smoothing would be counted twice, once in the index and once in the SPiCT dynamics, and SPiCT would underestimate the observation error and overstate the information in the trend. The smoothed structures are compared among themselves in stage 2 to select the structure of the smoothed total biomass index, which the final report shows as a reference for the trend but which is not given to SPiCT.
+
+The indices come from delta (hurdle) models, which split the catch of each haul into two parts that are modelled separately and multiplied in prediction. The first component, the **encounter model**, is a binomial model of whether a haul caught the species, fitted to all hauls. The second component, the **positive model**, models the biomass density in the hauls that caught the species, fitted to those hauls only, with a lognormal or gamma distribution. The predicted density of a location is the encounter probability times the expected positive density. Each component has its own fixed effects and random fields, so a field can be included in one component and not the other. In the Poisson-link versions of the delta families [@thorson2018], the first component models the number density of groups of fish $n$, from which the encounter probability $1 - \exp(-n)$ follows, and the second the biomass per group $w$; both have log links, and the predicted density is $n w$.
+
+`r if (cached_data) "**This version shows the selection as it was run before the data were last recompiled, with the model data of that run; it is rerun on the current data before the indices are final.** " else ""`The models use `r n_fmt(nrow(dt))` stations from `r min(dt$year)` to `r max(dt$year)`, `r n_fmt(sum(dt$value > 0))` with `r tolower(sp)`, the same records as the first-model document.
+
+# Methods
+
+## Selection procedure
+
+The selection runs in stages. Each stage starts from an **incoming model**, the model selected at the previous stage, varies one aspect of it and ends with a **selected model**, which becomes the incoming model of the next stage. The incoming model of the first stage is the base model; the mesh stage (stage 1) varies only the mesh cutoff, and the random-field stage (stage 2) starts from the base model with the selected mesh. Every candidate of a stage differs from the incoming model only in the aspect that the stage varies (@tbl-validate-rules).
+
+Every candidate is fitted to all hauls, which gives its convergence, the `sdmTMB::sanity()` checks, its AIC and its index. A shortlist is then cross-validated: the incoming model and the three candidates with the lowest AIC among those that converged with a positive-definite Hessian. AIC is used only to choose which candidates are worth the cost of cross-validation; the decisions use the cross-validated predictive density, because AIC is unreliable for these models (see [Expected log predictive density](#sec-elpd)). Every stage uses the same decision rule, the **one-standard-error rule** [@breiman1984; @hastie2009]: the candidates whose ELPD is within one paired standard error (SE, @sec-elpd) of the best cross-validated candidate are treated as equally good, and the simplest of them is selected. The rule builds parsimony into the selection: a more complex model replaces a simpler one only if it predicts better by more than the uncertainty of the comparison, so a choice does not depend on which hauls happened to fall in which fold. One SE is the conventional threshold of cross-validation model selection [@hastie2009], and one threshold for all stages keeps the decisions comparable; a two-SE threshold would be more conservative but has no stronger basis. For the families, the Tweedie family is the simplest, because it models the catch with one component instead of the two of a delta model; the delta families all have the same number of parameters (the Poisson link adds none), so among them the incoming family is kept if it is within one SE of the best (@tbl-validate-rules).
+
+The mesh and the prediction grid are computational settings rather than hypotheses about the stock, and a coarser setting is faster. Both are chosen by the same rule, which weighs prediction, the index and cost together. A **reference setting** is chosen first: for the mesh, the cutoff with the best ELPD among those that pass all `sdmTMB::sanity()` checks; for the grid, the finest grid, because the grid does not change the fit and the finest grid is the most accurate sum over the domain. A faster setting is then accepted if its model passes the sanity checks and its index is **equivalent** to the reference index: the terminal-year difference, the mean difference over the last five years (Δρ, after Mohn's rho) and the mean absolute relative difference (MARD) over the series are all within a tolerance $\tau$. The coarsest accepted setting, which is also the fastest, is selected. With many thousands of hauls, a cross-validated difference can be clear by the SE yet too small to change the index, so for these settings the practical test is the index itself, measured against the reference; a faster setting that moves the index by more than the tolerance is rejected however much time it saves. The differences include the level of the index as well as its trend, which makes the rule stricter than a comparison of trends; only the trend of an index is used in the assessment.
+
+For the mesh, $\tau$ = `r tol_txt(sel_mesh_tol)`, and every cutoff between the accepted one and the reference must be within it too. The reference mesh is itself an estimate, the best of a ladder by a noisy criterion, so the tolerance allows for that uncertainty: 5 % is about a quarter of the retrospective Mohn's rho usually accepted for the biomass estimates of an age-structured assessment (−0.15 to 0.20; @hurtadoferro2015) and well below the standard error of the log annual index. For the grid, $\tau = 1$ %. The grid does not change the fitted model, so the finest grid gives the correct index up to the resolution of the depth data, and a finer grid costs only computing time and memory; the tolerance can then be strict. Grid differences do not grow steadily with the cell size, because they depend on where the cell centres fall relative to steep slopes, so each grid is judged on its own.
+
+| Stage | Varies | Selected model |
+|---|---|---|
+| 1 Mesh | Mesh cutoff (`r paste(range(unlist(cfg$MESH_LADDER_KM)), collapse = '–')` km) | Coarsest cutoff that passes the sanity checks and whose index is within `r tol_txt(sel_mesh_tol)` of the index of the best cutoff by ELPD [@Vihtakari2026] |
+| 2 Random fields | Spatial and spatiotemporal fields of each component; IID, AR1 or random-walk fields | SPiCT indices: among the IID + year candidates within one SE of the best of them, the one with the fewest random fields; the later stages start from it. Smoothed index: among the AR1 and random-walk candidates without a year factor within one SE of the best of them, the one with the fewest parameters |
+| 3 Geometry | Isotropic, anisotropic, or isotropic with a barrier mesh | Isotropic, the simplest, if within one SE of the best; otherwise the best |
+| 4 Fixed effects | Each term dropped in turn; alternative forms of month and depth; a cruise-series factor added; gear type replaced by the trawl model | Simplest candidate within one SE of the best |
+| 5 Family | Delta-lognormal, delta-gamma, their Poisson-link versions, Tweedie | Tweedie, the simplest, if within one SE of the best; otherwise the incoming family if within one SE; otherwise the best |
+| 6 Grid | Prediction-grid cell size (5–200 km) | Not a model choice: coarsest grid whose index is within `r tol_txt(sel_grid_tol)` of the index on the finest grid |
+
+: Selection stages and decision rules. ELPD: cross-validated expected log predictive density; SE: standard error of the paired ELPD difference. {#tbl-validate-rules}
+
+The stages were run as separate server processes, one per candidate, so that a crash lost one candidate and a rerun resumed from the cached fits (@lst-stage-lib). Stages 2–5 used the `r stage_mesh_km` km mesh.
+
+## Cross-validation
+
+Cross-validation refits a model with part of the hauls held out (a fold) and scores how well the refitted model predicts the held-out hauls. Which hauls are held out together decides what the score measures. Survey hauls are clustered in space and time, and a haul held out at random usually has neighbours from the same year in the training data, so random folds measure interpolation over short distances and favour models that overfit local structure [@roberts2017]. The index, by contrast, has to predict the density in grid cells that were not sampled in a given year.
+
+The folds are therefore **space–time blocks**: the region is divided into squares, every square–year combination is a group, and the groups are assigned to `r n_folds` folds, largest first to the fold with the fewest hauls so far, which keeps the folds even although the hauls are clustered (@tbl-validate-cv-folds). A fold holds out an area in some years while the same area stays in the training data in other years, which mimics predicting an unsampled cell–year from the spatial field and from the neighbouring years (@fig-validate-cv-fold-map). Held-out hauls are given zero weight in the likelihood instead of being removed [@anderson2025], so every year stays in every fold fit.
+
+The block size follows the spatial correlation of the latent random fields [@roberts2017; @valavi2019]: blocks narrower than the correlation range leave held-out hauls correlated with training hauls a short distance away, and the score becomes optimistic. The base model of the first-model document has a Matérn range, the distance at which the spatial correlation falls to about 0.13 ($\sqrt{8\nu}/\kappa$ with smoothness $\nu = 1$) [@lindgren2011], of `r range_text(base_range[1, ])` in the encounter component and `r range_text(base_range[2, ])` in the positive component; the spatiotemporal fields share these ranges. The blocks are `r block_km` km squares, the larger range rounded up to 50 km. `blockCV::cv_spatial_autocor()` estimates the same quantity from an empirical variogram of the response or of residuals [@valavi2019]; the model-based range is used here because it is the correlation structure that the index model fits.
+
+```{r}
+#| label: tbl-validate-cv-folds
+#| tbl-cap: !expr 'paste0("Total hauls and hauls with ", tolower(sp), " per fold of the space–time block cross-validation (", block_km, " km squares). Groups: square–year combinations in the fold.")'
+fold_tab <- tibble::tibble(fold = folds, pos = dt$value > 0,
+                           group = paste(floor(dt$X / block_km), floor(dt$Y / block_km), dt$year)) |>
+  dplyr::group_by(Fold = .data$fold) |>
+  dplyr::summarise(`Total hauls` = dplyr::n(), `Hauls with species` = sum(.data$pos),
+                   Groups = dplyr::n_distinct(.data$group), .groups = "drop")
+knitr::kable(fold_tab)
+```
+
+```{r}
+#| label: fig-validate-cv-fold-map
+#| fig-height: !expr fold_fig_height
+#| fig-cap: !expr 'paste0("Fold assignment of the hauls in the last eight years. Each ", block_km, " km block square with hauls is shaded by the fold it belongs to in that year, and the hauls are drawn on top in the same colour. The same square can belong to a different fold in another year.")'
+yrs <- fold_yrs
+fold_pts <- tibble::tibble(X = dt$X, Y = dt$Y, year = dt$year, fold = factor(folds)) |>
+  dplyr::filter(.data$year %in% yrs)
+fold_sq <- fold_pts |>
+  dplyr::mutate(x0 = floor(.data$X / block_km) * block_km, y0 = floor(.data$Y / block_km) * block_km) |>
+  dplyr::distinct(.data$year, .data$x0, .data$y0, .data$fold)
+ggplot2::ggplot() +
+  ggplot2::geom_rect(data = fold_sq, ggplot2::aes(xmin = .data$x0, xmax = .data$x0 + block_km,
+                                                  ymin = .data$y0, ymax = .data$y0 + block_km,
+                                                  fill = .data$fold),
+                     alpha = 0.35, colour = "grey30", linewidth = 0.25) +
+  ggplot2::geom_point(data = fold_pts, ggplot2::aes(.data$X, .data$Y, colour = .data$fold), size = 0.5) +
+  ggplot2::facet_wrap(~year, ncol = 4) +
+  ggplot2::coord_equal() +
+  ggplot2::scale_fill_brewer(palette = "Paired", aesthetics = c("colour", "fill")) +
+  ggplot2::labs(x = "Easting (km)", y = "Northing (km)", fill = "Fold", colour = "Fold") +
+  ggplot2::theme_bw(base_size = 8) +
+  ggplot2::theme(legend.position = "bottom", panel.grid = ggplot2::element_blank(),
+                 axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
+  ggplot2::guides(fill = ggplot2::guide_legend(nrow = 1), colour = ggplot2::guide_legend(nrow = 1))
+```
+
+A cross-validation score is usable only if the fold fits are reliable, so every fold fit of a cross-validated candidate has to converge with a positive-definite Hessian; this is checked for the mesh candidates, which include the base model, in stage 1 (@tbl-validate-mesh). In the later stages the fold fits of each candidate are not checked one by one.
+
+## Expected log predictive density {#sec-elpd}
+
+For each haul $i$, the log predictive density $\log p(y_i \mid y_{-k(i)})$ is the log density of the observed response under the model fitted without the fold $k(i)$ that contains haul $i$, evaluated at the estimated parameters and random effects (`cv_loglik` in sdmTMB; @anderson2025). The expected log pointwise predictive density (ELPD) is estimated by their sum over all $n$ hauls [@vehtari2017]:
+
+$$
+\widehat{\mathrm{elpd}} = \sum_{i=1}^{n} \log p(y_i \mid y_{-k(i)}).
+$$
+
+The ELPD is the negative of an out-of-sample negative log-likelihood: the same kind of quantity that the fit minimises, but evaluated on hauls that did not inform the estimates. Higher values mean better prediction. The in-sample negative log-likelihood always decreases when a model gains flexibility, and AIC corrects for this only through the number of fixed parameters. Most of the flexibility of these models lies in the random fields, which add thousands of random effects but only one or two hyperparameters, so AIC under-penalises richer field structures; AIC is also not comparable between candidates that change the latent approximation, such as different meshes. Out-of-sample prediction needs no parameter count, because overfitting shows up as poor prediction of the held-out blocks. For delta models the predictive density combines the encounter and the positive component, and candidates with different families are comparable because they predict the same observed response.
+
+All candidates are scored on the same hauls, so two candidates $A$ and $B$ are compared by the paired difference and its standard error [@vehtari2017]:
+
+$$
+\Delta\widehat{\mathrm{elpd}} = \sum_{i=1}^{n} d_i = \sum_{g=1}^{G} D_g, \qquad d_i = \log p_A(y_i \mid y_{-k(i)}) - \log p_B(y_i \mid y_{-k(i)}), \qquad \mathrm{SE} = \sqrt{G}\,\mathrm{sd}(D_g),
+$$
+
+where $D_g$ is the sum of $d_i$ over the $G$ square–year groups of the folds.
+
+The SE is computed from the group sums, not from the single hauls ($\sqrt{n}\,\mathrm{sd}(d_i)$; @vehtari2017), because the hauls of one square–year group are held out together and predicted from the same neighbours, so their differences are correlated; the haul-level SE would be too small and the one-SE rule would too often prefer the more complex candidate. The SE is the standard error of the difference itself, not a difference between two standard errors. It is much smaller than the standard error of either ELPD, because the two candidates mostly fail on the same hauls, and the haul-by-haul pairing removes that shared part [@vehtari2017]. A candidate is therefore within the one-SE band of the best when its difference from the best is no larger than the SE of that difference [@yates2023]. The stage tables give, for each cross-validated candidate, its difference from the best candidate and the SE of that difference, so the rule can be read from one row: the candidate is within one SE of the best when −ΔELPD ≤ SE(Δ).
+
+# Results
+
+## Stage 1 — Mesh resolution
+
+A finer mesh approximates the random fields more closely but costs more time, and in a cross-validation it can also predict worse, because it lets the fields follow local noise. The cutoff is chosen by prediction, the index and cost together, as described in [Selection procedure](#selection-procedure): the cutoff with the best ELPD is the reference, and the coarsest (fastest) cutoff that passes the sanity checks and whose index stays within 5 % of the reference index is selected [@Vihtakari2026]. Only the cutoff differs between the candidates (@tbl-validate-mesh, @fig-validate-mesh-selection).
+
+```{r mesh-stage, eval=params$run_mesh}
+mesh_cutoffs <- as.numeric(unlist(cfg$MESH_LADDER_KM %||% c(15, 20, 30, 40, 50)))
+sel_mesh <- run_stage(
+  stats::setNames(lapply(mesh_cutoffs, function(k) list(cutoff = k)), paste0(mesh_cutoffs, " km")),
+  "mesh-spacetime"
+)
+mesh_tol <- cfg$SELECTION$MESH_TOL %||% 0.05
+mesh_window <- cfg$SELECTION$WINDOW %||% 5
+
+# One index per cutoff on the same grid, without bias correction, cached because it is slow.
+mesh_index_file <- file.path(sel_dir, "mesh-spacetime-index.rds")
+mesh_index <- if (file.exists(mesh_index_file) && is.null(only)) readRDS(mesh_index_file)
+# Recompute when no cache exists or its cutoffs differ from the current ladder.
+if (is.null(mesh_index) || !setequal(unique(mesh_index$model), names(sel_mesh$fits))) {
+  mesh_index <- dplyr::bind_rows(lapply(names(sel_mesh$fits), function(nm) {
+    f <- sel_mesh$fits[[nm]]
+    if (is.null(f)) return(NULL)
+    dplyr::mutate(predict_index(f, grid, area = grid_cell_area_nmi2, bias_correct = FALSE), model = nm)
+  }))
+  if (is.null(only)) saveRDS(mesh_index, mesh_index_file)
+}
+mesh_last_year <- max(mesh_index$year)
+mesh_cv <- cv_paired(sel_mesh, group = cv_groups(dt, block_km))
+mesh_folds <- cv_folds_table(sel_mesh)
+mesh_sane <- sel_mesh$table$model[sel_mesh$table$sanity %in% TRUE & sel_mesh$table$comparable %in% TRUE]
+# Reference: the best cutoff by ELPD among those that pass the sanity checks.
+mesh_best <- with(dplyr::filter(mesh_cv, model %in% mesh_sane), model[which.max(elpd)])
+mesh_best_km <- as.numeric(sub(" km", "", mesh_best))
+
+mesh_stability <- mesh_index |>
+  dplyr::inner_join(mesh_index |> dplyr::filter(model == mesh_best) |> dplyr::select(year, ref = est), by = "year") |>
+  dplyr::mutate(rel_diff = est / ref - 1) |>
+  dplyr::group_by(model) |>
+  dplyr::summarise(terminal = rel_diff[year == mesh_last_year],
+                   mesh_rho = mean(rel_diff[year > mesh_last_year - mesh_window]),
+                   mard = mean(abs(rel_diff)), .groups = "drop") |>
+  dplyr::left_join(sel_mesh$table |> dplyr::transmute(model, vertices = knots, fit_minutes = minutes,
+                                                     comparable, sanity), by = "model") |>
+  dplyr::left_join(dplyr::select(mesh_cv, model, delta_elpd, se_delta), by = "model") |>
+  dplyr::left_join(mesh_folds |> dplyr::group_by(model) |>
+                     dplyr::summarise(folds_pd = sum(pdHess, na.rm = TRUE), .groups = "drop"), by = "model") |>
+  dplyr::mutate(cutoff_km = as.numeric(sub(" km", "", model)),
+                stable = abs(terminal) <= mesh_tol & abs(mesh_rho) <= mesh_tol & mard <= mesh_tol) |>
+  dplyr::arrange(cutoff_km)
+# Equivalent: this cutoff and every cutoff between it and the reference within the tolerance.
+mesh_stability$equivalent <- vapply(seq_len(nrow(mesh_stability)), function(i) {
+  k <- mesh_stability$cutoff_km[i]
+  between <- mesh_stability$cutoff_km >= min(k, mesh_best_km) & mesh_stability$cutoff_km <= max(k, mesh_best_km)
+  all(mesh_stability$stable[between])
+}, logical(1))
+mesh_stability$eligible <- mesh_stability$equivalent & mesh_stability$sanity %in% TRUE &
+  mesh_stability$comparable %in% TRUE
+mesh_stability <- dplyr::arrange(mesh_stability, dplyr::desc(cutoff_km))
+eligible <- dplyr::filter(mesh_stability, eligible)
+# The coarsest eligible cutoff, as in assemble_mesh() (fit times on a shared server are noisy).
+selected_mesh <- if (nrow(eligible)) eligible$model[which.max(eligible$cutoff_km)] else mesh_best
+selected_mesh_km <- as.numeric(sub(" km", "", selected_mesh))
+```
+
+```{r, eval=params$run_mesh}
+#| label: tbl-validate-mesh
+#| tbl-cap: !expr 'if (!params$run_mesh) "" else paste0("Mesh cutoffs, relative to the ", mesh_best, " mesh, the best by ELPD among the cutoffs that pass the sanity checks (the reference). Terminal: relative index difference in ", mesh_last_year, "; Δρ: its mean over the last ", mesh_window, " years; MARD: mean absolute relative difference over all years. ΔELPD: cross-validated difference from the reference, with its paired SE. Folds PD: fold fits with a positive-definite Hessian (of ", n_folds, "). Equivalent: within ", 100 * mesh_tol, " % on all three index measures, as is every cutoff between it and the reference. Sanity: all sdmTMB::sanity() checks passed. The selected cutoff is the coarsest that is Equivalent and passes Sanity.")'
+knitr::kable(mesh_stability |>
+  dplyr::transmute(Cutoff = model, Vertices = vertices, `Fit (min)` = round(fit_minutes, 1),
+                   `Terminal (%)` = round(100 * terminal, 1), `Δρ (%)` = round(100 * mesh_rho, 1),
+                   `MARD (%)` = round(100 * mard, 1), `ΔELPD` = round(delta_elpd, 1),
+                   `SE(Δ)` = round(se_delta, 1),
+                   `Folds PD` = folds_pd, Equivalent = equivalent, Sanity = sanity))
+```
+
+```{r, eval=params$run_mesh}
+#| label: fig-validate-mesh-selection
+#| fig-height: 7
+#| fig-cap: "Mesh-resolution selection: (a) cross-validated ΔELPD from the best cutoff with ± one paired standard error; (b) relative difference of the index from the reference cutoff (best ELPD) over the last years (Δρ) and in the terminal year, with the tolerance band; (c) fit time labelled with the number of mesh vertices; (d) the index under each cutoff with 95 % confidence intervals. The selected cutoff is drawn with filled symbols and a thick line."
+plot_mesh_selection(mesh_stability, mesh_index, selected_mesh, mesh_tol, mesh_window)
+```
+
+`r if (params$run_mesh) paste0("The best cutoff by ELPD among those that pass the sanity checks is ", mesh_best, ", the reference. The selected cutoff is ", selected_mesh, if (selected_mesh != mesh_best) paste0(", the coarsest cutoff whose index is within ", 100 * mesh_tol, " % of the reference index; it takes ", round(eligible$fit_minutes[eligible$model == selected_mesh], 1), " min per fit against ", round(mesh_stability$fit_minutes[mesh_stability$model == mesh_best], 1), " min for the reference, although its ELPD is ", round(-mesh_stability$delta_elpd[mesh_stability$model == selected_mesh], 1), " lower (", round(-mesh_stability$delta_elpd[mesh_stability$model == selected_mesh] / mesh_stability$se_delta[mesh_stability$model == selected_mesh], 1), " SE)") else ": no faster cutoff passes the sanity checks with an index within the tolerance", ". ", if (mesh_best == paste0(min(mesh_cutoffs), " km")) "The best cutoff by ELPD is the finest tested, so a finer cutoff may predict better still; the ladder is extended before the rerun. " else "", if (all(mesh_stability$folds_pd == n_folds, na.rm = TRUE)) paste0("All ", n_folds, " fold fits of every cutoff converged with a positive-definite Hessian, so the space–time block folds are usable. ") else paste0("Not all fold fits converged with a positive-definite Hessian (", paste0(mesh_stability$model, ": ", mesh_stability$folds_pd, collapse = ", "), " of ", n_folds, "). "), if (selected_mesh_km != stage_mesh_km) paste0("**Stages 2–6 were run with the ", stage_mesh_km, " km mesh, chosen by an earlier index-stability rule, and are rerun with the ", selected_mesh, " mesh before the indices are final.**") else paste0("Stages 2–6 use this mesh.")) else ""`
+
+```{r stage-results}
+stage_file <- function(st) file.path(sel_dir, paste0("stage-", st, ".rds"))
+stages <- purrr::set_names(c("fields", "geometry", "fixed", "family"))
+stage_res <- purrr::map(stages, ~ if (file.exists(stage_file(.x))) readRDS(stage_file(.x)) else NULL)
+stage_done <- purrr::map_lgl(stage_res, Negate(is.null))
+grid_res <- if (file.exists(stage_file("grid"))) readRDS(stage_file("grid")) else NULL
+incoming_text <- function(res) {
+  if (is.null(res)) return("")
+  paste0("The incoming model of this stage is ", stage_incoming(res), ": ",
+         describe_spec(res$specs[[stage_incoming(res)]]), ".")
+}
+```
+
+In the stage tables below, ΔAIC is the difference from the lowest AIC of the stage. ΔELPD is the cross-validated difference from the best cross-validated candidate (0 for the best, negative for the others) and SE(Δ) the paired standard error of that difference, for the shortlisted candidates only. A candidate is within one SE of the best when −ΔELPD ≤ SE(Δ), which the column ≤ 1 SE of best marks; these are the candidates from which the rule selects. In stage 2, the SPiCT and the smoothed candidates are separate selections, each with its own best (column Set). MARD is the mean absolute relative difference of a candidate's index from the incoming model's index, each divided by its series mean, so it measures the difference in trend, not in level. The index figures show each candidate's index divided by its own series mean, so differences in trend are visible regardless of level, with the selected model as a thick line and its 95 % confidence band.
+
+## Stage 2 — Random-field structure
+
+`r incoming_text(stage_res$fields)` The candidates vary the spatial field and the spatiotemporal fields of the two model components, and the temporal structure: IID fields with a year factor (the SPiCT structure), AR1 fields with a year factor, and the smoothed structures without a year factor: AR1 fields with and without a spatial field, and random-walk fields without one. Two structures are selected. The SPiCT structure is selected among the IID + year candidates, and the later stages start from it. The smoothed-index structure is selected among the smoothed candidates by the same rule, with the fewest parameters as the simplest: a random walk is an AR1 field with the correlation fixed at one, so it is simpler than an AR1 field, and a model without the spatial field is simpler than one with it. AR1 fields with a year factor are reported only. The shortlist holds the incoming model, the three IID + year candidates with the lowest AIC and every smoothed candidate that converged (@tbl-validate-fields, @fig-validate-fields).
+
+```{r}
+#| label: tbl-validate-fields
+#| tbl-cap: "Random-field candidates. ΔAIC: difference from the lowest AIC. Set: the selection the candidate belongs to (SPiCT: IID + year; Smoothed: no year factor; Other: reported only). ΔELPD: cross-validated difference from the best candidate of the same set, shortlisted candidates only; SE(Δ): its paired standard error. ≤ 1 SE of best: −ΔELPD ≤ SE(Δ). MARD: mean absolute relative difference of the mean-scaled index from the incoming model's."
+if (stage_done[["fields"]]) knitr::kable(stage_table(stage_res$fields)) else cat("Not run yet.")
+```
+
+```{r}
+#| label: fig-validate-fields
+#| fig-height: 4.5
+#| fig-cap: "Indices of the random-field candidates, each divided by its series mean. Thick line and grey band: the selected model with its 95 % confidence interval."
+if (stage_done[["fields"]]) plot_stage_index(stage_res$fields)
+```
+
+`r stage_summary(stage_res$fields)`
+
+## Stage 3 — Spatial correlation geometry
+
+`r incoming_text(stage_res$geometry)` Its isotropic spatial correlation is compared with an anisotropic correlation (the range differs by direction) and with an isotropic correlation on a barrier mesh, which stops the correlation from crossing land [@bakka2019]. All three candidates are cross-validated.`r if (!is.null(stage_res$geometry) && any(is.na(stage_res$geometry$table$AIC))) paste0(" ", paste(stage_res$geometry$table$model[is.na(stage_res$geometry$table$AIC)], collapse = " and "), " left no fit in this run: the server process failed before saving the model, which is a computing failure, not a failure to converge (in an earlier run on the previous data version, the barrier-mesh model converged and passed the sanity checks for both species). It is rerun with the next selection run.") else ""` The isotropic model, the simplest geometry, is kept if it is within one SE of the best; otherwise the stage is a sensitivity analysis of the index (@tbl-validate-geometry, @fig-validate-geometry).
+
+```{r}
+#| label: tbl-validate-geometry
+#| tbl-cap: "Correlation-geometry candidates. Columns as in the random-field table."
+if (stage_done[["geometry"]]) knitr::kable(stage_table(stage_res$geometry)) else cat("Not run yet.")
+```
+
+```{r}
+#| label: fig-validate-geometry
+#| fig-height: 4
+#| fig-cap: "Indices of the correlation-geometry candidates, each divided by its series mean. Thick line and grey band: the selected model."
+if (stage_done[["geometry"]]) plot_stage_index(stage_res$geometry)
+```
+
+`r stage_summary(stage_res$geometry)`
+
+## Stage 4 — Fixed effects
+
+`r incoming_text(stage_res$fixed)` Each fixed effect is dropped in turn; the year factor stays because the SPiCT index needs it. A cruise-series factor (`fsurvey`) is also added, a difference in catchability between the survey series: the mix of series changes over the years, and an unmodelled catchability difference would then bend the trend. It is predicted for the coastal survey (`REFERENCE_SURVEY`). Gear type is also replaced by a factor of the trawl model (`fgear`: the Campelen shrimp trawl with rockhopper or bobbins ground gear, the Alfredo and Konsumtrål 60 cod trawls, and other trawls), because catchability can differ between trawl models of the same type; most trawl models are nested in one survey series. `r if (month_term(cfg) == "factor") "Month is also tried as a smooth instead of a factor. " else ""`The depth smooth is also replaced by a quadratic in depth in both components, because a depth smooth can collapse to a straight line; sdmTMB needs the same smooth terms in both components of a delta model, so the simpler form cannot be tried in one component alone. The selected model is the simplest within one paired SE of the best cross-validated one (@tbl-validate-fixed, @fig-validate-fixed).
+
+```{r}
+#| label: tbl-validate-fixed
+#| tbl-cap: "Fixed-effect candidates. Columns as in the random-field table."
+if (stage_done[["fixed"]]) knitr::kable(stage_table(stage_res$fixed)) else cat("Not run yet.")
+```
+
+```{r}
+#| label: fig-validate-fixed
+#| fig-height: 4
+#| fig-cap: "Indices of the fixed-effect candidates, each divided by its series mean. Thick line and grey band: the selected model."
+if (stage_done[["fixed"]]) plot_stage_index(stage_res$fixed)
+```
+
+`r stage_summary(stage_res$fixed)`
+
+## Stage 5 — Family
+
+`r incoming_text(stage_res$family)` Its family is compared with the other delta families, the Poisson-link versions of the delta-lognormal and delta-gamma families [@thorson2018] and the Tweedie family. All candidates model the same response, so their likelihoods are comparable without a Jacobian correction. All candidates are cross-validated. The Tweedie family, the simplest, is selected if it is within one SE of the best; otherwise the incoming family if it is within one SE of the best; otherwise the best family (@tbl-validate-family, @fig-validate-family). AIC and cross-validation can rank the families differently: AIC measures the fit to all hauls, while the ELPD can be dominated by how each family's tails handle unusually small or large catches in the held-out blocks.
+
+```{r}
+#| label: tbl-validate-family
+#| tbl-cap: "Family candidates. Columns as in the random-field table."
+if (stage_done[["family"]]) knitr::kable(stage_table(stage_res$family)) else cat("Not run yet.")
+```
+
+```{r}
+#| label: fig-validate-family
+#| fig-height: 4
+#| fig-cap: "Indices of the family candidates, each divided by its series mean. Thick line and grey band: the selected model."
+if (stage_done[["family"]]) plot_stage_index(stage_res$family)
+```
+
+`r stage_summary(stage_res$family)`
+
+## Stage 6 — Prediction grid
+
+The grid cell size is not a model choice but a trade-off between precision and computing cost. The index of the selected model is predicted on grids of 5 to 200 km cells and compared with the 5 km grid. Coarse cells take the depth and the random-field value at the cell centre, so they average the depth effect less accurately along steep slopes and miss field features smaller than a cell; differences in the summed index are small because these errors partly cancel over many cells. The grid is chosen by the rule in [Selection procedure](#selection-procedure), with the 5 km grid as the reference: the coarsest grid whose terminal-year difference, five-year mean difference and MARD are all within 1 % (@tbl-validate-grid, @fig-validate-grid).
+
+```{r grid-stage}
+grid_tol <- cfg$SELECTION$GRID_TOL %||% 0.01
+grid_window <- cfg$SELECTION$WINDOW %||% 5
+grid_tab <- if (!is.null(grid_res)) {
+  gi <- grid_res$index
+  for (v in c("index_minutes", "grid_mb")) if (!v %in% names(gi)) gi[[v]] <- NA_real_
+  ref5 <- dplyr::filter(gi, grid_km == min(grid_km)) |> dplyr::select(year, ref = est)
+  last_yr <- max(gi$year)
+  gi |>
+    dplyr::left_join(ref5, by = "year") |>
+    dplyr::mutate(rel = est / ref - 1) |>
+    dplyr::group_by(grid_km) |>
+    dplyr::summarise(cells = dplyr::first(cells), terminal = rel[year == last_yr],
+                     rho = mean(rel[year > last_yr - grid_window]), mard = mean(abs(rel)),
+                     max_diff = max(abs(rel)),
+                     minutes = dplyr::first(index_minutes), mb = dplyr::first(grid_mb),
+                     .groups = "drop") |>
+    dplyr::arrange(grid_km) |>
+    dplyr::mutate(stable = abs(terminal) <= grid_tol & abs(rho) <= grid_tol & mard <= grid_tol)
+}
+grid_pick <- if (!is.null(grid_tab)) {
+  ok <- dplyr::filter(grid_tab, stable)
+  # Coarsest stable grid: cost grows with the number of cells, and timings on a shared server
+  # are noisy (the same rule as the mesh stage).
+  max(ok$grid_km)
+}
+```
+
+```{r}
+#| label: tbl-validate-grid
+#| tbl-cap: "Prediction grids, relative to the 5 km grid. Cells: grid cells per year. Terminal: relative index difference in the last year; Δρ: its mean over the last five years; MARD: mean absolute relative difference over all years; Max: largest annual difference. Stable: within 1 % on the first three measures. Index (min): time to compute the index without bias correction. Grid (MB): size of the prediction grid for all years in memory."
+if (!is.null(grid_tab)) {
+  knitr::kable(dplyr::transmute(grid_tab, `Grid (km)` = grid_km, Cells = cells,
+                                `Terminal (%)` = round(100 * terminal, 1), `Δρ (%)` = round(100 * rho, 1),
+                                `MARD (%)` = round(100 * mard, 1), `Max (%)` = round(100 * max_diff, 1),
+                                Stable = stable, `Index (min)` = round(minutes, 2), `Grid (MB)` = round(mb, 1)))
+} else cat("Not run yet.")
+```
+
+```{r}
+#| label: fig-validate-grid
+#| fig-height: 3.5
+#| fig-cap: "Index of the selected model predicted on prediction grids of different cell sizes."
+if (!is.null(grid_res)) {
+  ggplot2::ggplot(grid_res$index, ggplot2::aes(year, est / 1000, colour = factor(grid_km))) +
+    ggplot2::geom_line() +
+    ggplot2::scale_colour_viridis_d(end = 0.9) +
+    ggplot2::labs(x = "Year", y = "Index (t)", colour = "Grid (km)") +
+    ggplot2::theme_bw(base_size = 9)
+} else cat("Not run yet.")
+```
+
+`r if (!is.null(grid_tab)) { g <- grid_tab[grid_tab$grid_km > min(grid_tab$grid_km), ]; paste0("Relative to the 5 km grid, the MARD of the index is ", paste0(round(100 * g$mard, 1), " % for ", g$grid_km, " km", collapse = ", "), " (@tbl-validate-grid). ", paste0("By the rule above, the ", grid_pick, " km grid is selected. "), if (grid_pick != cfg$GRID_KM && isTRUE(grid_tab$stable[grid_tab$grid_km == cfg$GRID_KM])) paste0("The indices use the ", cfg$GRID_KM, " km grid, which also passes the rule: a finer grid costs only computing time and memory; one grid for all stocks of the project keeps their documents comparable.") else if (grid_pick != cfg$GRID_KM) paste0("The indices so far use the ", cfg$GRID_KM, " km grid.") else "The indices use it.") } else ""`
+
+## Selected specification
+
+`r if (all(stage_done)) paste0("The specification selected for the ", tolower(sp), " total biomass index is: ", describe_spec(stage_res$family$specs[[stage_res$family$carried]]), ". It is applied to the fishable index, and to the smoothed index with the field structure selected for it in stage 2", if (!is.na(stage_smoothed(stage_res$fields))) paste0(" (", stage_smoothed(stage_res$fields), ")") else "", ", in the final report.") else "The selection is not complete yet."`
+
+# Software and reproducibility
+
+```{r software-citations}
+#| results: asis
+report_software(
+  c("tidyverse", "ggplot2", "sf", "sdmTMB", "sdmTMBexperiments", "knitr"),
+  here::here(cfg$DOCS_DIR %||% "docs", "assets", "references.bib")
+)
+```
+
+This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. The authors designed the study and specified and checked the analyses, and they take full responsibility for the content; this version of the AI-assisted text has not yet been reviewed and approved by them.
+
+The model selection was computed on a server with `R/validation/run_species.sh` (or on a cluster with `R/hpc/slurm/driver.sh`), which caches every candidate in `data/output/`r cfg$STOCK_KEY`/selection/`; this document reads the caches. <!-- Name the server or cluster. -->
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+# Appendix: analysis scripts {.appendix}
+
+```{r setup-appendix, code = readLines(here::here("R", "0_setup.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-setup-script
+#| lst-cap: "Shared package, configuration and model setup."
+#| code-fold: true
+#| code-summary: "Show setup script"
+```
+
+```{r stage-lib-appendix, code = readLines(here::here("R", "validation", "stage_lib.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-stage-lib
+#| lst-cap: "Selection stages: candidates, cross-validation runs and decision rules."
+#| code-fold: true
+#| code-summary: "Show stage library"
+```
+
+```{r stage-driver-appendix, code = readLines(here::here("R", "validation", "run_species.sh")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-stage-driver
+#| lst-cap: "Server driver that runs the stages for one species with retries."
+#| code-fold: true
+#| code-summary: "Show stage driver"
+```
+
+```{r helpers-appendix, code = readLines(here::here("R", "report_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-report-helpers
+#| lst-cap: "Report helpers, including the fold builder and the paired cross-validation comparison."
+#| code-fold: true
+#| code-summary: "Show report helpers"
+```

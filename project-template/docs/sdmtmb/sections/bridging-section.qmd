@@ -1,4 +1,4 @@
-<!-- Included by report.qmd. Shares its params. Comparison of the new index with the previous
+<!-- Included by the stock reports (<stock>-6-report.qmd). Shares its params. Comparison of the new index with the previous
 assessment's published index (config PREVIOUS_INDEX_FILE: csv or rds with year and est, in
 index years). Both series are rescaled to their mean over the overlapping years, so the
 comparison is of shape, not level. A revision larger than REVISION_TOLERANCE is a finding to

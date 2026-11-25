@@ -37,8 +37,8 @@ result.
    prediction grid.
 7. **Model selection**: mesh stage first, then fields, geometry, fixed effects, family, grid;
    render the validate document from the stage caches.
-8. **Write the selected specification into `config.yaml`** (`FINAL_MODEL`, mesh, grid) from the
-   stage decisions — by a script where the project has one, never by retyping a table.
+8. **Write the selected specification into `config.yaml`** (`FINAL_MODEL`, mesh, grid, smoothed
+   structure) with `Rscript R/validation/sync_final_model.R <stock>`, never by retyping a table.
 9. **Report computations** (product fits, bias-corrected indices, retrospectives, survey
    comparison, leave-one-out, sensitivity refits), then the report document.
 10. **Summary** last: it reads the report caches.
@@ -51,7 +51,7 @@ cores; keep the total within the server's fair share.
 
 ## Unattended driver
 
-Steps 6–10 should run without anyone logged in. A driver script per stock runs them in order,
+Steps 6–10 should run without anyone logged in: `R/run_models.sh <stock>` (template). It runs them in order,
 writes one log line per step, marks each finished step with a done-flag file, and stops at the
 first failure; rerunning it resumes after the last done-flag. Each step checks its own result
 (an exit status in the render log, a `DONE` line in a computation log) rather than trusting the
@@ -67,11 +67,11 @@ when its inputs change is the most common source of a wrong result that looks ri
 |---|---|---|
 | Compiled station and length data | survey selection | yes, when the compile toggle is on |
 | Base fit, mesh, prediction grid, first indices | first fit | no — move away when the data change |
-| CV folds (`cv-folds.rds`) | selection | partly: refused when the haul count changes; **not** when hauls change at the same count |
+| CV folds (`cv-folds.rds`) | selection | yes: refused when the hauls change (haul ids are stored with the folds); the block size is not rechecked |
 | Barrier land polygon | selection (on a machine with internet) | no |
 | Candidate fits and CV results, stage decisions | selection | no — keyed by candidate name, not by the data |
 | Driver logs that say a candidate is done | selection driver | no — a resumed driver skips those candidates |
-| Report fits, posterior summaries, bias-corrected indices, sensitivity refits | report computations | should stop on a changed `FINAL_MODEL` (a stamp of the specification stored with the cache) |
+| Report fits, posterior summaries, bias-corrected indices, sensitivity refits | report computations | yes: `report_check_stamp()` stops on a changed `FINAL_MODEL`, grid, references or model data |
 
 Rules:
 

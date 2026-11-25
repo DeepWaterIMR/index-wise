@@ -38,6 +38,7 @@ knitr::opts_knit$set(root.dir = here::here())
 # Fishable-length threshold. Remove this chunk and the Fishable length section if the project
 # has no length-based product. Reference-fleet records are confidential: read at render time,
 # never saved.
+index_species <- "{{STOCK_KEY}}"
 source(here::here("R", "0_setup.R"))
 source(here::here("R", "compile_functions.R"))
 source(here::here("R", "fishable_length.R"))

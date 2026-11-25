@@ -29,23 +29,35 @@ https://github.com/DeepWaterIMR/index-wise`).
    zeros, and swept-area density. Do not infer code meanings from their numeric order.
 4. **Start simple.** First model has no length groups and no temperature term.
 5. **Step 1 documents have a fixed structure** (index-wise `knowledge/data-documents.md`).
-   `{{STOCK_SLUG}}-2-survey-selection.qmd` is survey selection and coverage;
-   `{{STOCK_SLUG}}-3-data.qmd` is the compiled station/response report and owns length
+   `<stock>-2-survey-selection.qmd` is survey selection and coverage;
+   `<stock>-3-data.qmd` is the compiled station/response report and owns length
    products and diagnostics. Do not duplicate length-allocation material in survey selection.
 6. **Document provenance is explicit.** Keep the `published-title: "Version"` date label and the
    index-wise/researcher-supervised-AI provenance statement in every main report; add project-specific authors and affiliations in their YAML headers.
 7. **Review before you render.** Renders are slow — code-review changed chunks and fix issues
    first, then render in a screen session with a log in `logs/` (index-wise `index-render`
    skill). Flip compute toggles to `FALSE` once `data/output/` files exist.
+8. **One set of documents per stock, kept identical.** Every stock has the numbered documents
+   `<stock>-0-background` … `<stock>-6-report` (`<stock>` = its key in `SPECIES_SETTINGS`, or
+   `STOCK_SLUG` for one stock), each setting `index_species <- "<stock>"`. With several stocks,
+   edit the first stock's documents, then run `Rscript ai/tests/test-stock-parity.R write`;
+   differences between the stocks belong in `config.yaml`. Report sections are shared
+   (`docs/sdmtmb/sections/`).
+9. **Slow steps run as scripts, documents read caches.** The model selection
+   (`R/validation/`, or `R/hpc/slurm/` on a cluster), the report computations
+   (`R/report/run_report.sh`) and the whole chain (`R/run_models.sh <stock>`) run on a server;
+   `R/validation/sync_final_model.R` writes the selection into `config.yaml`. Before a full
+   rerun follow index-wise `knowledge/pipeline.md` (order, caches to move away).
 
 ## Workflow
 
 | Step | Document(s) | index-wise skill |
 |---|---|---|
-| 1. Compile & report data | `docs/data/{{STOCK_SLUG}}-2-survey-selection.qmd`, `docs/data/{{STOCK_SLUG}}-3-data.qmd`; summary `docs/data/{{STOCK_SLUG}}-1-summary.qmd` | `index-compile-data` |
-| 2. Fit first model | `docs/sdmtmb/fit/fit.qmd` | `index-fit-model` |
-| 3. Validate / select | `docs/sdmtmb/validation/validate.qmd` | `index-validate-model` |
-| 4. Final report + export | `docs/sdmtmb/{{SPECIES_SLUG}}/report.qmd` (+ `*-section.qmd`) | `index-final-report` |
+| 1. Compile & report data | `docs/data/<stock>-2-survey-selection.qmd`, `docs/data/<stock>-3-data.qmd`, `docs/background/<stock>-0-background.qmd` | `index-compile-data` |
+| 2. Fit first model | `docs/sdmtmb/fit/<stock>-4-fit.qmd` | `index-fit-model` |
+| 3. Validate / select | `R/validation/run_species.sh <stock>`, then `docs/sdmtmb/validation/<stock>-5-validate.qmd`; `R/validation/sync_final_model.R <stock>` | `index-validate-model` |
+| 4. Final report + export | `R/report/run_report.sh <stock>`, then `docs/sdmtmb/<stock>/<stock>-6-report.qmd` (+ `sections/*-section.qmd`) | `index-final-report` |
+| 5. Summary | `docs/data/<stock>-1-summary.qmd` (reads the report caches, so last) | — |
 | Optional: commercial CPUE | `docs/sdmtmb/cpue/cpue.qmd` (`CPUE:` block of `config.yaml`) | `index-cpue-data`, `index-cpue-model` |
 
 Logbook and sales-note records are confidential at the record level: keep the extract in
@@ -54,7 +66,9 @@ Logbook and sales-note records are confidential at the record level: keep the ex
 The `docs/` paths above are relative to `DOCS_DIR` in `config.yaml` (`docs`, or `docs/benchmark` for
 an index made for a stock-assessment benchmark; `docs/render.R` stays put).
 
-Full rebuild: `Rscript docs/render.R` (slow — see the rendering rules).
+Steps 2–5 unattended on the server: `R/run_models.sh <stock>` in a screen session.
+Rendering only: `Rscript docs/render.R <stage> [stock]` (it runs no selection or report
+computation).
 
 ## Project memory
 

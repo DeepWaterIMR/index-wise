@@ -1,6 +1,6 @@
 ---
 title: "{{SPECIES_NAME}} — {{AREA_LABEL}} data"
-subtitle: "Step 2 of 2 · data report"
+subtitle: "Compiled haul and length data"
 author: {{AUTHORS_YAML}}
 affiliations: {{AFFILIATIONS_YAML}}
 date: today
@@ -42,11 +42,12 @@ knitr::opts_knit$set(root.dir = here::here())
 ```
 
 ```{r config}
+index_species <- "{{STOCK_KEY}}"
 source(here::here("R", "0_setup.R"))
 source(here::here("R", "compile_functions.R"))
 source(here::here("R", "plot_helpers.R"))
 
-stock <- cfg$STOCK_SLUG %||% cfg$SPECIES_SLUG
+stock <- cfg$STOCK_KEY
 sp <- tolower(cfg$SPECIES_NAME)
 area_label <- if (length(cfg$STOCK_SUBAREAS)) {
   paste("ICES subareas", paste(unlist(cfg$STOCK_SUBAREAS), collapse = " and "))
@@ -54,6 +55,8 @@ area_label <- if (length(cfg$STOCK_SUBAREAS)) {
 over_cm <- cfg$OVER_CM
 fish_label <- paste0("Fishable (≥ ", over_cm, " cm)")
 n_fmt <- function(x) format(x, big.mark = " ")
+pct <- function(x, acc = 1) scales::percent(x, accuracy = acc)
+list_values <- function(x) if (length(x) < 2) x else paste(paste(x[-length(x)], collapse = ", "), "and", x[length(x)])
 
 dt <- readRDS(file.path(out_dir, "compiled-data.rds"))
 lengths <- readRDS(file.path(out_dir, "length-data.rds"))
@@ -88,7 +91,7 @@ The input is the compiled dataset written by the survey-selection document ([`r 
 
 ## Data collation
 
-The data flow is shown in @fig-data-flow. Station-level catches give the complete haul roster with true zeros and the total-biomass response. Individual length measurements are used only to divide each positive catch into the fishable and non-fishable parts; they do not change the total.
+The data flow is shown in @fig-data-flow. Station-level catches give the complete haul roster with true zeros (hauls of surveys that recorded the species when it was caught) and the total-biomass response. Individual length measurements are used only to divide each positive catch into the fishable and non-fishable parts; they do not change the total.
 
 ```{mermaid}
 %%| label: fig-data-flow
@@ -115,11 +118,11 @@ $$
 \rho = \frac{B}{d \times w / 1852},
 $$
 
-where $B$ is the catch weight (kg), $d$ the towed distance (nmi) and $w = `r cfg$GEAR_WIDTH`$ m the common effective trawl width, giving density in kg/nmi². The model response has not been decided yet (catch weight with swept area as an offset, or density); this report uses swept-area biomass density throughout. Gear type is a fixed effect in the models.
+where $B$ is the catch weight (kg), $d$ the towed distance (nmi) and $w = `r cfg$GEAR_WIDTH`$ m the common effective trawl width, giving density in kg/nmi². The models use this density as the response (`EFFORT: density` in `config.yaml`); with a logit-link delta family this is equivalent to modelling the catch with the log swept area as an offset, whereas with a Poisson-link delta family it is not, because an offset there also enters the encounter probability.
 
 ### Individual-level data
 
-The individual-level dataset contains the `r sp` length records from the retained hauls. Lengths are converted from metres to centimetres, and records outside `r compile_metadata$length_limits[1]`–`r compile_metadata$length_limits[2]` cm are removed as gross errors (`r compile_metadata$n_length_outliers` records). When a catch sample contains $m$ measured fish and a catch of $n$ fish, each measured fish represents $n/m$ fish (the raising factor); without a count the factor is one.
+The individual-level dataset contains the `r sp` length records from the retained hauls. Lengths are converted from metres to centimetres, and records outside `r compile_metadata$length_limits[1]`–`r compile_metadata$length_limits[2]` cm are removed as gross errors (`r compile_metadata$n_length_outliers` records). When a catch sample contains $m$ measured fish and a catch of $n$ fish, each measured fish represents $n/m$ fish (the raising factor); without a count the factor is one. `r cs <- readRDS(file.path(out_dir, "length-data.rds")) |> dplyr::summarise(n_ind = dplyr::n(), cc = dplyr::first(catchcount), .by = c("haul_id", "catchsampleid")); paste0("The catches of ", sp, " are small, and ", pct(mean(!is.na(cs$cc) & cs$n_ind >= cs$cc)), " of the catch samples were measured completely", if (any(is.na(cs$cc))) paste0(" (", pct(mean(is.na(cs$cc)), 0.1), " lack a count)") else "", ", so the raising factor is one for nearly all fish. The length samples of ", sp, " are not stratified by length in any cruise series, so the raised distribution represents the catch.")`
 
 ## Length-based data
 
@@ -129,7 +132,7 @@ $$
 p = \frac{\sum_{i:\,L_i \ge `r over_cm`} s_i w_i}{\sum_i s_i w_i},
 $$
 
-and the fishable biomass is $B_f = pB$, with density $\rho_f = B_f / (d \times w / 1852)$. The fishable part therefore never exceeds the total, and the length data only redistribute the recorded catch. The derivation of the threshold `r over_cm` cm is documented in the *Fishable length* section of [stock-background](../background/stock-background.html#fishable-length).
+and the fishable biomass is $B_f = pB$, with density $\rho_f = B_f / (d \times w / 1852)$. The fishable part therefore never exceeds the total, and the length data only redistribute the recorded catch. The threshold `r over_cm` cm is the length at which the Norwegian reference-fleet longline catches reach `r round(100 * (cfg$FISHABLE_PROP %||% 0.5))` % of their modal frequency; its derivation is documented in the *Fishable length* section of [`r stock`-0-background](../background/`r stock`-0-background.html#fishable-length).
 
 Positive hauls without length measurements receive the biomass-weighted mean fishable share of the same survey, or, if no fish were measured in that survey, of the same cruise series and year, or of the cruise series. Zero hauls are zero for both products. Because the share is applied to the recorded catch weight, a survey that weighed the catch but did not measure the fish still contributes fishable biomass; it is not turned into a false zero, which would bias the fishable index downwards. The calculation is done by `add_fishable_biomass()` in `R/compile_functions.R` (@lst-compile-functions) when the survey-selection document compiles the data, and it is verified against hand-calculated cases and an independent recomputation in `ai/tests/test-fishable-biomass.R`.
 
@@ -263,24 +266,42 @@ plot_annual_density(dplyr::filter(products, product == fish_label), base_annual,
                     ncol = annual_ncol)
 ```
 
-### Prediction region
+### Survey coverage by year
+
+The cruise series sample different parts of the area, and the mix of series changes over the years (@fig-coverage-annual). `r cov <- dt |> dplyr::summarise(first = min(year), last = max(year), .by = "cruiseseries"); paste0("The series cover ", list_values(paste0(cov$cruiseseries, " (", cov$first, "–", cov$last, ")")), ".")` `r oth <- dt |> dplyr::summarise(share = mean(cruiseseries == "Other"), .by = "year"); early <- oth$share[oth$year < 2004]; if (length(early)) paste0("The irregular Other surveys hold up to ", pct(max(early)), " of the hauls of a year before 2004, and ", pct(mean(oth$share[oth$year >= 2004])), " on average from 2004.") else ""` A change in coverage can move the index if the model does not predict the unsampled cells well; the regional split, the leave-one-survey-out refits and the sensitivity analyses in the report test this.
+
+```{r coverage-base}
+base_cov <- ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 6, rotate = TRUE,
+                                 expand.factor = 1.02, land.col = "grey95", land.border.col = "grey70")
+cov_map_height <- map_fig_height(base_cov, ncol = annual_ncol, nrow = ceiling(n_years / annual_ncol),
+                                 extra = 1, side = 0.2)
+```
+
+```{r, fig.height = cov_map_height}
+#| label: fig-coverage-annual
+#| fig-cap: "Retained hauls by year, coloured by cruise series."
+base_cov +
+  ggspatial::geom_spatial_point(data = dt, aes(longitudestart, latitudestart, colour = cruiseseries),
+                                size = 0.2, alpha = 0.6, crs = 4326) +
+  scale_colour_manual(values = cs_cols, name = NULL) +
+  guides(colour = guide_legend(nrow = 1, override.aes = list(size = 2, alpha = 1))) +
+  facet_wrap(~year, ncol = annual_ncol) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
+        strip.text = element_text(size = 7, margin = margin(1, 0, 1, 0)),
+        panel.spacing = unit(0.05, "lines"), legend.position = "bottom")
+```
+
+### Prediction grid
 
 ```{r prediction-region}
 region_file <- here::here(cfg$PREDICTION_REGION_FILE %||%
                             file.path(cfg$SOURCE_DIR %||% "data/source", paste0(stock, "-prediction-region.gpkg")))
-stock_area <- read_stock_area(cfg, cap = FALSE)  # uncut: the map cap would drop northern hauls
-region <- build_stock_region(dt, stock_area, cfg$CRS, buffer_km = cfg$REGION_BUFFER_KM %||% 25,
-                             ratio = cfg$REGION_CONCAVITY %||% 0.1, label = cfg$SPECIES_NAME)
-dir.create(dirname(region_file), recursive = TRUE, showWarnings = FALSE)
-sf::st_write(region, region_file, layer = cfg$REGION_LAYER, append = FALSE, quiet = TRUE)
-pts <- sf::st_as_sf(dt, coords = c("longitudestart", "latitudestart"), crs = 4326) |>
-  sf::st_transform(cfg$CRS)
-dt$in_region <- lengths(sf::st_intersects(pts, region)) > 0
-n_inside <- sum(dt$in_region)
+# Built and applied in the survey selection (<stock>-2-survey-selection.qmd)
+region <- sf::read_sf(region_file) |> sf::st_transform(cfg$CRS)
 # Depth-limited grid preview (the model fit builds the final grid the same way)
 max_depth <- cfg$MAX_DEPTH %||% 1000
 grid_base <- sdmTMBexperiments::make_prediction_grid(region, resolution = cfg$GRID_KM,
-                                                     max_depth = max_depth)
+                                                     max_depth = max_depth, drop_isolated = TRUE)
 if (!is.null(cfg$MIN_DEPTH)) grid_base <- grid_base[grid_base$depth >= cfg$MIN_DEPTH, ]
 saveRDS(grid_base, file.path(out_dir, "prediction-grid-base.rds"))
 grid_pts <- data.frame(x = grid_base$X * 1000, y = grid_base$Y * 1000) |>  # grid is in km
@@ -295,12 +316,12 @@ base_region <- ggOceanMaps::basemap(data = dt, legends = FALSE, base_size = 8, r
 region_map_height <- map_fig_height(base_region, extra = 0.6)
 ```
 
-The models predict density only where `r sp` has been caught. The prediction region is the concave hull of all hauls with `r sp`, buffered by `r cfg$REGION_BUFFER_KM %||% 50` km and cut to `r area_label` (@fig-prediction-region). The buffer is wide enough to merge isolated hauls into the region instead of leaving circles around them, and to take in the zero hauls next to the occupied area, such as those deeper on the continental slope, which inform the depth effect and the low densities at the edge of the distribution. Areas with only zero observations are left out. Within the region, the prediction grid keeps the `r cfg$GRID_KM`-km cells between land and `r max_depth` m depth (GEBCO, `ggOceanMaps::get_depth()`): `r n_fmt(nrow(grid_base))` cells, `r n_fmt(round(grid_km2, -2))` km² of the `r n_fmt(round(region_km2, -2))` km² region. `r if (n_pos_deep == 0) paste0("No haul with ", sp, " is deeper than this limit.") else paste0(n_pos_deep, if (n_pos_deep == 1) " haul" else " hauls", " with ", sp, if (n_pos_deep == 1) " is" else " are", " deeper than this limit; ", if (n_pos_deep == 1) "it stays" else "they stay", " in the model data but outside the prediction area.")` The model fit builds its grid in the same way. `r n_fmt(n_inside)` of the `r n_fmt(nrow(dt))` hauls (`r round(100 * n_inside / nrow(dt))` %) lie inside the region, including `r n_fmt(sum(dt$in_region & dt$biomass > 0))` of the `r n_fmt(nrow(pos))` hauls with `r sp`.
+The prediction region was built and applied in the survey selection ([`r stock`-2-survey-selection](`r stock`-2-survey-selection.html)), so all hauls in this report lie inside it (@fig-prediction-region). Within the region, the prediction grid keeps the `r cfg$GRID_KM`-km cells between land and `r max_depth` m depth (GEBCO, `ggOceanMaps::get_depth()`): `r n_fmt(nrow(grid_base))` cells, `r n_fmt(round(grid_km2, -2))` km² of the `r n_fmt(round(region_km2, -2))` km² region. `r if (n_pos_deep == 0) paste0("No haul with ", sp, " is deeper than this limit.") else paste0(n_pos_deep, if (n_pos_deep == 1) " haul" else " hauls", " with ", sp, if (n_pos_deep == 1) " is" else " are", " deeper than this limit; ", if (n_pos_deep == 1) "it stays" else "they stay", " in the model data but outside the prediction area.")` The model fit builds its grid in the same way.
 
 
 ```{r, fig.height = region_map_height}
 #| label: fig-prediction-region
-#| fig-cap: !expr 'paste0("Prediction region for ", sp, " (blue outline): concave hull of the hauls with ", sp, " (orange), buffered and cut to ", area_label, ". Blue squares: prediction-grid cells shallower than ", max_depth, " m. Grey crosses: hauls without ", sp, ".")'
+#| fig-cap: !expr 'paste0("Prediction grid for ", sp, ". Blue outline: the prediction region from the survey selection. Orange: hauls with ", sp, ". Blue squares: prediction-grid cells shallower than ", max_depth, " m. Grey crosses: hauls without ", sp, ".")'
 (base_region +
   ggplot2::geom_sf(data = grid_pts, shape = 15, size = 0.25, colour = "#0072B2", alpha = 0.35,
                    inherit.aes = FALSE) +
@@ -317,7 +338,7 @@ The models predict density only where `r sp` has been caught. The prediction reg
 
 ### Through time
 
-The annual mean density and the share of positive hauls show how the raw data change through the time series before any model standardisation (@fig-annual-response). These values mix changes in stock size with changes in survey coverage, gear and season, which the model separates.
+The annual mean density and the share of positive hauls show how the raw data change through the time series before any model standardisation (@fig-annual-response). These values mix changes in stock size with changes in survey coverage, gear and season, which the model accounts for only in part (through its covariates and random fields).
 
 ```{r}
 #| label: fig-annual-response
@@ -341,9 +362,27 @@ p_b <- ggplot(annual, aes(year, mean, colour = product)) +
 cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v", rel_heights = c(4, 5))
 ```
 
+The share of empty hauls differs between the cruise series, which sample different areas and seasons, but changes little from year to year within the main series (@fig-zero-series). `r zs <- dt |> dplyr::summarise(z = mean(biomass == 0), n = dplyr::n(), .by = c("cruiseseries", "year")) |> dplyr::filter(n >= 20) |> dplyr::summarise(sd = stats::sd(z), med = stats::median(z), .by = "cruiseseries") |> dplyr::filter(!is.na(sd)); paste0("The median annual zero share is ", list_values(paste0(pct(zs$med), " (", zs$cruiseseries, ")")), ", with a between-year standard deviation of ", round(100 * min(zs$sd)), "–", round(100 * max(zs$sd)), " percentage points (series-years with at least 20 hauls).")` An abrupt change within a series would point to a change of protocol, gear or coverage.
+
+```{r}
+#| label: fig-zero-series
+#| fig-height: 4
+#| fig-cap: !expr 'paste0("Annual share of hauls without ", sp, " by cruise series, for series-years with at least 10 hauls; point size shows the number of hauls.")'
+dt |>
+  dplyr::summarise(zero = mean(biomass == 0), hauls = dplyr::n(), .by = c("cruiseseries", "year")) |>
+  dplyr::filter(hauls >= 10) |>
+  ggplot(aes(year, 100 * zero, colour = cruiseseries)) +
+  geom_line(alpha = 0.6) +
+  geom_point(aes(size = hauls), alpha = 0.8) +
+  scale_colour_manual(values = cs_cols, name = NULL) +
+  scale_size_area(max_size = 2.5, name = "Hauls") +
+  labs(x = "Year", y = "Hauls without catch (%)") +
+  theme(legend.position = "right")
+```
+
 ### Tow distance
 
-Tow distance enters the response through the swept area. @fig-effort shows the retained tow distances by year and gear type; changes in the typical tow distance change the swept area per haul and therefore the scale of the density values. The distance is taken as correct; for `r n_fmt(sum(dt$speed_flag))` hauls whose distance and duration imply an implausible tow speed, the duration was set to missing in the survey selection.
+Tow distance enters the response through the swept area. @fig-effort shows the retained tow distances by year and gear type. The density is divided by the swept area, so a change in the typical tow distance does not change its scale, but it changes the area each haul covers and so the chance that a haul catches the species. The distance is taken as correct; for `r n_fmt(sum(dt$speed_flag))` hauls whose distance and duration imply an implausible tow speed, the duration was set to missing in the survey selection.
 
 ```{r}
 #| label: fig-effort
@@ -407,7 +446,7 @@ cowplot::plot_grid(p_a, p_b, ncol = 1, labels = "AUTO", align = "v", rel_heights
 
 ### Season and gear
 
-Month enters the models as a smooth term and gear type as a fixed effect. Both are confounded with cruise series, because each series is fished in a fixed season with one main gear (see the survey-selection document). @fig-month-gear shows the raw positive densities by month and by gear type within cruise series; differences between gears within the same cruise series are the information the gear effect is estimated from.
+Month and gear type are both confounded with cruise series, because each series samples in a fixed season, mostly with one gear (see the survey-selection document). `r switch(month_term(cfg), smooth = "Month enters the models as a smooth term", factor = "Month enters the models as a factor", none = "The models have no month term")`, and gear type `r if ("geartype" %in% unlist(cfg$FINAL_MODEL$TERMS)) "is a fixed effect" else "was dropped in the model selection"`. @fig-month-gear shows the raw positive densities by month and by gear type within cruise series; differences between gears within the same cruise series are the information a gear effect would be estimated from.
 
 ```{r}
 #| label: fig-month-gear
@@ -517,6 +556,20 @@ The length–weight relationship was fitted on the log scale to `r n_fmt(lw$n)` 
 compile_metadata$lw_plot
 ```
 
+```{r lw-sex}
+# Length-weight by sex (Biotic sex codes: 1 female, 2 male)
+lw_sex <- lengths |>
+  dplyr::filter(!is.na(weight_kg), weight_kg > 0, as.character(sex) %in% c("1", "2")) |>
+  dplyr::mutate(sex = factor(as.character(sex), levels = c("1", "2"), labels = c("female", "male")))
+lw_m0 <- stats::lm(log(weight_kg) ~ log(length_cm), lw_sex)
+lw_m1 <- stats::lm(log(weight_kg) ~ log(length_cm) * sex, lw_sex)
+lw_len <- c(40, 60, 80, 100)
+lw_ratio <- exp(stats::predict(lw_m1, data.frame(length_cm = lw_len, sex = "female")) -
+                stats::predict(lw_m1, data.frame(length_cm = lw_len, sex = "male")))
+```
+
+The length–weight relationship is common to both sexes. Of the fish with recorded weight, `r n_fmt(nrow(lw_sex))` have a recorded sex; separate relationships by sex change the AIC by `r sprintf("%.1f", round(stats::AIC(lw_m1) - stats::AIC(lw_m0), 1) + 0)`, and the predicted weight of a female is `r sprintf("%.2f", min(lw_ratio))`–`r sprintf("%.2f", max(lw_ratio))` times that of a male of the same length at `r min(lw_len)`–`r max(lw_len)` cm. The fishable share is a ratio of weights within a haul, so differences of this size do not change it noticeably. Maturity was not considered: it is recorded for a minority of the measured fish.
+
 ### Length distributions
 
 The raised length distributions show which part of the population each cruise series catches relative to the fishable threshold (@fig-length-dist). The share of the catch above the threshold differs between cruise series, which is one reason why the fishable and total indices can diverge.
@@ -559,6 +612,27 @@ lengths |>
   geom_point(colour = "#0072B2", size = 1) +
   geom_hline(yintercept = over_cm, linetype = "dashed") +
   labs(x = "Year", y = "Length (cm)")
+```
+
+### Sample sizes
+
+The number of hauls with `r sp` and of measured fish differs between cruise series and years (@fig-sample-size). `r m <- dplyr::count(lengths, haul_id, name = "measured"); pm <- dplyr::left_join(pos, m, by = "haul_id") |> dplyr::mutate(measured = dplyr::coalesce(measured, 0L)); paste0("A haul with ", sp, " has a median of ", stats::median(pm$measured), " measured fish, and ", pct(mean(pm$measured <= 5)), " of them have five or fewer.")` Series-years with few hauls carry little information on their own; their influence on the index is examined in the report (influence of cruises and hauls, leave-one-survey-out refits and the major-series sensitivity).
+
+```{r}
+#| label: fig-sample-size
+#| fig-height: !expr '0.35 * dplyr::n_distinct(dt$cruiseseries) * 2 + 1.6'
+#| fig-cap: !expr 'paste0("Hauls with ", sp, " (A) and measured ", sp, " (B) by cruise series and year. Numbers in the cells; blank: none.")'
+ss <- dplyr::bind_rows(
+  dplyr::summarise(pos, n = dplyr::n(), .by = c("cruiseseries", "year")) |> dplyr::mutate(what = "A"),
+  dplyr::summarise(lengths, n = dplyr::n(), .by = c("cruiseseries", "year")) |> dplyr::mutate(what = "B"))
+lab_what <- c(A = paste("A) Hauls with", sp), B = paste("B) Measured", sp))
+ggplot(ss, aes(year, cruiseseries, fill = log10(n))) +
+  geom_tile(colour = "white") +
+  geom_text(aes(label = n), size = 1.8) +
+  scale_fill_viridis_c(option = "mako", direction = -1, begin = 0.2, guide = "none") +
+  facet_wrap(~what, ncol = 1, labeller = labeller(what = lab_what)) +
+  scale_x_continuous(expand = expansion(add = 0.5)) +
+  labs(x = "Year", y = NULL)
 ```
 
 ### Fishable share and length coverage
@@ -622,11 +696,11 @@ checks |>
 
 # Results and recommendations
 
-**Ready for modelling.** The total-biomass response is complete for all `r n_fmt(nrow(dt))` hauls, with `r sprintf("%.1f", 100 * mean(dt$biomass == 0))` % true zeros. The fishable-biomass response is defined for every haul as well; `r sprintf("%.1f", 100 * mean(dt$biomass_fishable == 0))` % of the hauls have no fishable `r sp`.
+**Ready for modelling.** The total-biomass response is complete for all `r n_fmt(nrow(dt))` hauls, of which `r sprintf("%.1f", 100 * mean(dt$biomass == 0))` % are true zeros. The fishable-biomass response is defined for every haul as well; `r sprintf("%.1f", 100 * mean(dt$biomass_fishable == 0))` % of the hauls have no fishable `r sp`.
 
 **Usable with a stated limitation.** For `r n_fmt(sum(pos$fishable_imputed != "measured"))` positive hauls the fishable share is a survey or cruise-series mean rather than a measurement (@fig-length-coverage). The fishable share also depends on the predicted weight at length, so the fishable biomass is a modelled division of an observed catch.
 
-**To examine in the model fits.** Depth, month and gear type all relate to density in the raw data (@fig-depth, @fig-month-gear), but these relations are confounded with cruise series and area. Whether the cruise series needs its own term, and how the changing survey mix affects the indices, is examined in the model fits and validation.
+**Examined in the model fits.** Depth, month and gear type all relate to density in the raw data (@fig-depth, @fig-month-gear), but these relations are confounded with cruise series and area. The model selection tests the gear and month terms and a cruise-series factor. How the changing survey mix affects the indices is examined in the report (leave-one-survey-out and single-survey indices).
 
 # Software and reproducibility
 
@@ -639,7 +713,7 @@ report_software(
 )
 ```
 
-This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. The authors designed the study, specified and checked the analyses, and reviewed, edited and approved the AI-assisted content, for which they take full responsibility. This version has not yet been reviewed by the authors.
+This document and the associated analyses were created with researcher-supervised generative AI (<confirmed AI models>), following the [index-wise](https://github.com/DeepWaterIMR/index-wise) and [wise-writing](https://github.com/DeepWaterIMR/wise-writing) knowledge packs of the [Fiskwise](https://deepwaterimr.github.io/fiskwise/) ecosystem. The authors designed the study and specified and checked the analyses, and they take full responsibility for the content; this version of the AI-assisted text has not yet been reviewed and approved by them.
 
 # References {.unnumbered}
 

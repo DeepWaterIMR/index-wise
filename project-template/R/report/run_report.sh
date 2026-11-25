@@ -1,17 +1,17 @@
 #!/bin/bash
-# Run every report computation on the server, in dependency order, with one
-# log per step in logs/report/<species>/. Steps whose cache exists are skipped, so a rerun
-# resumes. Run in a screen session, passing LD_LIBRARY_PATH (screen drops it, and sf then
-# cannot load GDAL):
-#   screen -dmS report-<sp> bash -c "LD_LIBRARY_PATH='$LD_LIBRARY_PATH' R/report/run_report.sh <sp>"
-# R_LIBS points to the library with sdmTMBexperiments >= 0.1.12 (density_share(), drop_isolated and the
-# prediction-grid plot method); the selection caches stay on the version they were made with.
+# Run every report computation for one stock on the server, in dependency order, with one log
+# per step in logs/report/<stock>/. Steps whose cache exists are skipped, so a rerun resumes;
+# the first step stamps the specification and later steps stop if it changed
+# (report_check_stamp()). Run in a screen session, passing LD_LIBRARY_PATH (screen drops it, and
+# sf then cannot load GDAL):
+#   screen -dmS report-<stock> bash -c "LD_LIBRARY_PATH='$LD_LIBRARY_PATH' R/report/run_report.sh <stock>"
+# The selection, the report and the documents use the same R library (R/0_setup.R checks the
+# sdmTMBexperiments version). Ends with "ALL DONE <stock>".
 set -u
-sp=${1:-report}   # a label for the logs; the species comes from config.yaml
+sp=${1:?usage: R/report/run_report.sh <stock>}
 cd "$(dirname "$0")/../.."
-export R_LIBS=${R_LIBS:-$HOME/local/rlib-report}
 L=logs/report/$sp; mkdir -p "$L"
-C=${REPORT_CACHE:-data/output/report}   # <OUTPUT_DIR>/report; set REPORT_CACHE if OUTPUT_DIR differs
+C=${OUTPUT_DIR:-data/output}/$sp/report   # set OUTPUT_DIR when config.yaml changes it
 run() {  # run <log name> <cache file> <args...>
   local name=$1 cache=$2; shift 2
   if [ -n "$cache" ] && [ -f "$C/$cache" ]; then echo "$(date +%T) $name: cached"; return 0; fi
@@ -21,26 +21,32 @@ run() {  # run <log name> <cache file> <args...>
   echo "$(date +%T) $name: exit $rc"
   return $rc
 }
+failed() { [ -f "$L/$1.log" ] && grep -q "Execution halted" "$L/$1.log"; }
 run grid prediction-grid.rds grid || exit 1
-# The three products in parallel; each post step follows its own fit.
-for p in total-iid fishable-iid total-ar1; do
+products=$(Rscript R/report/report_compute.R "$sp" products 2> "$L/products.err")
+[ -n "$products" ] || { echo "could not list the products (see $L/products.err)"; exit 1; }
+# The products in parallel; each post step follows its own fit.
+for p in $products; do
   ( run fit-$p fit-$p.rds fit $p && run post-$p post-$p.rds post $p && run index-bc-$p index-bc-$p.rds index-bc $p ) &
 done
 # The sensitivity analyses need the total biomass (IID) fit and its index.
 while [ ! -f "$C/post-total-iid.rds" ]; do
   sleep 60
-  if [ -f "$L/fit-total-iid.log" ] && grep -q "Execution halted" "$L/fit-total-iid.log"; then echo "total-iid fit failed"; wait; exit 1; fi
-  if [ -f "$L/post-total-iid.log" ] && grep -q "Execution halted" "$L/post-total-iid.log"; then echo "total-iid post failed"; wait; exit 1; fi
+  if failed fit-total-iid || failed post-total-iid; then echo "total-iid failed"; wait; exit 1; fi
 done
 run retro-total-iid retro-total-iid.rds retro total-iid 6 &
 run surveys surveys.rds surveys 3 &
 run loso loso.rds loso 7 &
 run influence influence.rds influence 10 &
-while [ ! -f "$C/post-fishable-iid.rds" ]; do
-  sleep 60
-  if [ -f "$L/post-fishable-iid.log" ] && grep -q "Execution halted" "$L/post-fishable-iid.log"; then break; fi
-  if [ -f "$L/fit-fishable-iid.log" ] && grep -q "Execution halted" "$L/fit-fishable-iid.log"; then break; fi
+if echo "$products" | grep -qx fishable-iid; then
+  while [ ! -f "$C/post-fishable-iid.rds" ]; do
+    sleep 60
+    if failed fit-fishable-iid || failed post-fishable-iid; then break; fi
+  done
+  [ -f "$C/fit-fishable-iid.rds" ] && run retro-fishable-iid retro-fishable-iid.rds retro fishable-iid 6 &
+fi
+for v in $(Rscript R/report/report_compute.R "$sp" sens-names 2> "$L/sens-names.err"); do
+  run sens-$v sens-$v.rds sens $v &
 done
-[ -f "$C/fit-fishable-iid.rds" ] && run retro-fishable-iid retro-fishable-iid.rds retro fishable-iid 6 &
 wait
 echo "$(date +%T) ALL DONE $sp"

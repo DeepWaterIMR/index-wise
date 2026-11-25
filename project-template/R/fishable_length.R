@@ -1,9 +1,9 @@
 # fishable_length.R — fishable-length threshold from commercial length distributions.
 #
 # The threshold is the length at which the smoothed length-frequency distribution of the
-# commercial catch first reaches half of its modal frequency on the ascending limb: an
-# approximation of the length at 50 % retention by the fishery (selectivity times
-# availability). Reference-fleet data are confidential: read them on the laptop at render
+# commercial catch first reaches a set share (FISHABLE_PROP in config.yaml) of its modal
+# frequency on the ascending limb: an empirical lower bound of the lengths the fishery catches,
+# shaped by selectivity, availability and the size structure of the stock. Reference-fleet data are confidential: read them on the laptop at render
 # time and never save the records.
 
 #' Length records of the species from commercial (reference-fleet) catches
@@ -32,7 +32,8 @@ collect_commercial_lengths <- function(con, cfg, gear_category = "Hooks",
 #'
 #' @param length_cm Lengths in cm (integer-floored).
 #' @param window Width of the centred running mean (cm).
-#' @param prop Proportion of the modal frequency defining the threshold (default 0.5).
+#' @param prop Proportion of the modal frequency defining the threshold (FISHABLE_PROP; 0.5
+#'   approximates 50 % retention, 0.25 takes in more of the lengths the fishery catches).
 #' @return List with `threshold`, `mode` and the frequency table `freq` (length, n, smooth).
 fishable_length_threshold <- function(length_cm, window = 5, prop = 0.5) {
   freq <- tibble::tibble(length = length_cm) |>

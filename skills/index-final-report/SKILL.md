@@ -22,7 +22,7 @@ Before producing project files, read `knowledge/wise-writing.md` and the install
 `academic-style`, `academic-conventions`, and `academic-data-report` skills. Apply their
 conventions to every generated artifact; retain index-wise's scientific workflow.
 
-## Work in `docs/<slug>/report.qmd`
+## Work in `docs/sdmtmb/<stock>/<stock>-6-report.qmd`
 
 1. **Multiple indices** — fit/predict the products the assessment needs:
    - Total biomass (`spatiotemporal = "ar1"`, no year effect).
@@ -68,6 +68,14 @@ only reads the caches, so it renders in minutes and a failed step reruns alone.
 Judge every sensitivity, leave-out and comparison on the **trend**: report a level ratio and a
 trend change separately, and do not read a uniform level shift as a data problem
 (`knowledge/index-level-and-trend.md`).
+
+Run `R/report/run_report.sh <stock>` on the server after `sync_final_model.R`; the first step
+stamps the specification and later steps stop when `FINAL_MODEL` or the data changed. The
+sensitivity refits come from `SENSITIVITIES` in `config.yaml` (`drop`/`keep` hauls by a filter,
+swept-area `offset`, `fishable_threshold`); the regional split uses `REGIONS_FILE` (ICES
+divisions without it). Render the summary (`docs/data/<stock>-1-summary.qmd`) after the report:
+it reads the report caches. `R/run_models.sh <stock>` runs fit, selection, sync, report and
+summary unattended.
 
 Sensitivity sections (`*-section.qmd`, included from `report.qmd`):
 

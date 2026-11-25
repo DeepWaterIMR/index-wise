@@ -52,13 +52,14 @@ packages <- c(
 )
 
 # Needed only on some paths, so not installed until something asks for them:
-#   sdmTMBextra  BARRIER: true (barrier mesh)
-#   blockCV      the spatial block cross-validation in validate.qmd
+#   sdmTMBextra  BARRIER: true and the barrier-mesh candidate of the model selection
+#   blockCV      alternative spatial block folds (knowledge/model-selection.md)
 #   RstoxUtils   reading SPD files in <stock>-2-survey-selection.qmd
 #   suncalc      sun altitude as a catchability covariate (CATCHABILITY_TERMS: sun_altitude)
 #   glmmTMB      CPUE GLMMs in cpue.qmd (CPUE: engine: glmmTMB); mgcv ships with R
 #   DHARMa       grouped residual dispersion in cpue.qmd
-#   future       parallel backends, if a document sets one up
+#   future,      parallel refits in the report computations (R/report/report_lib.R) and
+#   future.apply parallel backends a document sets up
 # Call ensure_packages("blockCV") in the chunk that needs one.
 optional_packages <- c(
   sdmTMBextra = "pbs-assess/sdmTMBextra",
@@ -68,6 +69,7 @@ optional_packages <- c(
   glmmTMB = NA,
   DHARMa = NA,
   future = NA,
+  future.apply = NA,
   plotly = NA      # interactive survey-timing figure (static fallback without it)
 )
 
@@ -92,8 +94,17 @@ ensure_packages <- function(...) {
                 project_root = getwd())
 }
 
+# On a compute cluster (INDEX_HPC=1, set by R/hpc/slurm/env.sh) only the modelling packages are
+# needed; the Biotic database packages are for compiling data on the data machine.
+if (nzchar(Sys.getenv("INDEX_HPC"))) packages <- packages[setdiff(names(packages), c("DBI", "duckdb"))]
 package_setup(packages, install_missing_packages = install_missing_packages,
               project_root = getwd())
+# make_prediction_grid(drop_isolated = TRUE), used by every grid of the project, needs 0.1.12.
+# Fits and caches from different package versions are not interchangeable
+# (knowledge/pipeline.md): keep the data machine, the server and any cluster on one version.
+if (utils::packageVersion("sdmTMBexperiments") < "0.1.12")
+  stop("sdmTMBexperiments >= 0.1.12 is needed (installed: ",
+       utils::packageVersion("sdmTMBexperiments"), "). Update it before rendering.")
 # Data access (Biotic database) is provided by BAIT — see its biotic-connect skill.
 
 # --- Config -----------------------------------------------------------------------------
@@ -117,22 +128,44 @@ package_setup(packages, install_missing_packages = install_missing_packages,
 }
 cfg <- .read_yaml_utf8(.find_config())
 
+# Stock selection, effort, index-year, prediction-reference, balance, bridging and robustness
+# helpers.
+source(here::here("R", "index_helpers.R"))
+
+# --- Stock selection ----------------------------------------------------------------------
+# A project holds one or more stocks. With several, config.yaml has a SPECIES_SETTINGS block
+# keyed by the stock key (the file prefix of the numbered documents); each document sets
+# `index_species <- "<key>"` before sourcing this file, and that block is merged over the shared
+# settings (nested lists such as FINAL_MODEL merge key by key). A single-stock config without
+# SPECIES_SETTINGS is the one stock, keyed by STOCK_SLUG (or SPECIES_SLUG). Every stock writes to
+# its own output folder, <OUTPUT_DIR>/<key>, so fits and indices never overwrite each other.
+cfg <- select_stock(cfg, if (exists("index_species", inherits = TRUE)) index_species else NULL)
+index_species <- cfg$STOCK_KEY
+
 # yaml parses an unquoted whole number as an R integer, and an integer `cutoff` makes
 # sdmTMB::make_mesh() build one vertex per unique location (53 221 instead of 76 vertices for
 # one 14 683-haul dataset) with only a generic ">1000 vertices" warning. Coerce every
 # measurement-like setting to double here, once. CRS codes and row/year counts stay integer:
 # they are identifiers, and a row limit must not become 2.5e+05 in a SQL LIMIT. Add any new
 # numeric measurement setting to this list.
-for (.nm in c("OVER_CM", "GEAR_WIDTH", "GRID_KM", "MESH_CUTOFF_KM", "MAX_DEPTH",
-              "REFERENCE_MONTH")) {
+for (.nm in c("OVER_CM", "SENSITIVITY_OVER_CM", "GEAR_WIDTH", "GRID_KM", "MESH_CUTOFF_KM",
+              "MAX_DEPTH", "REFERENCE_MONTH")) {
   if (is.integer(cfg[[.nm]])) cfg[[.nm]] <- as.numeric(cfg[[.nm]])
 }
+if (is.integer(cfg$FINAL_MODEL$MESH_CUTOFF_KM))
+  cfg$FINAL_MODEL$MESH_CUTOFF_KM <- as.numeric(cfg$FINAL_MODEL$MESH_CUTOFF_KM)
 rm(.nm)
 
-# Effort, index-year, prediction-reference, balance, bridging and robustness helpers.
-source(here::here("R", "index_helpers.R"))
 # Commercial CPUE helpers (docs/sdmtmb/cpue).
 source(here::here("R", "cpue_helpers.R"))
+
+# Area names for the documents: "ICES subareas 1 and 2" / "ICES 1–2", or REGION.
+area_label <- if (length(cfg$STOCK_SUBAREAS)) {
+  paste("ICES subareas", paste(unlist(cfg$STOCK_SUBAREAS), collapse = " and "))
+} else cfg$REGION_LABEL %||% cfg$AREA_LABEL %||% cfg$REGION %||% "the stock area"
+area_short <- if (length(cfg$STOCK_SUBAREAS)) {
+  paste0("ICES ", paste(unlist(cfg$STOCK_SUBAREAS), collapse = "\u2013"))
+} else cfg$AREA_LABEL %||% cfg$REGION %||% ""
 
 # Derived convenience values.
 dt_crs         <- cfg$CRS
@@ -204,6 +237,12 @@ smooth_term <- function(var, data = NULL, k = 10) {
   paste0("s(", var, ")")
 }
 
+# Month term of the model (MONTH_TERM; INCLUDE_MONTH is the older true/false switch).
+month_term <- function(cfg) {
+  x <- cfg$MONTH_TERM %||% (if (isTRUE(cfg$INCLUDE_MONTH %||% TRUE)) "smooth" else "none")
+  match.arg(x, c("smooth", "factor", "none"))
+}
+
 # The fixed-effect terms this project's config implies, sized to `data` when it is given.
 # geartype stays in when there is >1 major gear type OR a single set gear width is used (so the
 # model absorbs the gear-width difference). Temperature is off by default (INCLUDE_TEMPERATURE).
@@ -215,9 +254,10 @@ model_terms <- function(cfg, has_multiple_gears = TRUE, data = NULL) {
   c(
     if (has_multiple_gears || !identical(cfg$GEAR_WIDTH, "per_gear")) "geartype",
     if (isTRUE(cfg$SURVEY_EFFECT) && several_surveys) "fsurvey",
-    # A month smooth with very uneven seasonal coverage can collapse (SD at 0, NaN SEs on every
-    # fixed effect, NaN index limits); INCLUDE_MONTH: false drops it.
-    if (isTRUE(cfg$INCLUDE_MONTH %||% TRUE)) smooth_term("month", data),
+    # MONTH_TERM: "smooth", "factor" or "none". A month smooth with very uneven seasonal
+    # coverage can collapse to a straight line (SD at 0, NaN SEs); a month factor needs
+    # positive hauls in every month. INCLUDE_MONTH: false is the older spelling of "none".
+    switch(month_term(cfg), smooth = smooth_term("month", data), factor = "fmonth", none = NULL),
     smooth_term("depth", data),
     if (isTRUE(cfg$INCLUDE_TEMPERATURE)) smooth_term("temperature", data),
     unlist(lapply(unlist(cfg$CATCHABILITY_TERMS), smooth_term, data = data))

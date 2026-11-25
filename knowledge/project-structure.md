@@ -1,7 +1,8 @@
 # The generated project structure
 
 `index-new-project` copies `project-template/` and stamps it with `config.yaml` to produce a
-**new project folder** for one species (or a small group of related species). This is the
+**new project folder** for one stock, or for several related stocks (e.g. two species for one
+benchmark) that share the data compilation and the documents. This is the
 "output" structure — the user's own repo. index-wise itself is never this structure.
 
 ```
@@ -17,8 +18,12 @@
 │   ├── plot_helpers.R    # Fixed cruise-series/gear colours, stock-area polygon
 │   ├── index_helpers.R   # Effort, index year, references, balance, bridging, robustness
 │   ├── cpue_helpers.R    # Commercial CPUE records, indices, diagnostics, bootstrap
-│   ├── report_helpers.R  # Narrative software citations from citation()
-│   └── report/           # Final-report computations (report_lib.R, report_compute.R, run_report.sh) and figures (report_plots.R); results cached in <OUTPUT_DIR>/report/
+│   ├── report_helpers.R  # Software citations, model data, CV folds and SE, stage tables
+│   ├── fishable_length.R # Fishable-length threshold from commercial lengths
+│   ├── run_models.sh     # Unattended steps 2-5 for one stock on the server (knowledge/pipeline.md)
+│   ├── validation/       # Model-selection stage runner (stage_lib.R, run_candidate.R, assemble_stage.R, run_species.sh, smoke_test.R) and sync_final_model.R; caches in <OUTPUT_DIR>/<stock>/selection/
+│   ├── report/           # Final-report computations (report_lib.R, report_compute.R, run_report.sh) and figures (report_plots.R); results cached in <OUTPUT_DIR>/<stock>/report/
+│   └── hpc/              # Optional cluster jobs for the selection (slurm/) and rename_caches.R
 ├── docs/
 │   ├── render.R         # Stage-aware HTML rendering
 │   ├── assets/          # references.bib, ICES JMS CSL, included static assets
@@ -26,20 +31,22 @@
 │   │   ├── <stock>-1-summary.qmd
 │   │   ├── <stock>-2-survey-selection.qmd
 │   │   └── <stock>-3-data.qmd
-│   ├── background/      # Stock background (stock-background.qmd)
+│   ├── background/      # <stock>-0-background.qmd: stock background and fishable length
 │   └── sdmtmb/          # sdmTMB model documents
-│       ├── fit/fit.qmd
-│       ├── validation/validate.qmd
-│       ├── cpue/cpue.qmd # optional commercial CPUE index (config CPUE:)
-│       └── <species>/   # report.qmd and optional *-section.qmd includes
+│       ├── fit/<stock>-4-fit.qmd
+│       ├── validation/<stock>-5-validate.qmd   # reads the R/validation caches
+│       ├── <stock>/<stock>-6-report.qmd        # reads the R/report caches
+│       ├── sections/    # *-section.qmd shared by the stock reports
+│       └── cpue/cpue.qmd # optional commercial CPUE index (config CPUE:)
+├── publish-site.sh       # Optional: copy the rendered HTML to a website repository (SITE_DIR)
 ├── data/
 │   ├── source/          # Local source data and supplied GIS polygons; ignored
-│   └── output/          # Fits, grids, predictions and indices; ignored
+│   └── output/<stock>/  # Fits, grids, predictions, selection and report caches; ignored
 ├── figures/             # Exported figures; ignored except README
 ├── logs/                # Temporary render logs; ignored except README
 ├── ai/
 │   ├── memory/          # Shared project memory: read MEMORY.md first
-│   ├── tests/           # Small validation checks and synthetic fixtures
+│   ├── tests/           # Checks: stock parity, AI statement, fishable biomass
 │   └── review/          # Reviews and audit outputs; ignored except README
 └── config/              # Tooling configuration, separate from analysis settings
 ```
@@ -61,7 +68,7 @@ docs/assessment-2027/{assets,background,data,sdmtmb}/   # later round
 `docs`, else `docs/benchmark` when `ASSESSMENT_MODEL` is set, else `docs`. R code builds paths as
 `here::here(cfg$DOCS_DIR %||% "docs", "assets", ...)`; YAML paths inside documents stay relative
 (`../assets/...` from `data/` and `background/`, `../../assets/...` from `sdmtmb/<report>/`), so
-they work in both layouts. Paths in this knowledge base such as `docs/sdmtmb/fit/fit.qmd` are
+they work in both layouts. Paths in this knowledge base such as `docs/sdmtmb/fit/<stock>-4-fit.qmd` are
 relative to the document root; read `docs/` as `DOCS_DIR`.
 
 Add `website/` only for projects with a website. Add numbered analysis scripts under `R/`
@@ -76,8 +83,15 @@ the method. All documents and their rendered outputs stay under `docs/`.
 - **`config.yaml` is the single source of truth** for species, `filter_sp`, surveys, response
   variables, length groups, study area / CRS / grid size / mesh cutoff, gear-width policy, and
   output paths. Documents read from it (via `R/0_setup.R`); they do not hard-code settings.
-- **Multiple species** → one `docs/sdmtmb/<species>/` folder each, sharing earlier reports under `docs/sdmtmb/` where the compiled dataset supports it. Otherwise scaffold one project
-  per species.
+- **Stocks.** The numbers give the reading order: `<stock>-0-background` … `<stock>-6-report`.
+  `<stock>` is the stock key: a `SPECIES_SETTINGS` entry, or `STOCK_SLUG` for a single stock
+  (default the species slug, plus the region slug for a split domain). Each document sets
+  `index_species <- "<stock>"` before sourcing `R/0_setup.R`, which merges that stock's
+  settings over the shared ones (`select_stock()`) and points `OUTPUT_DIR` to
+  `data/output/<stock>/`. With several stocks the first one's documents are the masters:
+  edit them and run `Rscript ai/tests/test-stock-parity.R write`; everything that differs
+  between stocks lives in `config.yaml`. Stocks with different data sources or assessments
+  are better as separate projects.
 - **Outputs cache to `data/output/`.** Expensive fits, prediction grids, predictions, and
   indices are saved there so re-renders load instead of recomputing (toggle-controlled — see
   `rendering.md`).
@@ -108,6 +122,15 @@ configs keep working. The optional `CPUE:` block configures the commercial CPUE 
 local extract (`file`, `landings_file`), `source`, `unit`, plausible `ranges`, core-fleet
 thresholds, `effort_treatment`, `engine` (glmmTMB/mgcv/sdmTMB), mesh and grid, the prediction
 `reference`, `final_month` and `bootstrap_n`.
+Several stocks: `SPECIES_SETTINGS` (one block per stock, merged over the shared keys).
+Model selection: `MESH_LADDER_KM` and the `SELECTION` block (`CV_TOP_N`, `MESH_TOL`, `GRID_TOL`,
+`WINDOW`, `GRID_LADDER_KM`, `IID_YEAR_ONLY`, `FIXED_EXTRA`), `MONTH_TERM`
+(`smooth`/`factor`/`none`), `REFERENCE_GEAR_MODEL`. Report: `FINAL_MODEL` (written by
+`R/validation/sync_final_model.R`), `FISHABLE_YEAR_EFFECT`, `SENSITIVITY_OVER_CM`,
+`SENSITIVITIES` (refits of type `drop`, `keep`, `offset`, `fishable_threshold`),
+`REGIONS_FILE`/`REGIONS` (regional split; ICES divisions without them),
+`SPICT_RECOMMENDED_INDEX`, `SITE_DIR` (optional website clone).
+
 For split domains also set `REGION`, `REGION_SLUG`, `REGION_FILE`, and `REGION_LAYER`. For
 high-latitude overview maps, optionally set `MAP_CRS` (default EPSG:3995, Arctic LAEA) and
 `MAP_SHAPEFILES` (default `Arctic`).

@@ -1,4 +1,4 @@
-<!-- Included by report.qmd. Leave-one-out influence of single cruises and hauls on the total
+<!-- Included by the stock reports (<stock>-6-report.qmd). Leave-one-out influence of single cruises and hauls on the total
 biomass (IID) index. Method: index-wise knowledge/influence-diagnostics.md. -->
 
 ## Influence of individual cruises and hauls {#sec-influence}

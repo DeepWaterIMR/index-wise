@@ -37,11 +37,16 @@ ok(all(abs(res$rho_biomass_fishable - res$biomass_fishable / res$swept_area) < 1
    "fishable density = fishable biomass / swept area")
 
 # --- 2. Real data --------------------------------------------------------------------------
-for (sp in "stock") {
-  cfg_txt <- readChar("config.yaml", file.info("config.yaml")$size, useBytes = TRUE)
-  Encoding(cfg_txt) <- "UTF-8"   # UTF-8 regardless of the R locale
-  cfg <- yaml::yaml.load(cfg_txt, eval.expr = FALSE)
-  out <- cfg$OUTPUT_DIR %||% "data/output"
+source("R/index_helpers.R")   # select_stock()
+cfg_txt <- readChar("config.yaml", file.info("config.yaml")$size, useBytes = TRUE)
+Encoding(cfg_txt) <- "UTF-8"   # UTF-8 regardless of the R locale
+cfg_all <- yaml::yaml.load(cfg_txt, eval.expr = FALSE)
+keys <- names(cfg_all$SPECIES_SETTINGS) %||% list(NULL)
+for (k in keys) {
+  cfg <- select_stock(cfg_all, k)
+  sp <- cfg$STOCK_KEY
+  out <- cfg$OUTPUT_DIR
+  if (!file.exists(file.path(out, "compiled-data.rds"))) { cat("SKIP", sp, "- no compiled data yet\n"); next }
   dt <- readRDS(file.path(out, "compiled-data.rds"))
   ln <- readRDS(file.path(out, "length-data.rds"))
   meta <- readRDS(file.path(out, "compile-metadata.rds"))

@@ -28,8 +28,16 @@ Ported to knowledge in phase A (2026-11-25):
   machines, benchmark dates and website.
 - Sigma2 findings were already in hpc-wise (`sigma2-olivia.md`, `estimation.md`).
 
-Not yet in the template (phase B of the plan): the two-species layout (`SPECIES_SETTINGS` merged by
-`R/0_setup.R`, `index_species` per document, twin documents written by a parity script, shared
-report `sections/`, documents numbered 0–6), the per-candidate stage runner (`R/validation/`), the
-config sync of the selected model, `run_models.sh`, report specification stamps and sensitivity
-refits with trend measures.
+Ported to the template in phase B (2026-11-25, from the project at 1a2203e): one code path for
+one or many stocks (`SPECIES_SETTINGS`, `select_stock()`, `index_species` per document, output in
+`data/output/<stock>/`), documents numbered 0–6 per stock with shared report `sections/`, the
+scaffold writing one set per stock and `ai/tests/test-stock-parity.R`; the per-candidate stage
+runner (`R/validation/`, settings in `SELECTION`), `sync_final_model.R`, `R/run_models.sh`,
+report specification stamps, configurable `SENSITIVITIES` with level ratio and trend change,
+assessment regions with an ICES-division fallback, optional Slurm jobs and `publish-site.sh`.
+The project documents were taken as the base and the template's generic features (index year,
+design balance, late components, bridging, robustness, CPUE) were kept.
+
+Not ported (project-specific): the ling/tusk values, the redfish regions file, the EcoS and
+cruise investigations, the data-review response, the Sigma2 journal and ledger. The document
+texts still assume SPiCT as the assessment model where they explain the IID + year structure.

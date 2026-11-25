@@ -1,4 +1,4 @@
-<!-- Included by report.qmd. Retrospective analysis of the two SPiCT candidates. -->
+<!-- Included by the stock reports (<stock>-6-report.qmd). Retrospective analysis of the two SPiCT candidates. -->
 
 ## Retrospective analysis {#sec-retro}
 

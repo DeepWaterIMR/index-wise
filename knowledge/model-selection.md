@@ -145,7 +145,7 @@ moves the end of the series.
    index. Use a smaller tolerance if the index CV is small.
 
 Report vertex count, fit time and fitted-object size beside the three summaries, and show the
-selection as one four-panel figure (`plot_mesh_selection()` in the template's `validate.qmd`):
+selection as one four-panel figure (`plot_mesh_selection()` in the template's `<stock>-5-validate.qmd`):
 (a) ΔELPD ± one paired SE; (b) the mesh $\Delta\rho$ and the
 terminal-year difference against the cutoff, with the tolerance band; (c) fit time labelled with
 the vertex count; (d) the index under every cutoff. The selected mesh is where (b) enters the
@@ -542,7 +542,7 @@ correlates only the spatial deviations from one year to the next, which helps a 
 year borrow its spatial pattern from its neighbours. The annual mean is not smoothed, so it
 meets the assessment constraint; the cost is a parameter per year and an AR1 correlation that
 can approach 1 when the year effect absorbs the common signal. Validate it beside the other
-two (`validate.qmd` stage 4: "AR1 + year effect", read against "AR1"), and include it whenever
+two (`<stock>-5-validate.qmd` stage 2: "AR1 + year effect", read against "AR1"), and include it whenever
 the index replaces one that used it. Build the year factor as a column (`fyear`), never as
 `factor(year)` in the formula, when `extra_time` is used.
 
@@ -585,7 +585,7 @@ record each in `ai/memory/`:
    fixed effect, the average catchability difference is forced into a penalised field. A factor
    in `spatial_varying` behaves differently between sdmTMB versions (the intercept column is
    now dropped automatically), which is why the template builds indicator columns. Treat the
-   field as a sensitivity (`validate.qmd`, `run_survey_field`), like the barrier mesh.
+   field as a sensitivity (`<stock>-5-validate.qmd`, `run_survey_field`), like the barrier mesh.
 4. **One index or two.** A combined index predicts at the reference survey. Separate seasonal
    indices predict the same fit once per survey and are separate assessment inputs with their
    own timing; never average them into one series after the fact.

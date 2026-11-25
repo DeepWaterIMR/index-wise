@@ -15,7 +15,10 @@ links that leave this skill's folder against the source skill there. Use absolut
 
 Goal: run expensive Quarto renders without wasting compute or blocking the chat. Read
 `knowledge/rendering.md`; for a full rerun of all steps, `knowledge/pipeline.md` (order of
-actions, caches to move away first, unattended driver).
+actions, caches to move away first). On the server, `R/run_models.sh <stock>` runs steps 2–5
+unattended (fit document, selection and validate document, config sync, report computations,
+report, summary) with one log line per step in `logs/pipeline/`; `Rscript docs/render.R <stage>
+[stock]` renders documents only.
 
 Before producing project files, read `knowledge/wise-writing.md` and the installed
 `academic-style`, `academic-conventions`, and `academic-data-report` skills. Apply their

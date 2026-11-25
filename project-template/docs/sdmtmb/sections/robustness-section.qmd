@@ -1,4 +1,4 @@
-<!-- Included by report.qmd. Shares its params. Robustness of the total index to the data it
+<!-- Included by the stock reports (<stock>-6-report.qmd). Shares its params. Robustness of the total index to the data it
 rests on (config ROBUSTNESS and LATE_COMPONENTS): whole-station subsampling within years,
 start-year peels, the terminal year without data that usually arrive late, and down-weighting
 of years with a known problem. Each run refits the selected model on a fresh mesh at the same

@@ -13,9 +13,9 @@ IMR-internal) repos:
 |---|---|
 | `docs/data/<stock>-2-survey-selection.qmd` | `ref-index-paper/docs/data/{Redfish bottom trawl, BioticExplorer_database, Compile_all_data}.Rmd` |
 | `docs/data/<stock>-3-data.qmd` | `ref-index-paper/docs/SI files/SI-Text-1-data.qmd` |
-| `docs/sdmtmb/fit/fit.qmd` | `ref-index-paper/docs/SI files/SI-Text-2-sdmTMB.qmd` |
-| `docs/sdmtmb/validation/validate.qmd` | `ref-index-paper/docs/SI files/SI-Text-3-model-selection.qmd` (staged selection, status-coded tables, index per candidate) |
-| `docs/sdmtmb/<species>/report.qmd` (+ `*-section.qmd`) | `ref-assessment-index/docs/benchmark/beaked/*` |
+| `docs/sdmtmb/fit/<stock>-4-fit.qmd` | `ref-index-paper/docs/SI files/SI-Text-2-sdmTMB.qmd` |
+| `docs/sdmtmb/validation/<stock>-5-validate.qmd` | `ref-index-paper/docs/SI files/SI-Text-3-model-selection.qmd` (staged selection, status-coded tables, index per candidate) |
+| `docs/sdmtmb/<stock>/<stock>-6-report.qmd` (+ `*-section.qmd`) | `ref-assessment-index/docs/benchmark/beaked/*` |
 
 As the routine is improved, index-wise's documents will diverge from this original
 material — that's expected. Use the table to find *background*, not to decide what the

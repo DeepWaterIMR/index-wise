@@ -210,23 +210,28 @@ compile_species_stations <- function(con, cfg, last_year) {
       .groups = "drop"
     )
 
-  # Duplicate / inconsistency diagnostic.
-  dupes <- dplyr::filter(sp_catch, count < lengthsamplecount | biomass < lengthsampleweight)
+  # Inconsistent records: the length sample exceeds the catch in count or weight.
+  inconsistent <- dplyr::filter(sp_catch, count < lengthsamplecount | biomass < lengthsampleweight)
   # Incomplete records: target recorded but no weight.
   incomplete <- dplyr::filter(sp_catch, weight_missing & biomass == 0)
 
   # Mission-level qualification (encountered-on-a-cruise).
   positive <- dplyr::filter(sp_catch, biomass > 0 | count > 0,
-                            !haul_id %in% c(dupes$haul_id, incomplete$haul_id))
+                            !haul_id %in% c(inconsistent$haul_id, incomplete$haul_id))
   qualifying_missions <- unique(roster$missionid[roster$haul_id %in% positive$haul_id])
 
   stations <- roster |>
     dplyr::filter(missionid %in% qualifying_missions,
-                  !haul_id %in% c(dupes$haul_id, incomplete$haul_id)) |>
+                  !haul_id %in% c(inconsistent$haul_id, incomplete$haul_id)) |>
     dplyr::left_join(dplyr::select(sp_catch, haul_id, biomass, count), by = "haul_id") |>
     dplyr::mutate(biomass = dplyr::coalesce(biomass, 0), count = dplyr::coalesce(count, 0)) |>
     label_surveys()
 
+  # Russian research vessels (nation codes 140 and 90): summarised before any exclusion, so the
+  # documents can state what INCLUDE_RUSSIAN: false removes.
+  russian <- dplyr::filter(stations, nation %in% c("140", "90"))
+  russian <- list(missions = dplyr::n_distinct(russian$missionid), hauls = nrow(russian),
+                  positive = sum(russian$biomass > 0))
   if (!isTRUE(cfg$INCLUDE_RUSSIAN))
     stations <- dplyr::filter(stations, !nation %in% c("140", "90"))
 
@@ -243,7 +248,9 @@ compile_species_stations <- function(con, cfg, last_year) {
       n_candidate_rows = n_candidate,
       n_valid_hauls = nrow(roster),
       n_qualifying_missions = length(qualifying_missions),
-      duplicates = dupes,
+      inconsistent = inconsistent,
+      duplicates = inconsistent,   # older name of `inconsistent`
+      russian = russian,
       incomplete = incomplete,
       multi_sample = multi_sample
     )

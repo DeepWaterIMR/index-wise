@@ -106,6 +106,9 @@ definition when seasons are combined, or how late-arriving data are handled).
 1. Choose a target directory for the new project (ask the user; a sibling of the current repo
    is typical). Never scaffold at a system root.
 2. Write `config.yaml` values from the answers (see fields in `knowledge/project-structure.md`).
+   For several stocks, put the identity keys (`SPECIES_NAME`, `SPECIES_SLUG`, `SPECIES_LATIN`,
+   `FILTER_SP`, `STOCK_CODE`, `OVER_CM`, ...) of each in a `SPECIES_SETTINGS` block keyed by its
+   stock key; the scaffold writes one set of numbered documents per stock.
 3. Run `scaffold.R` from the index-wise install:
 
    ```r

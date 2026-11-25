@@ -233,7 +233,7 @@ the assessment and show the class index beside it (`assessment-index-handoff.md`
   data:
   - `s(month)` with very uneven seasonal coverage: smooth SD at 0 in both delta components,
     tiny eigenvalues, NaN SEs on every fixed effect and NaN index limits. A survey-series term
-    usually already carries the season; drop the month smooth (`INCLUDE_MONTH: false`).
+    usually already carries the season; drop the month term (`MONTH_TERM: "none"`).
   - A spatial field with `sigma_O` near 0 and a huge `ln_tau_O` SE: switch it off for that
     component only (`SPATIAL: ["on", "off"]`).
   - An AR1 field with `rho` at 0.99–1.00 has absorbed the persistent spatial pattern; the

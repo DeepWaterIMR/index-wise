@@ -120,6 +120,38 @@ stopifnot(all(dir.exists(file.path(flat, "docs", c("assets", "background", "data
           length(list.files(file.path(flat, "docs"), "\\.qmd$", recursive = TRUE)) == length(qmds),
           !any(grepl("\\{\\{(SPECIES|REGION|STOCK|AREA|AUTHORS|AFFILIATIONS)", unlist(lapply(list.files(flat, "\\.(qmd|R|yml|yaml)$", recursive = TRUE,
             full.names = TRUE), readLines, warn = FALSE, encoding = "UTF-8")))))
+# Single stock: numbered documents with the stock key, its index_species, the key recorded.
+key <- .read_yaml_utf8(file.path(target, "config.yaml"))$STOCK_SLUG
+stopifnot(!is.null(key),
+          file.exists(file.path(target, docs_root, "sdmtmb", key, paste0(key, "-6-report.qmd"))),
+          file.exists(file.path(target, docs_root, "background", paste0(key, "-0-background.qmd"))),
+          !length(list.files(target, "STOCK", recursive = TRUE, include.dirs = TRUE)),
+          any(grepl(paste0('index_species <- "', key, '"'),
+                    readLines(file.path(target, docs_root, "data", paste0(key, "-1-summary.qmd"))), fixed = TRUE)))
+# Two stocks: one set of numbered documents each, stamped with each stock's identity; the
+# parity test passes on the scaffold and catches an edit of one stock only.
+cfg2 <- cfg
+cfg2$SPECIES_SETTINGS <- list(
+  ling = list(SPECIES_NAME = "Ling", SPECIES_SLUG = "ling", SPECIES_LATIN = "Molva molva", FILTER_SP = list("lange")),
+  tusk = list(SPECIES_NAME = "Tusk", SPECIES_SLUG = "tusk", SPECIES_LATIN = "Brosme brosme", FILTER_SP = list("brosme")))
+config2 <- file.path(workspace, "config-two.yaml")
+write_yaml_utf8(cfg2, config2)
+two <- file.path(workspace, "project-two")
+scaffold_index(config2, two, template = "project-template")
+num <- function(k) sort(sub(paste0("^.*/", k, "-"), "", list.files(file.path(two, docs_root), paste0("^", k, "-[0-9].*\\.qmd$"), recursive = TRUE)))
+stopifnot(length(num("ling")) == 7L, identical(num("ling"), num("tusk")),
+          dir.exists(file.path(two, docs_root, "sdmtmb", c("ling", "tusk"))),
+          any(grepl('index_species <- "tusk"', readLines(file.path(two, docs_root, "sdmtmb", "fit", "tusk-4-fit.qmd")), fixed = TRUE)),
+          any(grepl("^title: .*Tusk", readLines(file.path(two, docs_root, "data", "tusk-3-data.qmd"), encoding = "UTF-8"))))
+parity <- function() system2("Rscript", "ai/tests/test-stock-parity.R", stdout = FALSE, stderr = FALSE)
+old_wd <- setwd(two)
+stopifnot(parity() == 0L)
+f <- file.path(docs_root, "data", "tusk-3-data.qmd")
+writeLines(c(readLines(f), "extra line"), f)
+stopifnot(parity() != 0L)
+system2("Rscript", c("ai/tests/test-stock-parity.R", "write"), stdout = FALSE)
+stopifnot(parity() == 0L)
+setwd(old_wd)
 # Bad metadata must fail before creating a destination, including in dry-run mode.
 cfg$AUTHORS[[1]]$affiliation <- "missing"
 write_yaml_utf8(cfg, config_file)
@@ -136,7 +168,7 @@ stopifnot(any(grepl("@software-base-1", prose, fixed = TRUE)),
           sum(grepl("@Manual{software-base-1,", bib_lines, fixed = TRUE)) == 1,
           any(grepl("@Article{kept2020,", bib_lines, fixed = TRUE)))
 if ("--render" %in% commandArgs(TRUE)) {
-  path <- main[grepl("/fit/fit.qmd$", main)]
+  path <- main[grepl("/fit/[a-z0-9-]+-4-fit.qmd$", main)]
   original <- readLines(path)
   header_end <- which(original == "---")[2]
   fixture <- c(original[seq_len(header_end)], "", "# Purpose", "",

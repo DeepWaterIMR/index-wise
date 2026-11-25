@@ -45,6 +45,7 @@ csl: ../../assets/ices_jms.csl
 
 ```{r setup}
 knitr::opts_knit$set(root.dir = here::here())
+index_species <- "{{STOCK_KEY}}"   # the first stock of the project
 source(here::here("R", "0_setup.R"))
 cpue_cfg <- cfg$CPUE %||% list()
 cpue_dir <- file.path(out_dir, "cpue")

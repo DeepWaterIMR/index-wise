@@ -25,10 +25,17 @@ Before producing project files, read `knowledge/wise-writing.md` and the install
 `academic-style`, `academic-conventions`, and `academic-data-report` skills. Apply their
 conventions to every generated artifact; retain index-wise's scientific workflow.
 
-## Work in `docs/sdmtmb/validation/validate.qmd`
+## Run the stages on the server, then render `docs/sdmtmb/validation/<stock>-5-validate.qmd`
 
-Each stage has its own compute toggle and its own cache prefix. Adapt the candidate lists to
-the species and config. The order and its reasons are in `knowledge/model-selection.md`; in
+The stages run as server processes, one per candidate, with resumable caches
+(`R/validation/`; `knowledge/pipeline.md`): `R/validation/run_species.sh <stock>` in a screen
+session (or `R/hpc/slurm/driver.sh` on a cluster, with hpc-wise), after
+`SMOKE=1 Rscript R/validation/smoke_test.R <stock>` on any new machine. The validate document
+only reads `data/output/<stock>/selection/stage-*.rds`. Then
+`Rscript R/validation/sync_final_model.R <stock>` writes the selection into `config.yaml`
+(`FINAL_MODEL`, mesh, grid, smoothed structure). Candidate lists, shortlist size and
+tolerances are in `R/validation/stage_lib.R` and the `SELECTION` block of `config.yaml`;
+adapt them to the stock there, not in the document. The order and its reasons are in `knowledge/model-selection.md`; in
 short, start from the Step 2 model and settle the most expensive, most conditioning setting
 first:
 
@@ -89,13 +96,13 @@ stage mattered — a choice that does not move the index is not worth arguing ab
 - **State the full specification**, not a row label.
 - **Record the gap** when the carried-forward model is not the table's winner.
 
-## Toggles & rendering
+## Caches & rendering
 
-CV, mesh comparison and retros are the slowest steps — each is behind its own toggle, and
-`sdmTMB_selection(cache_dir =)` caches one file per candidate so an interrupted stage resumes.
-`only = "<candidate>"` spreads a long stage across R sessions when memory is the constraint.
-**Code-review before rendering**; render via `index-render` in a screen session with a log;
-**suggest running on a server**. Flip toggles to `FALSE` after the first successful render.
+Every candidate is cached (`sdmTMB_selection(cache_dir =)`), and the driver skips candidates
+whose log says `CANDIDATE DONE`, so a rerun resumes. Before a rerun with changed data, move the
+selection folder and `logs/validate/<stock>/` away (`knowledge/pipeline.md`). Saved folds are
+refused when the hauls change. **Code-review before rendering**; render via `index-render` in a
+screen session with a log, on the server.
 
 ## Output
 

@@ -3,6 +3,25 @@
 # field is read at run time by R/0_setup.R and used by the documents. Edit here, not in the
 # qmds.
 
+# --- Stocks -----------------------------------------------------------------------------
+# One stock: the identity keys below. Several stocks in one project (e.g. two species for one
+# benchmark): give each stock a block under SPECIES_SETTINGS, keyed by its stock key (the file
+# prefix of its documents and its output folder, data/output/<key>). A block overrides the
+# shared settings for that stock (nested lists such as FINAL_MODEL merge key by key); put in
+# it every setting that differs between the stocks. The documents of the first stock are the
+# masters; `Rscript ai/tests/test-stock-parity.R write` rewrites the others from them.
+# SPECIES_SETTINGS:
+#   ling:
+#     SPECIES_NAME: "Ling"
+#     SPECIES_SLUG: "ling"
+#     SPECIES_LATIN: "Molva molva"
+#     STOCK_CODE: "lin.27.1-2"
+#     FILTER_SP: ["lange"]
+#     OVER_CM: 67
+#     PREDICTION_REGION_FILE: "data/source/ling-prediction-region.gpkg"
+#   tusk:
+#     ...
+
 # --- Identity ---------------------------------------------------------------------------
 SPECIES_NAME:  "{{SPECIES_NAME}}"     # display name, e.g. "Beaked redfish"
 SPECIES_SLUG:  "{{SPECIES_SLUG}}"     # kebab-case slug for folders/files, e.g. "snabeluer"
@@ -51,6 +70,7 @@ EXCLUDE_CRUISES: []
 # --- Response & products ----------------------------------------------------------------
 RESPONSE: "biomass"                   # "biomass" (rho_biomass) or "abundance" (rho_abundance)
 OVER_CM: 30                           # threshold for the "over-X-cm biomass" product
+SENSITIVITY_OVER_CM: null             # alternative fishable threshold for the report sensitivity (e.g. the 50 %-of-mode rule)
 LENGTH_GROUPS: ["(0,10]", "(10,15]", "(15,20]", "(20,25]", "(25,30]", "(30,40]", "(40,Inf]"]
 
 # --- Gear width -------------------------------------------------------------------------
@@ -69,6 +89,7 @@ INDEX_YEAR_LABEL: "start"
 SURVEY_EFFECT: false                  # cruise-series catchability factor (fsurvey) in the model
 REFERENCE_SURVEY: null                # prediction reference series; null = most-sampled series
 REFERENCE_GEAR: null                  # prediction reference gear type; null = most-sampled gear
+REFERENCE_GEAR_MODEL: null            # reference trawl-model group if the selection uses fgear; null = most-sampled
 REFERENCE_MONTH: null                 # prediction reference month; set it to the month the main survey samples the bulk of the stock (knowledge/index-level-and-trend.md); null = most-sampled month
 CATCHABILITY_TERMS: []                # e.g. ["hour"] or ["sun_altitude"] for diel catchability
 CATCHABILITY_REFERENCE: {}            # e.g. {hour: 12}; a term without a value uses the median
@@ -102,6 +123,16 @@ MESH_CUTOFF_KM: 60                    # make_mesh cutoff (km)
 BARRIER: false                        # add a land barrier mesh?
 CV_FOLDS: 10                          # space-time block cross-validation folds (Step 3)
 CV_BLOCK_KM: null                     # block size (km); null = largest Matérn range of the Step 2 fit, rounded up to 50 km
+MESH_LADDER_KM: [15, 20, 30, 40, 50]  # mesh cutoffs compared in the selection (stage 1); per stock where different
+# Model selection (R/validation/, knowledge/model-selection.md). All keys optional.
+SELECTION:
+  CV_TOP_N: 3                         # candidates cross-validated after the AIC ranking
+  MESH_TOL: 0.05                      # mesh: index within 5 % of the best-ELPD cutoff
+  GRID_TOL: 0.01                      # grid: index within 1 % of the finest grid
+  WINDOW: 5                           # years in the end-of-series mean
+  GRID_LADDER_KM: [5, 10, 20, 30, 50, 100, 200]
+  IID_YEAR_ONLY: true                 # field stage decides among IID + year structures (index for SPiCT or another state-space model)
+  FIXED_EXTRA: ["month_smooth", "fsurvey", "fgear", "quadratic_depth"]  # extra fixed-effect candidates
 MAX_DEPTH: 1400                       # deepest grid cell to keep (m)
 MIN_DEPTH: null                       # shallowest grid cell to keep (m); null = no minimum
 
@@ -115,7 +146,8 @@ FAMILY: "delta_lognormal"             # delta_lognormal | delta_gamma | delta_lo
 SPATIAL: "on"                         # one value, or one per delta component, e.g. ["on", "off"]
 SPATIOTEMPORAL: "ar1"                 # ar1 | iid | rw | off
 YEAR_EFFECT: false                    # year factor (fyear) in the Step 2 model; true for a SPiCT-type base (IID + year)
-INCLUDE_MONTH: true                   # month smooth; switch off if it collapses (uneven seasons)
+MONTH_TERM: "smooth"                  # smooth | factor | none; a smooth collapses with few positive months, a factor needs positives in every month (knowledge/sdmtmb.md, first-fit symptoms)
+FISHABLE_YEAR_EFFECT: true            # false: fit the fishable (over OVER_CM) index without the year factor when it is too sparse
 INCLUDE_TEMPERATURE: false            # temperature smooth is OFF by default
 ASSESSMENT_MODEL: "SPiCT"             # what consumes the selected index
 SELECTED_INDEX: "Total biomass"       # exact name in the report's index_products list
@@ -138,8 +170,22 @@ FINAL_MODEL: null
 SMOOTHED_SPATIAL: "off"               # spatial field of the smoothed total-biomass index (no year factor)
 SMOOTHED_SPATIOTEMPORAL: "ar1"        # its spatiotemporal fields (selected among the smoothed candidates in validate.qmd)
 SPICT_CANDIDATE_INDICES: ["Total biomass (IID)", "Fishable biomass (IID)"]  # exported as assessment hand-offs
+SPICT_RECOMMENDED_INDEX: null         # the index project's recommendation (per stock); the assessment project decides (SELECTED_INDEX there)
 REPORT_SURVEYS: null                  # cruise series for the single-survey comparison; null = the three with most hauls
 REPORT_SUBAREAS: null                 # ICES subareas for the regional split, e.g. ["1", "2"]; null = all
+REGIONS_FILE: null                    # optional assessment regions (polygons with a `region` column) for the regional split
+REGIONS: null                         # regions to use, in this order; null = all in the file
+# Sensitivity refits in the report (R/report/report_lib.R, report_sensitivities()). null = the
+# swept-area offset refit, plus the fishable threshold when SENSITIVITY_OVER_CM is set.
+SENSITIVITIES: null
+#  - name: "sample-quality-2"         # cache name (sens-<name>.rds)
+#    label: "Without CoastalS sample-quality 2"
+#    type: "drop"                      # drop | keep | offset | fishable_threshold
+#    filter: {cruiseseries: ["CoastalS"], samplequality: ["2"]}
+#  - name: "major-series"
+#    label: "Major series only"
+#    type: "keep"
+#    filter: {cruiseseries: ["CoastalS", "WinterS", "EcoS"]}
 REGION_LABEL: null                    # how the report names the index area, e.g. "ICES subareas 1 and 2"
 N_WORKERS: 1                          # parallel refits (influence, survey comparison); forked on macOS/Linux
 INFLUENCE_REGION_COL: null            # optional grid column for index_by_region() in the influence section
@@ -182,5 +228,6 @@ CPUE:
 
 # --- Paths (relative to project root) ---------------------------------------------------
 OUTPUT_DIR: "data/output"
+SITE_DIR: null                        # optional local clone of a website repository for publish-site.sh
 REVIEW_DIR: "ai/review"
 SOURCE_DIR: "data/source"

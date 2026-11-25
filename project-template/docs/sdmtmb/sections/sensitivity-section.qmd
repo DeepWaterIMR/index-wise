@@ -1,0 +1,61 @@
+<!-- Included by the stock reports (<stock>-6-report.qmd). Sensitivity refits of the total and fishable
+biomass (IID) indices: data subsets, response with a swept-area offset, fishable threshold. -->
+
+## Sensitivity analyses {#sec-sens}
+
+```{r sens}
+sens_defs <- report_sensitivities(cfg)   # SENSITIVITIES in config.yaml
+sens_variants <- names(sens_defs)
+sens <- purrr::compact(stats::setNames(lapply(sens_variants, function(v) read_report_cache(ctx, paste0("sens-", v))), sens_variants))
+sens_tab <- purrr::imap_dfr(sens, function(x, v) dplyr::mutate(sensitivity_change(x), variant = v, label = x$label %||% v,
+                                                               product = x$product %||% total, removed = x$removed, all_ok = x$all_ok))
+# Leaving out the Other surveys (from the leave-one-survey-out refits) in the same terms
+loso_other <- read_report_cache(ctx, "loso")
+other_tab <- if (!is.null(loso_other) && "Other" %in% loso_other$index$id) {
+  x <- list(full = loso_other$full, index = dplyr::filter(loso_other$index, id == "Other"))
+  dplyr::mutate(sensitivity_change(x), variant = "no-other", label = "Without the Other surveys",
+                product = total, removed = sum(dt$cruiseseries == "Other"),
+                all_ok = loso_other$influence$all_ok[loso_other$influence$id == "Other"])
+}
+sens_all <- dplyr::bind_rows(sens_tab, other_tab)
+sens_of <- function(v, col) sens_all[[col]][sens_all$variant == v]
+```
+
+The model choices and the data selection were tested by refitting a model with one change at a time, with the same specification and mesh, and comparing its index with the index of the model fitted to all data. Only the trend is compared, because the level of a survey index depends on such choices and is not used in the assessment (see [Leave-one-survey-out](#leave-one-survey-out)): the **level ratio** is the geometric mean ratio of the two indices, and the **trend change** is the geometric mean absolute deviation of the yearly log ratios from their mean, zero for a pure change of level. The changes are:
+
+`r sens_desc <- c(drop = "the refit leaves out the hauls that match", keep = "the refit keeps only the hauls that match", offset = "the response is the catch (kg) with the log swept area as an offset, in the Poisson-link version of the selected family, so that the length of the tow also enters the probability of catching the species; with the swept-area density response, a short and a long empty tow carry the same information about the encounter probability", fishable_threshold = "the fishable biomass index with another length threshold, the fishable share of each haul recomputed from the length data"); filter_text <- function(f) paste(vapply(names(f), function(k) paste0(k, " ", paste(unlist(f[[k]]), collapse = ", ")), ""), collapse = " and "); paste0(vapply(sens_defs, function(d) paste0("- **", d$label %||% d$name, ".** ", lc_first(sens_desc[[d$type]]), if (d$type %in% c("drop", "keep")) paste0(" ", filter_text(d$filter)) else "", if (d$type == "fishable_threshold") paste0(" (", d$over_cm %||% cfg$SENSITIVITY_OVER_CM, " cm instead of ", cfg$OVER_CM, " cm; ", background_link, ")") else "", "."), ""), collapse = "\n")`
+- **Without the Other surveys.** The leave-one-survey-out refit without `Other` ([Leave-one-survey-out](#leave-one-survey-out)).
+
+<!-- Add the reason for each configured sensitivity (SENSITIVITIES in config.yaml) in a sentence after its item. -->
+
+`r if (nrow(sens_all)) paste0("The trend changes by ", list_values(paste0(pct(sens_all$trend_change), " (", lc_first(sens_all$label), ")")), " (@tbl-report-sens, @fig-report-sens).", if (any(!sens_all$all_ok %in% TRUE)) paste0(if (sum(!sens_all$all_ok %in% TRUE) == 1) " The refit " else " The refits ", list_values(lc_first(sens_all$label[!sens_all$all_ok %in% TRUE])), if (sum(!sens_all$all_ok %in% TRUE) == 1) " does" else " do", " not pass all sanity checks, so ", if (sum(!sens_all$all_ok %in% TRUE) == 1) "its comparison is" else "their comparisons are", " indicative.") else "", " A trend change below about 5 % is small compared with the standard error of the annual index; larger changes show which years depend on the choice (column Year of the table).") else "The sensitivity refits have not been computed yet."`
+
+```{r}
+#| label: tbl-report-sens
+#| eval: !expr 'nrow(sens_all) > 0'
+#| tbl-cap: "Sensitivity of the indices to single changes. Index: the index that was refitted. Hauls removed: hauls left out of the data. Level: geometric mean ratio of the refitted index to the index with all data. Trend change: geometric mean absolute deviation of the yearly log ratios from their mean. Year: year of the largest deviation. Sanity: the refit passed all sanity checks."
+sens_all |>
+  dplyr::transmute(Change = label, Index = lc_first(product), `Hauls removed` = n_fmt(removed),
+                   Level = round(level_ratio, 2), `Trend change` = pct(trend_change), Year = year_max,
+                   Sanity = all_ok) |>
+  knitr::kable()
+```
+
+```{r}
+#| label: fig-report-sens
+#| eval: !expr 'length(sens) > 0'
+#| fig-height: !expr 2.6 * ceiling(length(sens) / 2) + 0.6
+#| fig-cap: !expr 'paste0("Sensitivity refits of the ", sp_lc, " indices (orange) against the index fitted to all data (black), each divided by its mean so that the panels compare the trends. Bands: 95 % confidence intervals.")'
+purrr::imap_dfr(sens, function(x, v) dplyr::bind_rows(
+  dplyr::mutate(as.data.frame(x$full), model = "All data"),
+  dplyr::mutate(as.data.frame(x$index), model = "Refit")) |>
+    dplyr::mutate(dplyr::across(c(est, lwr, upr), ~ .x / mean(est)), .by = "model") |>
+    dplyr::mutate(panel = x$label)) |>
+  ggplot2::ggplot(ggplot2::aes(year, est, colour = model, fill = model)) +
+  ggplot2::geom_ribbon(ggplot2::aes(ymin = lwr, ymax = upr), alpha = 0.15, colour = NA) +
+  ggplot2::geom_line() +
+  ggplot2::facet_wrap(~panel, ncol = 2, scales = "free_y") +
+  ggplot2::scale_colour_manual(values = c("All data" = "black", "Refit" = "#D55E00"), aesthetics = c("colour", "fill")) +
+  ggplot2::labs(x = "Year", y = "Index / mean", colour = NULL, fill = NULL) +
+  ggplot2::theme_bw(base_size = 9) + ggplot2::theme(legend.position = "bottom")
+```

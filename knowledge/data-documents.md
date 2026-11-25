@@ -29,7 +29,7 @@ does not repeat survey selection (stock area, filter, surveys, gear tables, timi
    conversion, `LENGTH_LIMITS`, raising factor n/m); *Length-based data* (share formula,
    predicted weight at length, imputation hierarchy for positive hauls without lengths, which
    avoids false zeros from surveys that weighed but did not measure the catch; link to the
-   *Fishable length* section of `docs/background/stock-background.qmd` and to `ai/tests/test-fishable-biomass.R`).
+   *Fishable length* section of `docs/background/<stock>-0-background.qmd` and to `ai/tests/test-fishable-biomass.R`).
 3. **Analysis**
    - *Dataset overview*: metric table (station and individual level), responses by cruise
      series, and *Response distribution* (histogram of positive densities, log x, zero share per
@@ -59,7 +59,7 @@ does not repeat survey selection (stock area, filter, surveys, gear tables, timi
      `ai/review/<stock>-same-position-hauls.csv`).
 4. **Results and recommendations**, software, AI statement, references, script appendix.
 
-## `docs/background/stock-background.qmd`
+## `docs/background/<stock>-0-background.qmd`
 
 One background document per project (all stocks): purpose, current assessment and advice,
 management, other stocks of the species, implications for the indices, and a *Fishable length*

@@ -35,4 +35,5 @@ jobs:
           Rscript config/test-assessment-index-handoff.R
           Rscript config/test-index-helpers.R
           Rscript config/test-cpue-helpers.R
+          Rscript config/test-validation-helpers.R
           Rscript config/validate-scaffold.R

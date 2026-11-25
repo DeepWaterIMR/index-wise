@@ -1,0 +1,80 @@
+<!-- Included by the stock reports (<stock>-6-report.qmd). Regional contributions to the total biomass (IID) index. -->
+
+## Regional contributions to the index {#sec-regional}
+
+```{r region}
+reg_sf <- read_assessment_regions(cfg, dt_crs)
+cell_region <- dplyr::distinct(grid, X, Y, region)
+reg_used <- intersect(levels(cell_region$region), unique(as.character(cell_region$region)))
+reg_sf <- dplyr::filter(reg_sf, region %in% reg_used) |> dplyr::mutate(region = factor(region, levels = reg_used))
+reg_cols <- stats::setNames(c("#E69F00", "#56B4E9", "#009E73", "#CC79A7", "#0072B2", "#D55E00", "#999999")[seq_along(reg_used)], reg_used)
+haul_reg <- dt |>
+  dplyr::mutate(region = factor(assessment_region(dt, cfg, dt_crs), levels = reg_used)) |>
+  dplyr::count(year, region, name = "hauls")
+reg <- if (!is.null(post[[total]])) {
+  post[[total]]$pred |>
+    dplyr::mutate(est = exp(est)) |>
+    dplyr::left_join(cell_region, by = c("X", "Y")) |>
+    sdmTMBexperiments::index_by_region(region_col = "region", area = grid_cell_area_nmi2)
+}
+if (!is.null(reg)) {
+  reg_tab <- tibble::as_tibble(unclass(reg)) |> dplyr::mutate(region = factor(region, levels = reg_used))
+  reg_mean <- reg_tab |> dplyr::summarise(share = mean(share), .by = "region") |> dplyr::arrange(dplyr::desc(share))
+  reg_cor <- reg_tab |>
+    dplyr::left_join(dplyr::summarise(reg_tab, tot = sum(est), .by = "year"), by = "year") |>
+    dplyr::summarise(r = stats::cor(log(est), log(tot)), .by = "region")
+  first_last <- reg_tab |>
+    dplyr::summarise(early = mean(share[year < min(year) + 5]), late = mean(share[year > max(year) - 5]), .by = "region")
+  reg_top <- as.character(reg_mean$region[1])
+  reg_low_cor <- reg_cor |> dplyr::filter(r < 0.5)
+}
+```
+
+The total biomass index is the sum of the predicted biomass over the grid cells, so it can be split by area without refitting. The cells were assigned to `r if (is.null(cfg$REGIONS_FILE)) "the ICES divisions" else "the assessment regions of REGIONS_FILE"`, of which `r length(reg_used)` overlap the prediction region of `r sp_lc` (@fig-report-region-map), and the predicted biomass (without the bias correction) was summed by area and year (`r fn_doc("index_by_region")`). The split shows which areas carry the index and whether its trend comes from one area or from all of them, which matters because the survey coverage of the areas differs between series and years.
+
+`r if (!is.null(reg)) paste0("The ", reg_top, " holds on average ", pct(reg_mean$share[1]), " of the index, followed by ", list_values(paste0(reg_mean$region[-1], " (", pct(reg_mean$share[-1]), ")")), " (@fig-report-region). The share of the ", reg_top, " was ", pct(first_last$early[first_last$region == reg_top]), " in the first five years and ", pct(first_last$late[first_last$region == reg_top]), " in the last five. The log index of each area correlates with the log total index by r = ", paste0(sprintf("%.2f", reg_cor$r), " (", reg_cor$region, ")", collapse = ", "), if (nrow(reg_low_cor)) paste0("; the ", list_values(as.character(reg_low_cor$region)), if (nrow(reg_low_cor) == 1) " follows" else " follow", " the total index least, so ", if (nrow(reg_low_cor) == 1) "its" else "their", " trend differs from that of the stock as a whole") else "", ".", if (all(reg_cor$r > 0.95)) paste0(" The areas follow the total index closely because the predicted distribution changes little between years: the year-to-year change of the IID model comes mostly from the year factor, which scales all cells alike, and its spatiotemporal field (", st_txt(final$SPATIOTEMPORAL), ") has a small variance (@tbl-report-random).") else "") else "The regional split has not been computed yet."`
+
+```{r}
+#| label: fig-report-region-map
+#| eval: !expr '!is.null(reg)'
+#| dev: jpeg
+#| dev-args: !expr list(quality = 85)
+#| fig-height: 6
+#| fig-cap: !expr 'paste0("Areas used for the regional split of the ", sp_lc, " index (outlines) and the hauls in the model data (grey dots).")'
+reg_map_sf <- sf::st_transform(reg_sf, 4326)
+haul_pts <- sf::st_as_sf(dplyr::select(dt, lon, lat), coords = c("lon", "lat"), crs = 4326)
+ggOceanMaps::basemap(data = reg_map_sf, legends = FALSE, rotate = TRUE, land.col = "grey85",
+                     land.border.col = "grey60", base_size = 8) +
+  ggplot2::geom_sf(data = haul_pts, colour = "grey40", size = 0.05, alpha = 0.4) +
+  ggplot2::geom_sf(data = reg_map_sf, ggplot2::aes(colour = region), fill = NA, linewidth = 0.7) +
+  ggplot2::geom_sf_label(data = sf::st_point_on_surface(reg_map_sf), ggplot2::aes(label = region, colour = region),
+                         size = 2.6, fill = "white", alpha = 0.8, label.size = 0, show.legend = FALSE) +
+  ggplot2::scale_colour_manual(values = reg_cols, guide = "none") +
+  ggplot2::theme(axis.title = ggplot2::element_blank())
+```
+
+```{r}
+#| label: fig-report-region
+#| eval: !expr '!is.null(reg)'
+#| fig-height: 7
+#| fig-cap: !expr 'paste0("Regional composition of the total biomass (IID) index of ", sp_lc, " by area. A) Share of the index in each area by year. B) The index of each area divided by its own mean. C) Number of hauls in each area by year.")'
+a <- ggplot2::ggplot(reg_tab, ggplot2::aes(year, share, fill = region)) +
+  ggplot2::geom_area(colour = "white", linewidth = 0.2) +
+  ggplot2::scale_y_continuous(labels = scales::percent) +
+  ggplot2::scale_fill_manual(values = reg_cols) +
+  ggplot2::labs(x = NULL, y = "Share of index", fill = "Area") +
+  ggplot2::theme_bw(base_size = 9) + ggplot2::theme(legend.position = "none")
+b <- ggplot2::ggplot(reg_tab, ggplot2::aes(year, rel_mean, colour = region)) +
+  ggplot2::geom_hline(yintercept = 1, linetype = 2, colour = "grey50") +
+  ggplot2::geom_line() + ggplot2::geom_point(size = 0.7) +
+  ggplot2::scale_colour_manual(values = reg_cols) +
+  ggplot2::labs(x = NULL, y = "Index / mean", colour = "Area") +
+  ggplot2::theme_bw(base_size = 9) + ggplot2::theme(legend.position = "none")
+c <- ggplot2::ggplot(haul_reg, ggplot2::aes(year, hauls, fill = region)) +
+  ggplot2::geom_col(width = 0.85) +
+  ggplot2::scale_fill_manual(values = reg_cols) +
+  ggplot2::labs(x = "Year", y = "Hauls", fill = "Area") +
+  ggplot2::theme_bw(base_size = 9) + ggplot2::theme(legend.position = "bottom") +
+  ggplot2::guides(fill = ggplot2::guide_legend(nrow = 2))
+cowplot::plot_grid(a, b, c, ncol = 1, labels = "AUTO", rel_heights = c(1, 1, 1.35), align = "v", axis = "lr")
+```

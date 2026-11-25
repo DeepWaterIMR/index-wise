@@ -40,7 +40,8 @@ here. Reference data (species/surveys/gear) comes from the Biotic database via B
 
 **Scaffold mechanics:** only identity tokens (`{{SPECIES_NAME/SLUG/LATIN}}`) are stamped;
 every analytical setting lives in `config.yaml` and is read at run time by
-`project-template/R/0_setup.R`. `docs/SPECIES/` and `SPECIES-*` filenames are renamed to the
-slug.
+`project-template/R/0_setup.R`. Files named `STOCK-*` and the `sdmtmb/STOCK/` folder are
+written once per stock (`SPECIES_SETTINGS` keys, or `STOCK_SLUG`), each stamped with that
+stock's identity (since 0.2.5x; see [[third-project-lessons]]).
 
 Related: [[reference-sources]], [[conventions]].

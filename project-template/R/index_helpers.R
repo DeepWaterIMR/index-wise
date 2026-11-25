@@ -4,6 +4,37 @@
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
+# --- Stock selection ----------------------------------------------------------------------
+#' The configuration of one stock
+#'
+#' With several stocks, config.yaml has a SPECIES_SETTINGS block keyed by the stock key; the
+#' stock's block is merged over the shared settings (nested lists such as FINAL_MODEL merge key
+#' by key). A config without SPECIES_SETTINGS is one stock keyed by STOCK_SLUG (or
+#' SPECIES_SLUG). OUTPUT_DIR becomes <OUTPUT_DIR>/<key>.
+#' @param cfg The whole config.
+#' @param key Stock key (`index_species` of a document); may be NULL for a single stock.
+#' @return The stock's config, with STOCK_KEY and STOCK_KEYS added.
+select_stock <- function(cfg, key = NULL) {
+  stocks <- cfg$SPECIES_SETTINGS
+  if (is.null(stocks)) {
+    stocks <- list(list())
+    names(stocks) <- cfg$STOCK_SLUG %||% cfg$SPECIES_SLUG %||% "stock"
+  }
+  if (is.null(key)) {
+    if (length(stocks) > 1)
+      stop("Set `index_species` (one of: ", paste(names(stocks), collapse = ", "),
+           ") before sourcing R/0_setup.R.")
+    key <- names(stocks)[1]
+  }
+  if (!key %in% names(stocks))
+    stop("Unknown index_species '", key, "'. Use one of: ", paste(names(stocks), collapse = ", "))
+  out <- if (length(stocks[[key]])) utils::modifyList(cfg, stocks[[key]]) else cfg
+  out$STOCK_KEY <- key
+  out$STOCK_KEYS <- names(stocks)
+  out$OUTPUT_DIR <- file.path(cfg$OUTPUT_DIR %||% "data/output", key)
+  out
+}
+
 # --- Effort -----------------------------------------------------------------------------
 # Swept area in nmi^2 from tow distance (nmi) and effective width (m). Write the unit conversion
 # once and reuse it: a width in km multiplied by a km^2 -> nmi^2 factor looks plausible and is
@@ -66,7 +97,23 @@ prepare_model_data <- function(dt, cfg) {
     out$log_swept_area <- log(out$swept_area)
   }
   if ("cruiseseries" %in% names(out)) out$fsurvey <- factor(out$cruiseseries)
+  if ("gearname" %in% names(out)) out$fgear <- gear_model_group(out$gearname)
+  if ("month" %in% names(out)) out$fmonth <- factor(out$month)
   sdmTMB::add_utm_columns(out, ll_names = c("lon", "lat"), utm_crs = cfg$CRS)
+}
+
+# Trawl models grouped for the gear-model candidate of the model selection (IMR gear names):
+# the Campelen shrimp trawl with rockhopper (Rs) or bobbins (Rg) ground gear, the Alfredo and
+# Konsumtrål 60 ("Konsum 60") cod trawls, and the rest. Most models are nested in one survey
+# series, so read the confounding table before using the factor.
+gear_model_group <- function(gearname) {
+  g <- dplyr::case_when(
+    grepl("^Reketr", gearname) & grepl("Rs", gearname) ~ "Campelen Rs",
+    grepl("^Reketr", gearname) & grepl("Rg", gearname) ~ "Campelen Rg",
+    grepl("Alfredo", gearname) ~ "Alfredo",
+    grepl("Konsumtr", gearname) ~ "Konsum 60",   # ASCII: level names reach file names and logs
+    TRUE ~ "Other trawl")
+  factor(g)
 }
 
 # --- Prediction region ------------------------------------------------------------------
@@ -98,9 +145,11 @@ restrict_to_region <- function(dt, region) {
 }
 
 # Reference gear and month for the prediction grid: config values, else the most sampled level.
-# They set the level of the index, not its trend. A hard-coded month outside the surveyed
-# season extrapolates the month smooth.
-reference_gear <- function(dt, cfg) cfg$REFERENCE_GEAR %||% names(which.max(table(dt$geartype)))
+# They set the level of the index, not its trend (knowledge/index-level-and-trend.md). A month
+# outside the surveyed season extrapolates the month term; with a month factor confounded with
+# the survey series, the reference month ties the level to the series that sample in it.
+# Exact match: `cfg$REFERENCE_GEAR` would partially match REFERENCE_GEAR_MODEL.
+reference_gear <- function(dt, cfg) cfg[["REFERENCE_GEAR", exact = TRUE]] %||% names(which.max(table(dt$geartype)))
 reference_month <- function(dt, cfg) {
   as.integer(cfg$REFERENCE_MONTH %||% names(which.max(table(dt$month))))
 }
@@ -143,6 +192,10 @@ build_model_grid <- function(region, dt, cfg, resolution = cfg$GRID_KM) {
   grid$fyear <- factor(grid$year, levels = levels(dt$fyear))
   ref_month <- reference_month(dt, cfg)
   grid$geartype <- reference_gear(dt, cfg)
+  if ("fgear" %in% names(dt)) {
+    grid$fgear <- factor(cfg$REFERENCE_GEAR_MODEL %||% names(which.max(table(dt$fgear))),
+                         levels = levels(dt$fgear))
+  }
   grid$month <- ref_month
   grid$fmonth <- factor(ref_month, levels = levels(dt$fmonth))
   grid <- add_reference_levels(grid, dt, cfg)
