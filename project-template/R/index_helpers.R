@@ -134,9 +134,10 @@ add_reference_levels <- function(grid, dt, cfg) {
 # between land and MAX_DEPTH (MIN_DEPTH if set), repeated for every year from the first to the
 # last year of the data, with the year factor on the levels of the data and the reference gear,
 # month and catchability levels. Predictions on it are densities (log_swept_area = 0).
+# Cells without any neighbour (slivers of the region) are dropped (sdmTMBexperiments >= 0.1.12).
 build_model_grid <- function(region, dt, cfg, resolution = cfg$GRID_KM) {
   grid_base <- sdmTMBexperiments::make_prediction_grid(region, resolution = resolution,
-                                                       max_depth = cfg$MAX_DEPTH)
+                                                       max_depth = cfg$MAX_DEPTH, drop_isolated = TRUE)
   if (!is.null(cfg$MIN_DEPTH)) grid_base <- grid_base[grid_base$depth >= cfg$MIN_DEPTH, ]
   grid <- tidyr::crossing(as.data.frame(grid_base), year = seq(min(dt$year), max(dt$year)))
   grid$fyear <- factor(grid$year, levels = levels(dt$fyear))

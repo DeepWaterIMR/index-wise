@@ -154,3 +154,18 @@ report_par_table <- function(post, what = c("fixed", "ran_pars"), component_name
                    Estimate = fmt(x$estimate), `95 % CI` = ifelse(is.na(lo), "", paste0(fmt(lo), " – ", fmt(hi))))
   })
 }
+
+#' Upper axis limit from a reference series, rounded up to a readable value
+#'
+#' Used to keep wide confidence bands of other series from stretching an index axis: the limit
+#' is `mult` times the largest upper confidence limit of the reference, rounded up to a multiple
+#' of half a power of ten (e.g. 17.3 -> 20, 13 -> 15, 0.62 -> 0.65).
+#'
+#' @param upr Upper confidence limits of the reference series.
+#' @param mult Multiplier.
+#' @return A single number.
+axis_cap <- function(upr, mult = 1.2) {
+  u <- mult * max(upr, na.rm = TRUE)
+  step <- 10^floor(log10(u)) / 2
+  ceiling(u / step) * step
+}

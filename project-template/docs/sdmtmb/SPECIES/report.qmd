@@ -41,6 +41,12 @@ source(here::here("R", "report", "report_lib.R"))
 source(here::here("R", "report", "report_plots.R"))
 sp <- cfg$SPECIES_NAME
 sp_lc <- tolower(sp)
+# Link to the documentation of a package function.
+fn_doc <- function(fn, pkg = "sdmTMBexperiments", page = fn) {
+  base <- c(sdmTMBexperiments = "https://deepwaterimr.github.io/sdmTMBexperiments/reference/",
+            sdmTMB = "https://sdmtmb.github.io/sdmTMB/reference/")
+  paste0("[`", pkg, "::", fn, "()`](", base[[pkg]], page, ".html)")
+}
 n_fmt <- function(x) format(x, big.mark = " ", scientific = FALSE, trim = TRUE)
 pct <- function(x, acc = 1) scales::percent(x, accuracy = acc)
 lc_first <- function(x) paste0(tolower(substr(x, 1, 1)), substring(x, 2))

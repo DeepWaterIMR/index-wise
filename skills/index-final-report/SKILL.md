@@ -71,9 +71,13 @@ Sensitivity sections (`*-section.qmd`, included from `report.qmd`):
   (`index_by_region()`), with hauls per division.
 - `retro-section.qmd` — retrospective peels of the assessment candidates with Mohn's rho.
   Use `run_report_retro()`, not `sdmTMB_retro()`, for models with a year factor (see
-  `knowledge/sdmtmbexperiments.md`).
-- `survey-comparison-section.qmd` — single-survey indices (`compare_surveys()`, survey models
-  with AR1 fields and no year factor, Tweedie for series with < 100 positive hauls) and
+  `knowledge/sdmtmbexperiments.md`). Peels and leave-out refits drop the hauls of month levels
+  left without a positive catch (`drop_empty_levels()`); otherwise that coefficient is
+  unidentified, the Hessian is not positive definite and every peel fails the sanity checks.
+- `survey-comparison-section.qmd` — single-survey indices (`compare_surveys()`; each survey
+  model has the compiled IID specification with a year factor and no month term, so it could
+  serve as an alternative index; years without catches are dropped; a model that fails is
+  simplified by `survey_model_ladder()`: no spatiotemporal field, then Tweedie) and
   leave-one-survey-out refits (`sdmTMB_leave_out(id_col = "cruiseseries")`). Report which
   sanity checks the survey models fail.
 - `influence-section.qmd` — cruises and hauls screened with `density_share()`, then left out

@@ -4,7 +4,7 @@
 # resumes. Run in a screen session, passing LD_LIBRARY_PATH (screen drops it, and sf then
 # cannot load GDAL):
 #   screen -dmS report-<sp> bash -c "LD_LIBRARY_PATH='$LD_LIBRARY_PATH' R/report/run_report.sh <sp>"
-# R_LIBS points to the library with sdmTMBexperiments >= 0.1.11 (density_share() and the
+# R_LIBS points to the library with sdmTMBexperiments >= 0.1.12 (density_share(), drop_isolated and the
 # prediction-grid plot method); the selection caches stay on the version they were made with.
 set -u
 sp=${1:-report}   # a label for the logs; the species comes from config.yaml
@@ -24,7 +24,7 @@ run() {  # run <log name> <cache file> <args...>
 run grid prediction-grid.rds grid || exit 1
 # The three products in parallel; each post step follows its own fit.
 for p in total-iid fishable-iid total-ar1; do
-  ( run fit-$p fit-$p.rds fit $p && run post-$p post-$p.rds post $p ) &
+  ( run fit-$p fit-$p.rds fit $p && run post-$p post-$p.rds post $p && run index-bc-$p index-bc-$p.rds index-bc $p ) &
 done
 # The sensitivity analyses need the total biomass (IID) fit and its index.
 while [ ! -f "$C/post-total-iid.rds" ]; do

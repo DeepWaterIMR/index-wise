@@ -5,6 +5,7 @@
 #   Rscript R/report/report_compute.R <species> grid
 #   Rscript R/report/report_compute.R <species> fit <total-iid|fishable-iid|total-ar1>
 #   Rscript R/report/report_compute.R <species> post <total-iid|fishable-iid|total-ar1>
+#   Rscript R/report/report_compute.R <species> index-bc <total-iid|fishable-iid|total-ar1>
 #   Rscript R/report/report_compute.R <species> retro <total-iid|fishable-iid> [n_workers]
 #   Rscript R/report/report_compute.R <species> surveys [n_workers]
 #   Rscript R/report/report_compute.R <species> loso [n_workers]
@@ -13,8 +14,8 @@
 #
 # The model specification comes from config.yaml: FINAL_MODEL, the specification selected in
 # validate.qmd (without it, the config defaults with IID spatiotemporal fields), and SMOOTHED_*
-# for the smoothed index. The indices are computed without bias
-# correction; the final run adds it.
+# for the smoothed index. The final indices (index-bc step) are bias-corrected; the
+# diagnostics and sensitivity analyses use indices without bias correction.
 
 #' Shared settings of the report: model data, products and model settings
 #'
@@ -272,6 +273,28 @@ run_report_post <- function(ctx, label, grid, nsim = 100) {
   invisible(out)
 }
 
+#' Bias-corrected index of one product
+#'
+#' The final indices are computed with the bias correction of the retransformation of the random
+#' effects (`bias_correct = TRUE` in `sdmTMB::get_index()`; Thorson and Kristensen 2016). The
+#' other results of the report use the uncorrected index of `run_report_post()`.
+#'
+#' @param ctx Report context.
+#' @param label Product name.
+#' @param grid Report grid.
+#' @return The index (cached as index-bc-<file>.rds) with the fitting time in minutes.
+run_report_index_bc <- function(ctx, label, grid) {
+  s <- ctx$products[[label]]
+  fit <- readRDS(report_fit_file(ctx, s$file))
+  g <- grid_for_fit(grid, fit)
+  if ("fmonth" %in% names(g)) g$fmonth <- factor(g$fmonth, levels = levels(fit$data$fmonth))
+  t0 <- Sys.time()
+  index <- predict_index(fit, g, area = grid_cell_area_nmi2, bias_correct = TRUE)
+  attr(index, "minutes") <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
+  saveRDS(index, report_cache(ctx, paste0("index-bc-", s$file)))
+  invisible(index)
+}
+
 #' Observed and simulated catches, summarised for the predicted-distribution figures
 #'
 #' @param d Model data (`fit$data`).
@@ -302,10 +325,33 @@ simulation_summary <- function(d, sims) {
 
 # --- Sensitivity analyses -------------------------------------------------------------------
 
+#' Drop hauls in factor levels without any positive catch
+#'
+#' A subset of the data (a retrospective peel, a leave-out refit) can leave a level of a
+#' factor covariate with hauls but no positive catch. Its coefficient in the positive
+#' component then has no data, and in the encounter component it tends to minus infinity,
+#' so the Hessian is not positive definite. Such hauls carry no information on either
+#' coefficient beyond "always empty", so they are removed and the level dropped.
+#'
+#' @param data Model data with the response in `value`.
+#' @param cols Factor columns to check.
+#' @return `data` without those hauls; the number of removed hauls in `attr(, "n_dropped")`.
+drop_empty_levels <- function(data, cols = "fmonth") {
+  n0 <- nrow(data)
+  for (v in intersect(cols, names(data))) {
+    has_pos <- tapply(data$value > 0, data[[v]], any)
+    data <- data[as.character(data[[v]]) %in% names(has_pos)[has_pos %in% TRUE], , drop = FALSE]
+  }
+  data <- droplevels(data)
+  attr(data, "n_dropped") <- n0 - nrow(data)
+  data
+}
+
 #' Retrospective analysis with the year factor re-levelled in each peel
 #'
 #' `sdmTMBexperiments::sdmTMB_retro()` keeps the removed years as empty levels of a year
-#' factor, which leaves their coefficients without data; this version drops them. Each peel
+#' factor, which leaves their coefficients without data; this version drops them, and the hauls
+#' of month levels left without a positive catch (`drop_empty_levels()`). Each peel
 #' keeps the mesh of the full model, so the peels differ only in the data.
 #'
 #' @param ctx Report context.
@@ -324,42 +370,49 @@ run_report_retro <- function(ctx, label, grid, nyears = 6, n_workers = 6) {
   on.exit(future::plan(future::sequential), add = TRUE)
   res <- future.apply::future_lapply(years, function(k) {
     sk <- s
-    sk$data <- droplevels(fit$data[fit$data$year <= k, , drop = FALSE])
+    sk$data <- drop_empty_levels(fit$data[fit$data$year <= k, , drop = FALSE])
     mesh <- sdmTMB::make_mesh(sk$data, xy_cols = c("X", "Y"), mesh = fit$spde$mesh)
     m <- try(fit_report_product(sk, ctx, mesh = mesh), silent = TRUE)
     if (inherits(m, "try-error")) {
       return(list(index = data.frame(year = sort(unique(sk$data$year)), est = NA_real_,
                                      lwr = NA_real_, upr = NA_real_, se = NA_real_, type = "crashed"),
-                  ok = FALSE, minutes = NA_real_))
+                  ok = FALSE, minutes = NA_real_, n_dropped = attr(sk$data, "n_dropped")))
     }
     g <- grid_for_fit(grid, m)
     if ("fmonth" %in% names(g)) g$fmonth <- factor(g$fmonth, levels = levels(m$data$fmonth))
     idx <- predict_index(m, g, area = grid_cell_area_nmi2, bias_correct = FALSE)
     idx$type <- "ok"
-    list(index = idx, ok = report_passes(m), minutes = attr(m, "fit_minutes"))
+    list(index = idx, ok = report_passes(m), minutes = attr(m, "fit_minutes"),
+         n_dropped = attr(sk$data, "n_dropped"))
   }, future.seed = TRUE)
   out <- lapply(res, function(r) list(index = r$index))
   names(out) <- paste0("peel ", seq_along(years) - 1, ": ", years)
   class(out) <- "sdmTMB_retro"
   attr(out, "peels") <- tibble::tibble(peel = names(out), year = years,
                                        all_ok = vapply(res, `[[`, logical(1), "ok"),
-                                       minutes = vapply(res, `[[`, numeric(1), "minutes"))
+                                       minutes = vapply(res, `[[`, numeric(1), "minutes"),
+                                       n_dropped = vapply(res, function(r) as.integer(r$n_dropped %||% 0L), integer(1)))
   saveRDS(out, report_cache(ctx, paste0("retro-", s$file)))
   invisible(out)
 }
 
 #' Indices fitted to single survey series, compared with the compiled total biomass index
 #'
-#' Each survey model has a depth smooth, a spatial field and AR1 spatiotemporal fields without
-#' a year factor, so that years with few catches borrow from their neighbours; series with
-#' fewer than 100 hauls with the species use the Tweedie family, the others the compiled
-#' family. The survey indices are therefore smoothed, and the comparison is about trends.
+#' Each survey model has the specification of the compiled total biomass (IID) model: a year
+#' factor, a depth smooth, the spatial field and the IID spatiotemporal field of FINAL_MODEL,
+#' and the compiled family. The month term is left out, because each series samples one season.
+#' The survey indices are therefore comparable with the compiled index year by year and could
+#' serve as alternative indices. Years in which a series caught no fish are left out of its
+#' model (a year factor cannot be estimated from zeros only). A survey model that fails to fit
+#' or does not pass the sanity checks is simplified in steps (`survey_model_ladder()`) until one
+#' passes; the step used is recorded.
 #'
 #' @param ctx Report context.
 #' @param grid Report grid.
 #' @param surveys Cruise series to compare.
 #' @param n_workers Parallel survey fits.
-#' @return An `sdmTMB_survey_comparison` object.
+#' @return An `sdmTMB_survey_comparison` object with the attributes `steps` (ladder step of each
+#'   survey), `families`, `years_dropped` and `attempts` (every attempt and its outcome).
 run_report_surveys <- function(ctx, grid, surveys = cfg$REPORT_SURVEYS, n_workers = 3) {
   fit <- readRDS(report_fit_file(ctx, "total-iid"))
   index <- readRDS(report_cache(ctx, "post-total-iid"))$index
@@ -367,27 +420,102 @@ run_report_surveys <- function(ctx, grid, surveys = cfg$REPORT_SURVEYS, n_worker
   if ("fmonth" %in% names(g)) g$fmonth <- factor(g$fmonth, levels = levels(fit$data$fmonth))
   # Default: the three series with most hauls.
   if (is.null(surveys)) surveys <- names(utils::head(sort(table(fit$data$cruiseseries), decreasing = TRUE), 3))
-  specs <- lapply(surveys, function(sv) {
+  ladder <- survey_model_ladder(ctx)
+  one_survey <- function(sv) {
     d <- fit$data[fit$data$cruiseseries == sv, ]
-    yrs <- sort(unique(d$year))
-    gaps <- setdiff(seq(min(yrs), max(yrs)), yrs)
-    sparse <- sum(d$value > 0) < 100
-    sdmTMBexperiments::survey_spec(
-      sv, formula = value ~ 0 + s(depth),
-      family = if (sparse) sdmTMB::tweedie() else ctx$family,
-      spatial = "on", spatiotemporal = "ar1",
-      extra_time = if (length(gaps)) gaps else NULL)
-  })
-  names(specs) <- surveys
-  comp <- sdmTMBexperiments::compare_surveys(
-    data = fit$data, compiled_index = index, compiled_model = fit, surveys = specs,
-    newdata = g, object_crs = sf::st_crs(dt_crs), mesh_cutoff = ctx$final$MESH_CUTOFF_KM,
-    offset_col = model_offset,
-    area = grid_cell_area_nmi2, bias_correct = FALSE, n_workers = n_workers,
-    reference_label = "Compiled", verbose = FALSE)
-  attr(comp, "families") <- vapply(specs, function(x) x$family$family[1], character(1))
+    pos_years <- sort(unique(d$year[d$value > 0]))
+    dropped <- setdiff(sort(unique(d$year)), pos_years)
+    attempts <- list()
+    best <- NULL
+    for (step in names(ladder)) {
+      st <- ladder[[step]]
+      spec <- sdmTMBexperiments::survey_spec(
+        sv, formula = st$formula, family = st$family, spatial = st$spatial,
+        spatiotemporal = st$spatiotemporal,
+        filter = function(x) droplevels(x[x$year %in% pos_years, , drop = FALSE]))
+      comp <- try(sdmTMBexperiments::compare_surveys(
+        data = fit$data, compiled_index = index, compiled_model = fit,
+        surveys = stats::setNames(list(spec), sv), newdata = g, object_crs = sf::st_crs(dt_crs),
+        mesh_cutoff = ctx$final$MESH_CUTOFF_KM, offset_col = model_offset,
+        area = grid_cell_area_nmi2, bias_correct = FALSE,
+        n_workers = 1, reference_label = "Compiled", verbose = FALSE), silent = TRUE)
+      fitted <- !inherits(comp, "try-error") && !all(is.na(comp$sanity[[sv]]))
+      ok <- fitted && isTRUE(comp$sanity[[sv]][rownames(comp$sanity) == "all_ok"])
+      attempts[[step]] <- tibble::tibble(survey = sv, step = step, fitted = fitted, all_ok = ok,
+                                         error = if (inherits(comp, "try-error")) conditionMessage(attr(comp, "condition")) else NA_character_)
+      if (fitted && is.null(best)) best <- list(comp = comp, step = step)
+      if (ok) {
+        best <- list(comp = comp, step = step)
+        break
+      }
+    }
+    if (is.null(best)) best <- list(comp = comp, step = NA_character_)
+    list(comp = best$comp, step = best$step, family = if (is.na(best$step)) NA_character_ else ladder[[best$step]]$family_name,
+         dropped = dropped, attempts = dplyr::bind_rows(attempts))
+  }
+  future::plan(future::multicore, workers = n_workers)
+  on.exit(future::plan(future::sequential), add = TRUE)
+  res <- future.apply::future_lapply(surveys, one_survey, future.seed = TRUE)
+  names(res) <- surveys
+  comp <- merge_survey_comparisons(lapply(res, `[[`, "comp"), surveys)
+  attr(comp, "steps") <- vapply(res, `[[`, character(1), "step")
+  attr(comp, "families") <- vapply(res, `[[`, character(1), "family")
+  attr(comp, "years_dropped") <- lapply(res, `[[`, "dropped")
+  attr(comp, "attempts") <- dplyr::bind_rows(lapply(res, `[[`, "attempts"))
+  attr(comp, "ladder") <- vapply(ladder, `[[`, character(1), "description")
   saveRDS(comp, report_cache(ctx, "surveys"))
   invisible(comp)
+}
+
+#' Simplification steps of the single-survey models
+#'
+#' @param ctx Report context.
+#' @return A named list of steps, each with formula, family, fields and a description.
+survey_model_ladder <- function(ctx) {
+  form <- value ~ 0 + fyear + s(depth)
+  as_component <- function(x) if (length(x) == 1L) x[[1]] else as.list(unlist(x))
+  list(
+    compiled = list(formula = form, family = ctx$family, family_name = ctx$final$FAMILY,
+                    spatial = as_component(ctx$final$SPATIAL),
+                    spatiotemporal = as_component(ctx$final$SPATIOTEMPORAL),
+                    description = "the specification of the compiled model"),
+    spatial_only = list(formula = form, family = ctx$family, family_name = ctx$final$FAMILY,
+                        spatial = "on", spatiotemporal = "off",
+                        description = "without the spatiotemporal field"),
+    tweedie = list(formula = form, family = sdmTMB::tweedie(), family_name = "tweedie",
+                   spatial = "on", spatiotemporal = "off",
+                   description = "with the Tweedie family and without the spatiotemporal field")
+  )
+}
+
+#' Combine single-survey comparisons into one `sdmTMB_survey_comparison` object
+#'
+#' @param comps Named list of `compare_surveys()` results, one survey each.
+#' @param surveys Survey labels, in order.
+#' @return An `sdmTMB_survey_comparison` object.
+merge_survey_comparisons <- function(comps, surveys) {
+  ok <- stats::setNames(!vapply(comps, inherits, logical(1), "try-error"), surveys)
+  first <- comps[[which(ok)[1]]]
+  ref <- attr(first, "reference_label")
+  sanity <- do.call(cbind, lapply(surveys, function(sv) {
+    x <- if (ok[[sv]]) comps[[sv]]$sanity[, sv, drop = FALSE]
+    if (is.null(x)) x <- stats::setNames(data.frame(rep(NA, nrow(first$sanity)), row.names = rownames(first$sanity)), sv)
+    x
+  }))
+  out <- list(
+    sanity = sanity,
+    settings = dplyr::bind_rows(lapply(comps[ok], `[[`, "settings")),
+    index = dplyr::bind_rows(
+      dplyr::filter(first$index, .data$model == ref, .data$domain == "full"),
+      dplyr::bind_rows(lapply(comps[ok], function(x) dplyr::filter(x$index, !(.data$model == ref & .data$domain == "full"))))),
+    grid = stats::setNames(lapply(surveys[ok], function(sv) comps[[sv]]$grid[[sv]]), surveys[ok])
+  )
+  class(out) <- "sdmTMB_survey_comparison"
+  attr(out, "crs") <- attr(first, "crs")
+  attr(out, "coord_multiplier") <- attr(first, "coord_multiplier")
+  attr(out, "reference_label") <- ref
+  attr(out, "surveys") <- surveys
+  out
 }
 
 #' Leave-out refits with unused factor levels dropped
@@ -419,7 +547,7 @@ report_leave_out <- function(ctx, label, grid, id_col, ids = NULL, n_workers = 7
   res <- future.apply::future_lapply(ids, function(k) {
     keep <- as.character(dat[[id_col]]) != k
     sk <- s
-    sk$data <- droplevels(dat[keep, , drop = FALSE])
+    sk$data <- drop_empty_levels(dat[keep, , drop = FALSE])
     removed_years <- setdiff(data_years, sk$data$year)
     out <- try({
       mesh <- sdmTMB::make_mesh(sk$data, xy_cols = c("X", "Y"), mesh = fit$spde$mesh)
@@ -497,40 +625,84 @@ run_report_loso <- function(ctx, grid, n_workers = 7) {
 #' Influence of individual cruises and hauls on the total biomass (IID) index
 #'
 #' Candidates are screened without refitting with `density_share()`: the cruises with the
-#' largest share of a year's summed density relative to their share of the hauls, and the
-#' hauls with the largest share of a year's summed density. Each candidate is then left out in
-#' turn and the model refitted (`sdmTMB_leave_out()`).
+#' largest share of a year's summed density relative to their share of the hauls (candidates
+#' for a positive influence), the cruises with the smallest such ratio among those holding at
+#' least 10 % of a year's hauls (candidates for a negative influence: many hauls with little
+#' fish), and the hauls with the largest share of a year's summed density. Each candidate is
+#' then left out in turn and the model refitted. Refits already in the cache are reused, so
+#' adding candidates refits only the new ones.
 #'
 #' @param ctx Report context.
 #' @param grid Report grid.
-#' @param n_cruises,n_hauls Number of candidates refitted.
+#' @param n_cruises,n_low_cruises,n_hauls Number of candidates refitted.
 #' @param n_workers Parallel refits.
 #' @return A list with the screens and the two leave-out results.
-run_report_influence <- function(ctx, grid, n_cruises = 10, n_hauls = 10, n_workers = 10) {
+run_report_influence <- function(ctx, grid, n_cruises = 10, n_low_cruises = 5, n_hauls = 10, n_workers = 10) {
   fit <- readRDS(report_fit_file(ctx, "total-iid"))
-  g <- grid_for_fit(grid, fit)
-  if ("fmonth" %in% names(g)) g$fmonth <- factor(g$fmonth, levels = levels(fit$data$fmonth))
   d <- fit$data
   d$unit_effort <- 1   # the response is already a swept-area density
   cruise_screen <- sdmTMBexperiments::density_share(d, value_col = "value", effort_col = "unit_effort",
                                                     group_col = "cruise_id") |>
     dplyr::mutate(ratio = .data$share / .data$haul_share)
-  cruise_ids <- cruise_screen |>
+  high_ids <- cruise_screen |>
     dplyr::filter(.data$share >= 0.1, .data$haul_share < 1) |>
     dplyr::arrange(dplyr::desc(.data$ratio)) |>
     dplyr::distinct(.data$cruise_id) |>
     utils::head(n_cruises) |>
+    dplyr::pull(.data$cruise_id)
+  low_ids <- cruise_screen |>
+    dplyr::filter(.data$haul_share >= 0.1, .data$haul_share < 1, !.data$cruise_id %in% high_ids) |>
+    dplyr::arrange(.data$ratio) |>
+    dplyr::distinct(.data$cruise_id) |>
+    utils::head(n_low_cruises) |>
     dplyr::pull(.data$cruise_id)
   haul_screen <- sdmTMBexperiments::density_share(d, value_col = "value", effort_col = "unit_effort")
   haul_ids <- haul_screen |>
     dplyr::arrange(dplyr::desc(.data$share)) |>
     utils::head(n_hauls) |>
     dplyr::pull(.data$haul_id)
-  lo <- function(ids, col) {
-    report_leave_out(ctx, "Total biomass (IID)", grid, id_col = col, ids = ids, n_workers = n_workers)
+  old <- read_report_cache(ctx, "influence")
+  lo <- function(ids, col, previous) {
+    ids <- as.character(ids)
+    done <- if (!is.null(previous)) intersect(ids, previous$influence$id) else character()
+    todo <- setdiff(ids, done)
+    new <- if (length(todo)) report_leave_out(ctx, "Total biomass (IID)", grid, id_col = col, ids = todo, n_workers = n_workers)
+    merge_leave_out(previous, new, ids)
   }
   out <- list(cruise_screen = cruise_screen, haul_screen = haul_screen,
-              cruise = lo(cruise_ids, "cruise_id"), haul = lo(as.character(haul_ids), "haul_id"))
+              cruise = lo(c(high_ids, low_ids), "cruise_id", old$cruise),
+              haul = lo(haul_ids, "haul_id", old$haul),
+              low_cruises = low_ids)
   saveRDS(out, report_cache(ctx, "influence"))
   invisible(out)
+}
+
+#' Combine cached and new leave-out refits, keeping the units in `ids`
+#'
+#' @param a,b `sdmTMB_leave_out` objects (either may be NULL).
+#' @param ids Units to keep.
+#' @return An `sdmTMB_leave_out` object.
+merge_leave_out <- function(a, b, ids) {
+  parts <- purrr::compact(list(a, b))
+  out <- parts[[1]]
+  out$index <- dplyr::bind_rows(lapply(parts, `[[`, "index")) |> dplyr::filter(.data$id %in% ids)
+  out$influence <- dplyr::bind_rows(lapply(parts, `[[`, "influence")) |>
+    dplyr::filter(.data$id %in% ids) |>
+    dplyr::distinct(.data$id, .keep_all = TRUE) |>
+    dplyr::arrange(dplyr::desc(.data$influence))
+  out
+}
+
+#' Mean absolute change of the index without each unit of a leave-out analysis
+#'
+#' @param lo An `sdmTMB_leave_out` object (with `ratio` in `index` and `id_years` in
+#'   `influence`).
+#' @return A tibble with `id` and `mean_abs_change`, the geometric mean absolute change
+#'   `exp(mean(abs(log(ratio)))) - 1` over the years the unit has data.
+leave_out_mean_change <- function(lo) {
+  lo$index |>
+    dplyr::left_join(dplyr::select(lo$influence, "id", "id_years"), by = "id") |>
+    dplyr::filter(purrr::map2_lgl(.data$year, .data$id_years, ~ .x %in% .y),
+                  !is.na(.data$ratio), .data$ratio > 0) |>
+    dplyr::summarise(mean_abs_change = exp(mean(abs(log(.data$ratio)))) - 1, .by = "id")
 }

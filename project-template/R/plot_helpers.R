@@ -109,18 +109,27 @@ read_stock_area <- function(cfg, crs = 3995, cap = TRUE) {
     sf::st_sf(area = paste("ICES", paste(cfg$STOCK_SUBAREAS, collapse = " and ")), geometry = _)
 }
 
-#' Compact month ranges
+#' Compact ranges of consecutive integers (months, years)
+#'
+#' @param x Integers, possibly repeated and unsorted.
+#' @param last_and Join the last range with "and" (for prose) rather than a comma.
+#' @return One string, e.g. "1995–1996, 1998–2002, 2005 and 2007–2008".
+format_ranges <- function(x, last_and = TRUE) {
+  x <- sort(unique(stats::na.omit(as.integer(x))))
+  if (!length(x)) return("")
+  runs <- split(x, cumsum(c(1, diff(x) != 1)))
+  parts <- vapply(runs, function(r) {
+    if (length(r) == 1) as.character(r) else paste0(r[1], "–", r[length(r)])
+  }, character(1), USE.NAMES = FALSE)
+  if (!last_and || length(parts) < 2) return(paste(parts, collapse = ", "))
+  paste(paste(parts[-length(parts)], collapse = ", "), "and", parts[length(parts)])
+}
+
+#' Compact month ranges, e.g. "1–3, 8–12"
 #'
 #' @param m Integer months (1–12), possibly repeated.
-#' @return One string, e.g. "1–3, 8–12" for months 1, 2, 3, 8, 9, 10, 11, 12.
-format_months <- function(m) {
-  m <- sort(unique(stats::na.omit(as.integer(m))))
-  if (!length(m)) return("")
-  runs <- split(m, cumsum(c(1, diff(m) != 1)))
-  paste(vapply(runs, function(r) {
-    if (length(r) == 1) as.character(r) else paste0(r[1], "–", r[length(r)])
-  }, character(1)), collapse = ", ")
-}
+#' @return One string.
+format_months <- function(m) format_ranges(m, last_and = FALSE)
 
 #' Height (inches) of a ggOceanMaps map so the HTML figure has no empty space
 #'

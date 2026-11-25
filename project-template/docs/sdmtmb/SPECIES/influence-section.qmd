@@ -8,9 +8,13 @@ infl <- read_report_cache(ctx, "influence")
 flag_infl <- 0.1
 flag_lev <- 2
 if (!is.null(infl)) {
-  cr <- infl$cruise$influence
+  low_ids <- infl$low_cruises %||% character()
+  cr <- infl$cruise$influence |>
+    dplyr::left_join(leave_out_mean_change(infl$cruise), by = "id") |>
+    dplyr::mutate(screen = ifelse(id %in% low_ids, "low", "high"))
   ha <- infl$haul$influence
-  cr_flag <- dplyr::filter(cr, influence >= flag_infl, leverage >= flag_lev)
+  cr_flag <- dplyr::filter(cr, abs(influence) >= flag_infl, abs(leverage) >= flag_lev)
+  cr_neg <- dplyr::filter(cr, influence <= -0.01) |> dplyr::arrange(influence)
   ha_flag <- dplyr::filter(ha, abs(influence) >= flag_infl)
   cruise_info <- dt |>
     dplyr::summarise(series = paste(unique(cruiseseries), collapse = "/"), year = min(year),
@@ -18,13 +22,27 @@ if (!is.null(infl)) {
                      positive = sum(value > 0), .by = "cruise_id")
   haul_info <- dt |>
     dplyr::transmute(id = as.character(haul_id), year, series = cruiseseries, depth = round(depth),
-                     density = round(value), lon = round(lon, 2), lat = round(lat, 2))
+                     count, biomass, distance, density = round(value), lon = round(lon, 2), lat = round(lat, 2))
+  # Does the year of a flagged cruise stand out in the index? Ratio of the year's index to the
+  # geometric mean of the neighbouring years (the total biomass index without bias correction).
+  idx_tot <- post[[total]]$index
+  spike_of <- function(y) {
+    nb <- idx_tot$est[idx_tot$year %in% c(y - 1, y + 1)]
+    idx_tot$est[idx_tot$year == y] / exp(mean(log(nb)))
+  }
+  # A cruise can only create a spike in the direction of its influence: a high spike if it raises
+  # the index, a dip if it lowers it.
+  spike_limit <- 1.5
+  flag_years <- cruise_info$year[match(cr_flag$id, cruise_info$cruise_id)]
+  spikes <- vapply(flag_years, spike_of, numeric(1))
+  spikes[!is.finite(spikes)] <- 1
+  anomalous <- (cr_flag$influence > 0 & spikes >= spike_limit) | (cr_flag$influence < 0 & spikes <= 1 / spike_limit)
 }
 ```
 
-A single cruise or haul can move a survey index when it samples a high-density area that other hauls of the year do not cover. To find such cases, the candidates were first screened without refitting (`sdmTMBexperiments::density_share()`): for cruises, the share of the year's summed haul densities divided by the cruise's share of the year's hauls, and for hauls, the share of the year's summed densities. `r if (!is.null(infl)) paste0("The ", nrow(cr), " cruises with the highest ratio among those holding at least 10 % of a year's summed density, and the ", nrow(ha), " hauls with the largest shares, were then") else "The candidates were then"` left out one at a time and the total biomass model refitted with the same specification and mesh (`sdmTMBexperiments::sdmTMB_leave_out()`). As for the survey series, the influence is one minus the geometric mean ratio of the index without the cruise or haul to the index with all data, over the years it has data. Leverage divides the influence by the cruise's share of the hauls in those years: a value well above one marks a cruise that moves the index far more than its sample size warrants. Cruises with an influence of at least `r flag_infl` and a leverage of at least `r flag_lev` are flagged.
+A single cruise or haul can move a survey index when it samples a high-density area that other hauls of the year do not cover, or, in the other direction, when it has many empty hauls in an area that the rest of the data predict to be dense. To find such cases, the candidates were first screened without refitting (`r fn_doc("density_share")`): for cruises, the share of the year's summed haul densities divided by the cruise's share of the year's hauls, and for hauls, the share of the year's summed densities. `r if (!is.null(infl)) paste0("The ", sum(cr$screen == "high"), " cruises with the highest ratio among those holding at least 10 % of a year's summed density (candidates for a positive influence), the ", sum(cr$screen == "low"), " cruises with the lowest ratio among those holding at least 10 % of a year's hauls (candidates for a negative influence), and the ", nrow(ha), " hauls with the largest shares were then") else "The candidates were then"` left out one at a time and the total biomass model refitted with the same specification and mesh (`r fn_doc("sdmTMB_leave_out")`). The influence and the mean absolute change are defined as for the survey series ([Leave-one-survey-out](#leave-one-survey-out)): 0 means no change, a positive influence that the cruise or haul raises the index (0.3: the index is on average 30 % lower without it) and a negative one that it lowers the index (−0.3: the index is on average 30 % higher without it). Leverage divides the influence by the cruise's share of the hauls in its year: a value well above one (or below minus one) marks a cruise that moves the index far more than its sample size warrants. Cruises with an absolute influence of at least `r flag_infl` and an absolute leverage of at least `r flag_lev` are flagged.
 
-`r if (!is.null(infl)) paste0(if (nrow(cr_flag)) paste0(nrow(cr_flag), " of the ", nrow(cr), " tested cruises are flagged (@tbl-report-cruise-flag): ", list_values(paste0(cr_flag$id, " (influence ", round(cr_flag$influence, 2), ", leverage ", round(cr_flag$leverage, 1), ")")), ". ") else paste0("None of the ", nrow(cr), " tested cruises reaches an influence of ", flag_infl, " with a leverage of ", flag_lev, " (@fig-report-cruise). "), "The largest single-year change from leaving out a cruise is ", pct(max(cr$max_abs_change, na.rm = TRUE)), " (", cr$id[which.max(cr$max_abs_change)], ", ", cr$year_max_change[which.max(cr$max_abs_change)], "). ", if (nrow(ha_flag)) paste0(nrow(ha_flag), " of the ", nrow(ha), " tested hauls change the index of their year by at least ", pct(flag_infl), " (@tbl-report-haul). ") else paste0("No single haul changes the index of its year by ", pct(flag_infl), " or more; the largest change is ", pct(max(abs(ha$influence), na.rm = TRUE)), " (@tbl-report-haul). "), "No cruise or haul is excluded on these results: an exclusion would need a reason in the data, such as a gear or sampling problem, rather than its effect on the index.") else "The influence analysis has not been computed yet."`
+`r if (!is.null(infl)) paste0(if (nrow(cr_flag)) paste0("Of the ", nrow(cr), " tested cruises, ", nrow(cr_flag), if (nrow(cr_flag) == 1) " is" else " are", " flagged (@fig-report-cruise, @tbl-report-cruise-flag): ", list_values(paste0(cr_flag$id, " (influence ", round(cr_flag$influence, 2), ", leverage ", round(cr_flag$leverage, 1), ")")), ". ") else paste0("None of the ", nrow(cr), " tested cruises reaches an absolute influence of ", flag_infl, " with an absolute leverage of ", flag_lev, " (@fig-report-cruise, @tbl-report-cruise-flag). "), if (nrow(cr_neg)) paste0("The strongest negative influence is ", round(cr_neg$influence[1], 2), " (", cr_neg$id[1], "): without it the index of its year is ", pct(-cr_neg$influence[1]), " higher. ") else "No tested cruise lowers the index. ", "The largest single-year change from leaving out a cruise is ", pct(max(cr$max_abs_change, na.rm = TRUE)), " (", cr$id[which.max(cr$max_abs_change)], ", ", cr$year_max_change[which.max(cr$max_abs_change)], "). ", if (nrow(ha_flag)) paste0(nrow(ha_flag), " of the ", nrow(ha), " tested hauls change the index of their year by at least ", pct(flag_infl), " (@tbl-report-haul). ") else paste0("No single haul changes the index of its year by ", pct(flag_infl), " or more; the largest change is ", pct(max(abs(ha$influence), na.rm = TRUE)), " (@tbl-report-haul). "), "The catches of the tested hauls show whether a haul is an outlier or a large catch from a dense area. ", if (nrow(cr_flag) && !any(anomalous)) paste0("Although the flagged cruises move the index of their year, they do not create anomalous spikes: a cruise that raises the index would matter if its year stood out above its neighbours, and one that lowers it if its year stood out below them, and the index of ", format_ranges(flag_years), " is ", round(min(spikes), 2), "–", round(max(spikes), 2), " times the geometric mean of the neighbouring years", if (any(spikes <= 1 / spike_limit & cr_flag$influence > 0)) paste0(" (", format_ranges(flag_years[spikes <= 1 / spike_limit & cr_flag$influence > 0]), " is a low year, which the flagged cruise raises rather than lowers)") else "", ". No cruise or haul therefore needs to be removed.") else if (nrow(cr_flag)) paste0("The index stands out from its neighbouring years in the direction of the influence of the flagged cruise in ", format_ranges(flag_years[anomalous]), " (more than ", spike_limit, " times, or less than 1/", spike_limit, " of, the geometric mean of the neighbouring years); the flagged cruises of those years should be checked for a gear or sampling problem before the index is used.") else "No cruise or haul needs to be removed.") else "The influence analysis has not been computed yet."`
 
 ```{r}
 #| label: fig-report-cruise
@@ -37,23 +55,25 @@ plot(infl$cruise, type = "leverage", influence_limit = flag_infl, leverage_limit
 ```{r}
 #| label: tbl-report-cruise-flag
 #| eval: !expr '!is.null(infl)'
-#| tbl-cap: "Tested cruises (platform and cruise number) and their leave-one-out influence on the total biomass (IID) index. Haul share: the cruise's share of the hauls in its year. Max change: largest absolute relative change of the index in a year. Sanity: the refit passed all sanity checks."
+#| tbl-cap: "Tested cruises (platform and cruise number) and their leave-one-out influence on the total biomass (IID) index. Screen: high, selected for a large density share relative to the haul share (candidates for a positive influence); low, selected for a small one (candidates for a negative influence). Haul share: the cruise's share of the hauls in its year. Mean change: geometric mean absolute change of the index over the years of the cruise. Max change: largest absolute relative change of the index in a year. Sanity: the refit passed all sanity checks."
 cr |>
   dplyr::left_join(cruise_info, by = c("id" = "cruise_id")) |>
-  dplyr::transmute(Cruise = id, Series = series, Year = year, Months = months, Hauls = hauls,
+  dplyr::transmute(Cruise = id, Screen = screen, Series = series, Year = year, Months = months, Hauls = hauls,
                    `With catch` = positive, `Haul share` = round(haul_share, 3),
                    Influence = round(influence, 3), Leverage = round(leverage, 2),
-                   `Max change` = round(max_abs_change, 3), Sanity = all_ok) |>
+                   `Mean change` = round(mean_abs_change, 3), `Max change` = round(max_abs_change, 3),
+                   Sanity = all_ok) |>
   knitr::kable()
 ```
 
 ```{r}
 #| label: tbl-report-haul
 #| eval: !expr '!is.null(infl)'
-#| tbl-cap: !expr 'paste0("Tested hauls (the largest shares of the summed density of their year) and their leave-one-out influence on the index of their year. Density: haul biomass density (kg/nmi²); depth in m.")'
+#| tbl-cap: !expr 'paste0("Tested hauls (the largest shares of the summed density of their year) and their leave-one-out influence on the index of their year. Count and catch: number and weight (kg) of ", sp_lc, " in the haul; distance: trawled distance (nmi); density: haul biomass density (kg/nmi²); depth in m.")'
 ha |>
   dplyr::left_join(haul_info, by = "id") |>
   dplyr::transmute(Haul = id, Year = year, Series = series, Lon = lon, Lat = lat, Depth = depth,
+                   Count = count, `Catch (kg)` = round(biomass, 1), `Distance (nmi)` = round(distance, 2),
                    Density = n_fmt(density), Influence = round(influence, 3), Sanity = all_ok) |>
   knitr::kable()
 ```

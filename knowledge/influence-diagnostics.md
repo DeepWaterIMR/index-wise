@@ -44,6 +44,17 @@ data as `extra_time`. Two levels:
   cruises were one-off or auxiliary cruises covering areas that few other cruises sample
   (continental slope, coast), often with few positive hauls.
 
+**Reading the influence** (`1 - exp(mean(log(ratio)))` over the unit's years, ratio = index
+without / with the unit): 0 = no change; positive = the unit raises the index (0.2: the index is
+20 % lower without it; 1: the whole index came from it); negative = the unit lowers it (−0.25:
+25 % higher without it), typically many empty or poor hauls in an area the other data predict
+to be dense. The density-share screen ranks units by a large density share, so it only finds
+positive candidates; screen the lowest ratios among units with a large share of the hauls to
+find negative ones. Because the influence averages log ratios over years, a unit that raises
+some years and lowers others has influence near zero: also report the mean absolute change
+`exp(mean(abs(log(ratio)))) - 1`. A series with the most data need not have the largest
+influence; influence measures dependence, not contribution.
+
 Model structure changes how an anomaly propagates, so report both:
 
 - `iid` spatiotemporal field + factor year: nothing links the year to its neighbours, so that
