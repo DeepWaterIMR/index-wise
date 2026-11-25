@@ -258,7 +258,7 @@ run_candidate <- function(species, stage, name, phase, n_workers = 10) {
   print(sel$table)
   # The index of each fitted candidate, cached beside the fit.
   fit <- sel$fits[[1]]
-  idx_file <- file.path(s$sel_dir, paste0(args$cache_prefix, "-", sdmTMBexperiments:::.selection_slug(name), "-index.rds"))
+  idx_file <- cache_file(s, args$cache_prefix, name, "-index")
   if (!is.null(fit) && !file.exists(idx_file)) {
     idx <- try(predict_index(fit, s$grid, area = grid_cell_area_nmi2, bias_correct = FALSE))
     if (!inherits(idx, "try-error")) saveRDS(idx, idx_file)
@@ -266,11 +266,24 @@ run_candidate <- function(species, stage, name, phase, n_workers = 10) {
   invisible(sel)
 }
 
+# Cache file of a candidate, as sdmTMB_selection() names it. sdmTMBexperiments >= 0.1.13 uses an
+# R-version-independent hash; a cache written under the older rlang-hash name is renamed to the
+# current name on first use, as sdmTMB_selection() does.
+cache_file <- function(s, prefix, name, suffix = "") {
+  ns <- asNamespace("sdmTMBexperiments")
+  f <- file.path(s$sel_dir, paste0(prefix, "-", ns$.selection_slug(name), suffix, ".rds"))
+  if (!file.exists(f) && exists(".legacy_selection_slug", envir = ns)) {
+    old <- file.path(s$sel_dir, paste0(prefix, "-", ns$.legacy_selection_slug(name), suffix, ".rds"))
+    if (file.exists(old) && old != f) file.rename(old, f)
+  }
+  f
+}
+
 # Read every cached candidate of a stage into one selection-like object.
 read_stage <- function(s, stage, names, with_cv = FALSE) {
   prefix <- if (stage == "mesh") "mesh-spacetime" else paste0("v-", stage)
   rd <- function(nm, suffix) {
-    f <- file.path(s$sel_dir, paste0(prefix, "-", sdmTMBexperiments:::.selection_slug(nm), suffix, ".rds"))
+    f <- cache_file(s, prefix, nm, suffix)
     if (file.exists(f)) readRDS(f) else NULL
   }
   fits <- lapply(names, function(nm) rd(nm, "")$fit)

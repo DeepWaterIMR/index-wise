@@ -1,7 +1,8 @@
-# Rename selection caches copied from a cluster (e.g. Olivia) to the names this R session expects. The cache file
-# name ends in substr(rlang::hash(candidate name), 1, 6), and that hash differs between R/rlang
-# versions (Olivia R 4.4.2 vs Eucleia R 4.6.1), so copied caches are otherwise not found and
-# would be refitted.
+# Rename selection caches copied from a cluster (e.g. Olivia) to the names this R session expects.
+# Needed only for caches written by sdmTMBexperiments <= 0.1.12, whose file names ended in
+# substr(rlang::hash(candidate name), 1, 6): that hash differs between R/rlang versions (R 4.4.2
+# vs R 4.6.1), so copied caches were otherwise not found and would be refitted. Since 0.1.13 the
+# names use an R-version-independent hash.
 #   Rscript R/hpc/rename_caches.R <species>
 a <- commandArgs(trailingOnly = TRUE)
 source(here::here("R", "validation", "stage_lib.R"))

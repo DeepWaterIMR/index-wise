@@ -82,8 +82,10 @@ Rules:
   (with folds and barrier land), stage logs, report folder. Keep them until the new results are
   checked.
 - **Cache names that contain a hash of an R object differ between R and rlang versions.** Caches
-  copied from a cluster with another R version are then invisible and get recomputed. Rename
-  them on arrival or hash plain strings (hpc-wise `sigma2-olivia.md`).
+  copied from a cluster with another R version are then invisible and get recomputed.
+  sdmTMBexperiments >= 0.1.13 names selection caches with an R-version-independent hash and
+  renames caches under the old names on first use; caches copied from another R version that
+  were written by 0.1.12 or older need `R/hpc/rename_caches.R` once (hpc-wise `sigma2-olivia.md`).
 - **Do not compare cross-validation results across fold sets** (`model-selection.md`).
 
 ## Reruns of one piece
