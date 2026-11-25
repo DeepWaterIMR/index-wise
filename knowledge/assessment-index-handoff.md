@@ -41,3 +41,9 @@ An `.rds` file (default `assessment-index.rds`) holding a list:
   `spatiotemporal = "iid"` and year as a fixed effect, so the assessment model does not receive a
   pre-smoothed series (see `model-selection.md`); record the structure carried in
   `metadata$provenance`.
+- When several candidate indices are exported (e.g. total and fishable biomass), the choice of
+  the assessed index belongs to the assessment project (`SELECTED_INDEX` there). The index
+  project may state a recommendation with its reason; a class index that cannot carry the year
+  factor is a weak candidate.
+- Set `timing` from the prediction reference month, not from the survey mean
+  (`index-level-and-trend.md`).

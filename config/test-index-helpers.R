@@ -96,4 +96,14 @@ fake_fit <- list(time = "year", data = data.frame(year = c(2001, 2003), fyear = 
 g <- grid_for_fit(data.frame(year = 2001:2003), fake_fit)
 stopifnot(identical(g$year, c(2001L, 2003L)), identical(levels(g$fyear), c("2001", "2003")))
 
+# --- Paired CV standard error with block groups ------------------------------------------
+rh <- new.env()
+sys.source("project-template/R/report_helpers.R", envir = rh)
+d <- c(1, 1, -1, -1, 2, NA)
+grp <- c("a", "a", "b", "b", "c", "c")
+stopifnot(all.equal(rh$paired_se(d), sqrt(5) * sd(d[1:5])),
+          all.equal(rh$paired_se(d, grp), sqrt(3) * sd(c(2, -2, 2))),
+          identical(rh$cv_groups(data.frame(X = c(10, 260), Y = c(0, 0), year = 2020), 250),
+                    c("0 0 2020", "1 0 2020")))
+
 message("Synthetic index-helper checks passed.")

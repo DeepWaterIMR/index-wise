@@ -26,4 +26,7 @@ series merely because one of its surveys qualifies.
 - [ ] **Step 4 — Final report + export** (`docs/sdmtmb/{{SPECIES_SLUG}}/report.qmd`). Products,
   selected index, export path.  _<notes>_
 
+**Order of actions for a full rerun:** follow index-wise `knowledge/pipeline.md`; record here
+any project-specific step (machines, sync commands, caches to move away).
+
 **Cached outputs in `data/output/`:** _<list files so re-renders can load them>_.

@@ -138,6 +138,10 @@ Shared knowledge lives in `knowledge/`:
 - `packages.md` — the package ecosystem and install lines.
 - `project-structure.md` — the structure of the generated project folder.
 - `rendering.md` — Quarto rendering, screen sessions, logs, toggles, figure formats.
+- `pipeline.md` — order of actions for a full rerun, laptop/server split, cache inventory and
+  guards, unattended driver.
+- `index-level-and-trend.md` — why only the index trend counts, the prediction reference month,
+  and reporting a level ratio beside a trend change.
 
 ---
 

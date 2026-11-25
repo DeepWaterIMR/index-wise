@@ -166,11 +166,15 @@ load_cv_folds <- function(dt, cfg, fit_file, sel_dir) {
 #' Paired cross-validation comparison
 #'
 #' Every candidate of a cross-validated sdmTMB_selection() is scored on the same held-out hauls,
-#' so the ELPD difference is summed haul by haul and its standard error is
-#' sqrt(n) * sd of the per-haul differences (Vehtari et al. 2017).
+#' so the ELPD difference is summed haul by haul. Its standard error is computed from the sums
+#' over the space-time block groups (`group`, see cv_groups()): hauls of one square-year group
+#' are held out together and their differences are correlated, so the haul-level SE
+#' sqrt(n) * sd(d) (Vehtari et al. 2017) is too small. Without `group` the haul-level SE is used.
 #' @param sel An sdmTMB_selection() result with `cv`.
 #' @param ref Reference candidate; the best by ELPD when NULL.
-cv_paired <- function(sel, ref = NULL) {
+#' @param group Optional block group of each haul (cv_groups()), in the order of the CV data.
+#' @return A tibble with model, elpd, delta_elpd, se_delta and n.
+cv_paired <- function(sel, ref = NULL, group = NULL) {
   ll <- lapply(sel$cv, function(x) if (is.null(x)) NULL else x$data$cv_loglik)
   ll <- ll[!vapply(ll, is.null, logical(1))]
   elpd <- vapply(ll, sum, numeric(1), na.rm = TRUE)
@@ -179,7 +183,28 @@ cv_paired <- function(sel, ref = NULL) {
     d <- x - ll[[ref]]
     ok <- !is.na(d)
     tibble::tibble(model = nm, elpd = sum(x, na.rm = TRUE), delta_elpd = sum(d[ok]),
-                   se_delta = if (nm == ref) 0 else sqrt(sum(ok)) * stats::sd(d[ok]),
+                   se_delta = if (nm == ref) 0 else paired_se(d, group),
                    n = sum(ok))
   })
 }
+
+#' Standard error of a summed paired difference
+#'
+#' @param d Per-haul differences of the log predictive density (NA allowed).
+#' @param group Optional grouping of the hauls (space-time block groups). With groups, the SE
+#'   is `sqrt(G) * sd(D_g)` of the G group sums `D_g`, which allows for correlation within a
+#'   group; without, `sqrt(n) * sd(d)`.
+#' @return The standard error of `sum(d)`.
+paired_se <- function(d, group = NULL) {
+  ok <- !is.na(d)
+  if (is.null(group)) return(sqrt(sum(ok)) * stats::sd(d[ok]))
+  g <- tapply(d[ok], group[ok], sum)
+  sqrt(length(g)) * stats::sd(g)
+}
+
+#' Space-time block group of each haul, as used for the CV folds
+#'
+#' @param dt Model data with X, Y (km) and year.
+#' @param block_km Block size (km), `attr(folds, "block_km")`.
+#' @return Character vector of square-year groups.
+cv_groups <- function(dt, block_km) paste(floor(dt$X / block_km), floor(dt$Y / block_km), dt$year)

@@ -69,7 +69,7 @@ INDEX_YEAR_LABEL: "start"
 SURVEY_EFFECT: false                  # cruise-series catchability factor (fsurvey) in the model
 REFERENCE_SURVEY: null                # prediction reference series; null = most-sampled series
 REFERENCE_GEAR: null                  # prediction reference gear type; null = most-sampled gear
-REFERENCE_MONTH: null                 # prediction reference month; null = most-sampled month
+REFERENCE_MONTH: null                 # prediction reference month; set it to the month the main survey samples the bulk of the stock (knowledge/index-level-and-trend.md); null = most-sampled month
 CATCHABILITY_TERMS: []                # e.g. ["hour"] or ["sun_altitude"] for diel catchability
 CATCHABILITY_REFERENCE: {}            # e.g. {hour: 12}; a term without a value uses the median
 

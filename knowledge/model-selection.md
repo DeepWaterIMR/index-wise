@@ -182,6 +182,16 @@ the comparison is three models (isotropic, anisotropic, barrier), not a 2 × 2.
   selection metric, drop it: one factor fewer is one reference level fewer to defend.
 - **Choose the prediction reference explicitly** (series, gear, month, catchability covariates).
   It sets the index level, not its shape, but it must be a level with good coverage in the data.
+  Put the reference month where the main survey samples the bulk of the stock, not at the most
+  sampled month: a month dominated by one series ties the whole index level to that series
+  (`index-level-and-trend.md`).
+- **Cruise series and trawl model as candidates.** When the survey mix changes over the years
+  (a series ends, another starts), an unmodelled catchability difference between series bends
+  the trend. Test a cruise-series factor (`fsurvey`, predicted for `REFERENCE_SURVEY`) in this
+  stage; where trawl models differ within a gear type, a trawl-model group factor (`fgear`) in
+  place of the gear type. Read the confounding table (series × month, gear, depth) first: a
+  series factor and a month factor are partly the same term when each series fishes in its own
+  months.
 - **Check balance over time, not only the series × gear cross-table.** A gear or survey whose
   share of hauls swings between years is confounded with the year effect: its catchability is
   estimated from a few years and the shift can be read as a trend. The data report's
@@ -232,6 +242,13 @@ an exception for "best ELPD" there quietly re-admits the larger model.
   A ΔELPD from the incoming model with its SE cannot be used to check the rule, because the SE
   of the difference from the best is a different number; a Δ/SE column adds nothing once the
   difference is from the best.
+- **Shortlist for the field stage.** Cross-validate the base model, the best few IID + year
+  candidates by AIC, and every smoothed candidate when a smoothed index is also delivered;
+  AR1/RW structures cannot become the SPiCT structure, so for that selection they are reported
+  only.
+- **Tweedie often fails.** In ling/tusk ICES 1–2 (2026) Tweedie gave no fit or no
+  positive-definite Hessian for either species, so it was never cross-validated. Say so in the
+  family table; do not let its absence read as a comparison it lost.
 - **A missing fit is not a non-convergence.** If a candidate left no fit object (the process
   crashed), mark it as such in the table and rerun it; do not report it as "converged: FALSE".
   Keep the server logs of failed candidates until the stage is rerun.
@@ -428,7 +445,10 @@ given year.
 - **Usability check.** Every fold fit of the base model must converge with a positive-definite
   Hessian. If not, the folds (or the model) need changing before any comparison means anything.
 - **Make the folds once and save them** (`cv-folds.rds`), so every stage scores the same hauls
-  and paired differences are valid.
+  and paired differences are valid. Re-make them (and rerun every stage) when the model data
+  change — a filter, a dropped nation, a new year — or when the base fit's range changes the
+  block size; never compare CV results across two fold sets. Removing one nation's hauls in
+  ling/tusk ICES 1–2 (2026) lengthened the tusk range and moved the blocks from 250 to 300 km.
 
 Alternatives, for special questions only:
 
@@ -449,7 +469,12 @@ In-sample likelihood always improves with flexibility, and AIC penalises only fi
 while most of the flexibility of these models sits in random fields (thousands of random effects,
 one or two hyperparameters), so AIC under-penalises richer field structures and is not comparable
 across meshes. Compare candidates by the paired difference over the same hauls,
-ΔELPD = Σ dᵢ with SE = √n · sd(dᵢ) (`cv_paired()`), the SE of the difference itself; select
+ΔELPD = Σ dᵢ, with the SE of the difference itself (`cv_paired()`). Hauls of one square × year
+group are held out together, so their differences are not independent: compute the SE from the
+group sums, $\mathrm{SE} = \sqrt{G}\,\mathrm{sd}(D_g)$ with $D_g = \sum_{i \in g} d_i$ over the
+$G$ groups, not from single hauls (√n · sd(dᵢ)). The block-level SE was 0–60 % larger than the
+haul-level one in ling/tusk ICES 1–2 (2026) and changed no decision, but the haul-level SE
+overstates the evidence. Select
 with the one-standard-error rule in every stage (Breiman et al. 1984; Hastie et al. 2009; Yates
 et al. 2023): the simplest candidate within one SE of the best, or the incoming one where the
 candidates are not ordered by complexity (families). One rule for all stages keeps the
@@ -613,6 +638,13 @@ Selection is the slowest thing in the project, so it is the most likely to be in
   scale by that grid's cell area. Otherwise a grid change between renders moves every index and
   the comparison measures the grid, not the candidate.
 
+When a stage takes hours, run each candidate (and its fold fits) as a separate server process
+that writes its own cache and log, assemble the stage with its decision rule in another small
+process, and let the validate document only read the results. A crash then costs one candidate,
+stages run unattended, and the same code runs on a cluster as one job-array task per candidate.
+Write the stage decisions to one file and from there into `config.yaml`, so the report follows
+the selection without a hand-copied specification. See `pipeline.md`.
+
 See `rendering.md` for the render-side toggles and the screen-session discipline.
 
 ## What the document must end with
@@ -624,9 +656,12 @@ paragraph is what a reviewer reads.
 
 ## References
 
+- Breiman, L., Friedman, J. H., Olshen, R. A., and Stone, C. J. 1984. Classification and
+  Regression Trees. Wadsworth, Belmont, CA.
 - Hastie, T., Tibshirani, R., and Friedman, J. 2009. The Elements of Statistical Learning: Data
   Mining, Inference, and Prediction. 2nd edn. Springer, New York.
-  <https://doi.org/10.1007/978-0-387-84858-7>- Hurtado-Ferro, F., Szuwalski, C. S., Valero, J. L., *et al.* 2015. Looking in the rear-view
+  <https://doi.org/10.1007/978-0-387-84858-7>
+- Hurtado-Ferro, F., Szuwalski, C. S., Valero, J. L., *et al.* 2015. Looking in the rear-view
   mirror: bias and retrospective patterns in integrated, age-structured stock assessment
   models. ICES Journal of Marine Science, 72: 99–110. <https://doi.org/10.1093/icesjms/fsu198>
 - Mohn, R. 1999. The retrospective problem in sequential population analysis: an investigation
@@ -640,6 +675,7 @@ paragraph is what a reviewer reads.
   Sciences, 75: 1369–1382. <https://doi.org/10.1139/cjfas-2017-0266>
 - Vehtari, A., Gelman, A., and Gabry, J. 2017. Practical Bayesian model evaluation using
   leave-one-out cross-validation and WAIC. Statistics and Computing, 27: 1413–1432.
+  <https://doi.org/10.1007/s11222-016-9696-4>
 - Roberts, D. R., et al. 2017. Cross-validation strategies for data with temporal, spatial,
   hierarchical, or phylogenetic structure. Ecography, 40: 913–929.
 - Valavi, R., Elith, J., Lahoz-Monfort, J. J., and Guillera-Arroita, G. 2019. blockCV: an R
@@ -647,4 +683,4 @@ paragraph is what a reviewer reads.
   cross-validation of species distribution models. Methods in Ecology and Evolution, 10: 225–232.
 - Yates, L. A., Aandahl, Z., Richards, S. A., and Brook, B. W. 2023. Cross validation for model
   selection: a review with examples from ecology. Ecological Monographs, 93: e1557.
-  <https://doi.org/10.1007/s11222-016-9696-4>
+  <https://doi.org/10.1002/ecm.1557>

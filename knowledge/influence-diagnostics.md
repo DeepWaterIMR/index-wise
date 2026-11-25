@@ -99,6 +99,15 @@ every other series moved it by ≤ 10 %: a single-survey dependence worth statin
 A series nested in a combined series (e.g. one part of a slope survey that also exists as
 north + south) should be dropped from the comparison, not shown twice.
 
+Report each leave-out as a **level ratio and a trend change**, not as one influence number. A
+ratio that is about the same in every year — including years before the left-out series
+existed — is a level shift through a shared parameter (typically the month effect at the
+prediction reference month), not evidence about the series' data. Tusk ICES 1–2 (2026): leaving
+out one survey with 13 % of the hauls changed the index by 87 % on average but its trend by
+about 11 %; the cause was the reference month (`index-level-and-trend.md`). Flag influential
+cruises for study; remove them only under a general rule or a documented `EXCLUDE_CRUISES`
+entry.
+
 ## Reporting checklist
 
 - Region split figure and haul counts per region × year around the anomaly.

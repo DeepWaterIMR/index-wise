@@ -67,11 +67,13 @@ abundance) model — to confirm the method works before adding complexity.
 
 ## Step 3 — Validate / select the model (skill: `index-validate-model`)
 
-Five selection stages, in order: **component ranking** → **fixed effects** → **family** →
-**spatiotemporal structure** → **mesh resolution**, then a retrospective. Each is the same
-operation with a different thing varied, so all five run through
-`sdmTMBexperiments::sdmTMB_selection()`; `sdmTMB_mesh_cv`, `compare_meshes`, `sdmTMB_retro` and
-`mohns_rho` cover the sensitivity checks.
+Six stages, in order: **mesh resolution** → **random-field structure** → **spatial correlation
+geometry** (anisotropy, barrier) → **fixed effects** → **family re-check** → **prediction grid**.
+Each is the same operation with a different thing varied (`sdmTMBexperiments::sdmTMB_selection()`
+on a per-stage candidate list); the grid stage is not a model choice. Retrospectives, residuals
+and comparisons with an existing index are diagnostics of the final model (Step 4), not
+selection criteria. When fits take minutes or more, run the stages as server processes and let
+the document read their caches (`pipeline.md`).
 
 **Read `model-selection.md` first.** The method is the comparability contract, not the function
 calls: candidates fitted to identical records, only `comparable` rows compared, hold-out
@@ -115,3 +117,5 @@ within-year correlation and sensitivity, and exports the relative index (`cpue-m
 - **Render in a screen session** with a log in `logs/`; tell the user the session name;
   suggest a server. Once `data/output` files exist, flip caching toggles to `FALSE`.
 - **Write project memory** as you make non-obvious decisions.
+- **Full reruns** follow the order and cache rules in `pipeline.md`.
+- **Judge every sensitivity on the trend**, not the level (`index-level-and-trend.md`).

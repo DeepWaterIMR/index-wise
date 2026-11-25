@@ -158,6 +158,24 @@ calls `get_index()`; with sdmTMB ≥ 1.2.0 it uses `get_index(fit, newdata = )`,
   (`plot_prediction_map()`, `plot_random_field()`).
 - Cross-validation with `sdmTMB::sdmTMB_cv()` (wrapped by `sdmTMB_mesh_cv()`).
 
+## First-fit symptoms and structural fixes
+
+What the first fits of a sparse species typically show, and what fixed it (ling and tusk,
+ICES 1–2, 2026). Each fix is a starting structure for Step 3, not a decision.
+
+| Symptom | Cause | Fix tried |
+|---|---|---|
+| `s(month)` SD → 0, `se_magnitude_ok` fails (SE ~1e4) | the month effect is linear or too few positive months | drop the month term, or a month factor if every level has positives |
+| Month factor not positive definite | a month level without positive catches | merge or drop the month; drop such hauls in peels and leave-outs |
+| IID spatiotemporal SD → 0 in one component | too coarse a mesh, or too few positives in that component | finer mesh; field off in that component |
+| AR1 ρ ≈ 0.99 and spatial SD → 0, non-PD Hessian | the AR1 field absorbs the persistent spatial pattern | `spatial = "off"` for the smoothed (AR1) model |
+| Spatial field and depth smooth collapse in a length-class model | few positives above the threshold | no year factor, or fewer terms; consider whether the product is supported |
+| Sparse early years destabilise every fit | irregular coverage of the main area before some year | start the series where coverage becomes regular (`FIRST_YEAR`) |
+
+A fishable or length-class index that can only be fitted **without** the year factor is pulled
+towards the series mean in weak years and can exceed the total index; prefer the total index for
+the assessment and show the class index beside it (`assessment-index-handoff.md`).
+
 ## Gotchas
 
 - **X/Y must be km.** Passing metres puts data in the wrong place and breaks the mesh.

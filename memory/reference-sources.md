@@ -51,3 +51,7 @@ term by default; use a common 25 m gear width with `geartype` as a fixed effect 
 documents a reason to revert to gear-specific widths; code-review before every slow render.
 
 Related: [[architecture]].
+- **lotidae-assessment-index** (ling and tusk, ICES 1–2, WKBMSYSPiCT5, Nov 2026). Supplied the
+  trend-versus-level principle, block-level CV standard errors, the staged per-candidate
+  selection runner, the unattended pipeline and cache discipline, and the two-species layout;
+  see [[third-project-lessons]].

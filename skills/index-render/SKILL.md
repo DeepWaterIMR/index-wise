@@ -14,7 +14,8 @@ links that leave this skill's folder against the source skill there. Use absolut
 # Render index documents
 
 Goal: run expensive Quarto renders without wasting compute or blocking the chat. Read
-`knowledge/rendering.md`.
+`knowledge/rendering.md`; for a full rerun of all steps, `knowledge/pipeline.md` (order of
+actions, caches to move away first, unattended driver).
 
 Before producing project files, read `knowledge/wise-writing.md` and the installed
 `academic-style`, `academic-conventions`, and `academic-data-report` skills. Apply their

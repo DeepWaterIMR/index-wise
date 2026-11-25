@@ -19,7 +19,7 @@ metadata:
   line) — user uses soft-wrap editors.
 - **Raster figures** `fig-format: jpeg`; keep generated HTML small.
 - **Scaffold stamps identity only.** Analytical settings live in `config.yaml`, read at run
-  time. If you add a config field, wire it in `project-template/R/00_setup.R`, not as a
+  time. If you add a config field, wire it in `project-template/R/0_setup.R`, not as a
   stamped token.
 
 Related: [[architecture]].

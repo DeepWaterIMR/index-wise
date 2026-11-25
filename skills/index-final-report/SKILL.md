@@ -65,6 +65,10 @@ All slow work runs on a server through `R/report/run_report.sh`, which runs
 surveys, loso, influence) and caches each result under `<OUTPUT_DIR>/report/`; the document
 only reads the caches, so it renders in minutes and a failed step reruns alone.
 
+Judge every sensitivity, leave-out and comparison on the **trend**: report a level ratio and a
+trend change separately, and do not read a uniform level shift as a data problem
+(`knowledge/index-level-and-trend.md`).
+
 Sensitivity sections (`*-section.qmd`, included from `report.qmd`):
 
 - `region-section.qmd` — regional contributions: the index summed by ICES division

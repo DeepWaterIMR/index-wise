@@ -49,7 +49,9 @@ every answer for `ai/memory/scaffold-interview.md`.
    share a time step, and when does the index year begin (`INDEX_YEAR_START_MONTH`,
    `INDEX_YEAR_LABEL`; `knowledge/data-filtering.md`)? A survey catchability factor
    (`SURVEY_EFFECT`) and which survey is the prediction reference? One combined index or
-   separate seasonal indices?
+   separate seasonal indices? Which month and survey should the index be predicted for? Default
+   to the month in which the main survey samples the bulk of the stock, not the most sampled
+   month (`knowledge/index-level-and-trend.md`); the index timing follows it.
 8. **Catchability** — does the species migrate vertically or otherwise change catchability
    with time of day? If so, offer `hour` or `sun_altitude` (`CATCHABILITY_TERMS`) and a
    reference (`CATCHABILITY_REFERENCE`, e.g. daylight); they are tested in Step 3, not imposed.
@@ -65,17 +67,32 @@ every answer for `ai/memory/scaffold-interview.md`.
 10. **Late data** — which data typically arrive after the assessment (a nation's or vessel's
     hauls, a late survey)? Record them as `LATE_COMPONENTS` and agree how the terminal year is
     handled (`knowledge/data-filtering.md`).
-11. **Years** — first year to include (default `> 1980`).
+11. **Years** — first year to include (default `> 1980`). Ask from which year the main stock
+    area was sampled regularly: sparse early years destabilise the fits and give an index that
+    cannot be trusted, so the series often starts later than the database does.
 12. **Stock and domain** — stock code and slug (`STOCK_SLUG`, prefix of the `docs/data/`
     documents), stock area as ICES subareas (`STOCK_SUBAREAS`) or a polygon, the purpose
     sentence (`PURPOSE`), study area / prediction region, CRS (EPSG), grid cell size (km), mesh
     cutoff (km), barrier mesh yes/no, depth range of the grid (`MIN_DEPTH`, `MAX_DEPTH`). Has an
     area entered the survey mid-series (`knowledge/regions.md`)? GIS polygons are
     **user-supplied** and go in the project's `data/source/` — never in the template.
-13. **Russian data** — included by default; ask only if they want to exclude it.
+13. **Russian and other confidential data** — Russian data are included by default; ask only if
+    they want to exclude them. Ask whether any confidential source (e.g. reference-fleet
+    lengths for a fishable-length threshold) is needed; such data are read where they live and
+    only derived values are stored.
 14. **Human metadata** — accountable authors and affiliations using wise-writing's
     `AUTHORS` and `AFFILIATIONS` schema; confirm exact AI models and roles before reporting.
-15. **Outputs** — which are official vs exploratory vs draft?
+15. **Outputs** — which are official vs exploratory vs draft? For a benchmark: its name and
+    meeting dates (they set the schedule), and whether the rendered documents go to a website.
+16. **Several stocks** — one stock per project, or several related stocks (e.g. two species in
+    the same area for the same benchmark) sharing the data compilation and the documents? Record
+    which settings differ between them. The template scaffolds one stock; for several stocks,
+    follow `project-structure.md` (*Multiple species*) and the two-species layout described in
+    `memory/third-project-lessons.md` until the template supports it directly.
+17. **Machines** — where is the Biotic database (data compilation), and which server runs the
+    fits, the model selection and the renders? Is a cluster (Sigma2) available for the
+    selection? The answers set up `ai/hpc-wise.yml` with hpc-wise and the order in
+    `knowledge/pipeline.md`.
 
 ## Step 2 — Plan (plan mode)
 

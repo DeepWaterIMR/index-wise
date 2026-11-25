@@ -32,7 +32,7 @@ gating, AIC ladder first with cross-validation on an AIC-ranked shortlist, the w
 in the metric column rather than at row 1, and the gap stated whenever the carried-forward model
 is not the winner. The mechanics live in `sdmTMBexperiments::sdmTMB_selection()` +
 `selection_frame()` / `best_candidate()` / `sdmTMB_cv_summary()` / `add_aic_weights()`, added
-there rather than here (see the boundary rule below); `project-template/R/00_setup.R` carries
+there rather than here (see the boundary rule below); `project-template/R/0_setup.R` carries
 only the two project-side conveniences, `drop_one_candidates()` and `selection_kable()`.
 
 **Boundary:** call generic helpers from `sdmTMBexperiments`; never duplicate package internals
@@ -40,7 +40,7 @@ here. Reference data (species/surveys/gear) comes from the Biotic database via B
 
 **Scaffold mechanics:** only identity tokens (`{{SPECIES_NAME/SLUG/LATIN}}`) are stamped;
 every analytical setting lives in `config.yaml` and is read at run time by
-`project-template/R/00_setup.R`. `docs/SPECIES/` and `SPECIES-*` filenames are renamed to the
+`project-template/R/0_setup.R`. `docs/SPECIES/` and `SPECIES-*` filenames are renamed to the
 slug.
 
 Related: [[reference-sources]], [[conventions]].

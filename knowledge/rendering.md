@@ -2,7 +2,8 @@
 
 Fitting sdmTMB models and rendering the Quarto documents is **time-consuming** (minutes to
 hours). Treat every render as expensive: review the code first, run it detached with a log,
-and cache outputs so you only pay the cost once.
+and cache outputs so you only pay the cost once. The order of a full rerun and which caches
+must be moved away first are in `pipeline.md`.
 
 ## 1. Review before you render
 
