@@ -36,7 +36,8 @@ https://github.com/DeepWaterIMR/index-wise`).
    index-wise/researcher-supervised-AI provenance statement in every main report; add project-specific authors and affiliations in their YAML headers.
 7. **Review before you render.** Renders are slow — code-review changed chunks and fix issues
    first, then render in a screen session with a log in `logs/` (index-wise `index-render`
-   skill). Flip compute toggles to `FALSE` once `data/output/` files exist.
+   skill). Flip compute toggles to `FALSE` once `data/output/` files exist. Before a full rerun,
+   a benchmark or a hand-off, audit the whole project with the `index-review` skill.
 8. **One set of documents per stock, kept identical.** Every stock has the numbered documents
    `<stock>-0-background` … `<stock>-6-report` (`<stock>` = its key in `SPECIES_SETTINGS`, or
    `STOCK_SLUG` for one stock), each setting `index_species <- "<stock>"`. With several stocks,

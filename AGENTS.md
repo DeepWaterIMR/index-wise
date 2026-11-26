@@ -113,6 +113,7 @@ into `knowledge/`) before acting.
 | **CPUE** — prepare logbook / sales-note records              | `skills/index-cpue-data/SKILL.md` |
 | **CPUE** — standardise (glmmTMB, mgcv, sdmTMB) and export    | `skills/index-cpue-model/SKILL.md` |
 | Render long Quarto docs (screen session, logs, toggles)      | `skills/index-render/SKILL.md` |
+| Review / audit a project for bugs and inconsistencies        | `skills/index-review/SKILL.md` |
 
 A commercial CPUE index is a separate, optional track beside the survey workflow: its data come
 from logbooks or sales notes, not from Biotic, and they are confidential at the record level.
@@ -142,6 +143,8 @@ Shared knowledge lives in `knowledge/`:
   guards, unattended driver.
 - `index-level-and-trend.md` — why only the index trend counts, the prediction reference month,
   and reporting a level ratio beside a trend change.
+- `review-checklist.md` — recurring defects in index projects (config–code drift, stale text,
+  selection, interpretation, Quarto mechanics, caches, privacy) for `index-review`.
 
 ---
 

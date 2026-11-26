@@ -3,7 +3,7 @@
 # 📈 index-wise — Build sdmTMB survey indices with AI agents
 
 <!-- version -->
-**Version 0.3.1** (2026-11-26)
+**Version 0.3.2** (2026-11-26)
 <!-- /version -->
 
 **Teach your AI coding agent to build a spatiotemporal survey index for stock assessment — for any species, on your own machine.**
@@ -76,7 +76,7 @@ The two CPUE skills are an optional track for a **commercial CPUE index** beside
 
 Each step's document lives in [`project-template/docs/`](project-template/docs/) and is index-wise's own, evolving implementation — improve it directly as the routine matures. [`knowledge/workflow.md`](knowledge/workflow.md) points to the (IMR-internal) background material the method was originally distilled from, if you want the history.
 
-Long renders are compiled with [`index-render`](skills/index-render/SKILL.md) in a screen session with a log in `logs/`.
+Long renders are compiled with [`index-render`](skills/index-render/SKILL.md) in a screen session with a log in `logs/`. Before a benchmark, a hand-off or a full rerun, [`index-review`](skills/index-review/SKILL.md) audits a project for bugs, config–code drift, stale or inconsistent text and privacy slips, using a lint script and [`knowledge/review-checklist.md`](knowledge/review-checklist.md).
 
 ## 📚 What's in this repo
 
