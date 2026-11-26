@@ -234,8 +234,9 @@ an exception for "best ELPD" there quietly re-admits the larger model.
 - **Families have a complexity order too.** Tweedie is the simplest (one linear predictor and
   one set of fields); the delta families have two, and all have the same number of parameters
   (the Poisson link adds none). Rule: Tweedie if within one SE of the best; otherwise the
-  incoming family if within one SE; otherwise the best. Cross-validate every family, so the
-  simplest is never left out of the comparison by an AIC shortlist.
+  best. Parsimony cannot choose among equally complex delta families, so there is no "keep the
+  incoming family" tie-break (ling/tusk decision, 2026-11-26). Cross-validate every family, so
+  the simplest is never left out of the comparison by an AIC shortlist.
 - **Report the difference from the best, not from the incoming model.** Give each
   cross-validated candidate's ΔELPD from the best candidate of its set and the paired SE of
   *that* difference: the rule is then readable in one row (within one SE when −ΔELPD ≤ SE).
@@ -245,7 +246,17 @@ an exception for "best ELPD" there quietly re-admits the larger model.
 - **Shortlist for the field stage.** Cross-validate the base model, the best few IID + year
   candidates by AIC, and every smoothed candidate when a smoothed index is also delivered;
   AR1/RW structures cannot become the SPiCT structure, so for that selection they are reported
-  only.
+  only. AR1 + year sits with the smoothed candidates for comparison but cannot be the smoothed
+  index (no year factor). Also cross-validate the model without spatiotemporal fields, compared
+  with the best IID + year candidate, to show what the fields add. A run can skip the
+  cross-validation of listed candidates with `selection/cv-exclude.txt` (one name per line;
+  the incoming model is always cross-validated).
+- **Every component needs a temporal term.** The index changes between years only through the
+  year factor and the spatiotemporal fields. A delta component with neither is constant over
+  the years and flattens the index (the ling fishable index with IID fields in the positive
+  component only and no year factor, 2026-11-26). The stage runner drops such candidates and
+  the report stops on them (`check_temporal_terms()`); a model fitted without the year factor
+  takes the field structure of the smoothed index (`report_no_year_spec()`).
 - **Tweedie often fails.** In ling/tusk ICES 1–2 (2026) Tweedie gave no fit or no
   positive-definite Hessian for either species, so it was never cross-validated. Say so in the
   family table; do not let its absence read as a comparison it lost.

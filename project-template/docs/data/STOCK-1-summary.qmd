@@ -94,7 +94,9 @@ family_name <- c(delta_lognormal = "delta-lognormal", delta_gamma = "delta-gamma
                  delta_lognormal_poisson_link = "Poisson-link delta-lognormal",
                  delta_gamma_poisson_link = "Poisson-link delta-gamma", tweedie = "Tweedie")[[final$FAMILY]]
 st_parts <- unlist(final$SPATIOTEMPORAL)
-st_desc <- if (length(st_parts) == 2 && st_parts[2] == "off") "an IID spatiotemporal field in the encounter component only" else paste0(toupper(paste(unique(st_parts), collapse = "/")), " spatiotemporal fields")
+st_desc <- if (length(st_parts) == 2 && sum(st_parts == "off") == 1) {
+  paste0("an ", toupper(st_parts[st_parts != "off"]), " spatiotemporal field in the ", c("encounter", "positive")[st_parts != "off"], " component only")
+} else paste0(toupper(paste(unique(st_parts), collapse = "/")), " spatiotemporal fields")
 if (have_results) {
   index_tab <- purrr::imap_dfr(if (bias_corrected) index_bc else purrr::map(post, "index"),
                                ~ dplyr::mutate(as.data.frame(.x), model = .y)) |>
@@ -209,10 +211,10 @@ The model specification was selected in `r links$validate` after the first model
 - **Mesh:** `r final$MESH_CUTOFF_KM` km cutoff, the coarsest cutoff that passes the sanity checks and whose index stays within 5 % of the index of the best-predicting cutoff.
 - **Random fields:** a spatial field in both delta components and `r st_desc`: the IID structure with the fewest fields among those that predicted within one standard error of the best. The correlation is `r if (isTRUE(final$ANISOTROPY)) "anisotropic: the isotropic correlation predicted worse by more than one standard error" else "isotropic, the simplest geometry, which predicted within one standard error of the best"`.
 - **Fixed effects:** `r if ("fmonth" %in% final$TERMS) "a month factor, " else ""``r if ("fsurvey" %in% final$TERMS) "a cruise-series factor, " else ""``r if ("fgear" %in% final$TERMS) "a trawl-model factor, " else ""`a depth smooth and the year factor that the index for `r assessment_model` needs.`r if (!"geartype" %in% unlist(final$TERMS)) " Gear type was dropped: the model without it predicted within one standard error of the best." else ""``r if (!"fsurvey" %in% unlist(final$TERMS)) " A cruise-series factor did not predict better by more than one standard error, so it was not added." else ""``r if (identical(cfg$MONTH_TERM, "none")) paste0(" A month term was not used: ", month_term_reason(dt$month, dt$biomass > 0, sp), ".") else ""`
-- **Family:** `r family_name``r if (identical(final$FAMILY, "delta_lognormal")) ": no other family predicted better by more than one standard error" else ": under the selection rule, it predicted the held-out hauls better than the incoming delta-lognormal family and the Tweedie family by more than one standard error"`.
+- **Family:** `r family_name``r if (identical(final$FAMILY, "tweedie")) ": the simplest family, within one standard error of the best" else ": the best by cross-validation among the delta families, which have the same number of parameters; the simpler Tweedie family was not selectable (not within one standard error of the best, or its fit failed)"`.
 - **Prediction grid:** `r cfg$GRID_KM` km cells, whose index stays within 1 % of the index on a 5 km grid.
 
-The same specification is used for the fishable biomass model`r if (have_results && fishable_no_year) ", except that the year factor could not be estimated and was dropped" else ""`. The smoothed index has AR1 spatiotemporal fields without a year factor.
+The same specification is used for the fishable biomass model`r if (have_results && fishable_no_year) ", except that the year factor could not be estimated and was dropped; without it, the model takes the field structure of the smoothed index" else ""`. The smoothed index has `r toupper(paste(unique(unlist(cfg$SMOOTHED_SPATIOTEMPORAL %||% "ar1")), collapse = "/"))` spatiotemporal fields without a year factor.
 
 # Model diagnostics
 

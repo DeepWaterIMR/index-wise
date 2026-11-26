@@ -152,7 +152,7 @@ n_fields <- function(d) {
 
 stage_candidates <- function(stage, s, d) {
   upd <- function(...) utils::modifyList(d, list(...))
-  switch(stage,
+  cands <- switch(stage,
     fields = list(
       "IID, spatial on (base)" = upd(spatial = "on", spatiotemporal = "iid"),
       "IID, no spatial field" = upd(spatial = "off", spatiotemporal = "iid"),
@@ -207,6 +207,10 @@ stage_candidates <- function(stage, s, d) {
     },
     stop("Unknown stage ", stage)
   )
+  # Every component needs a year factor or a spatiotemporal field (check_temporal_terms()).
+  ok <- vapply(cands, function(x) check_temporal_terms(spec_formula(x), x$spatiotemporal, stop_on_fail = FALSE), logical(1))
+  if (!all(ok)) message("Left out (a component without a temporal term): ", paste(names(cands)[!ok], collapse = ", "))
+  cands[ok]
 }
 
 build_mesh <- function(s, d) {
@@ -321,14 +325,21 @@ assemble_stage <- function(species, stage, phase) {
     if (stage == "fields") {
       # Two selections: the assessment structure among the IID + year candidates (the base model and
       # the best of them by AIC) and the smoothed-index structure among the smoothed candidates
-      # (all of them, so that the parsimony rule can reach the simplest).
+      # (all of them, so that the parsimony rule can reach the simplest, and AR1 + year for
+      # comparison). The model without spatiotemporal fields is cross-validated too, to show
+      # what the fields add.
       iid <- names(cands)[vapply(cands, is_iid_year, logical(1))]
-      smo <- names(cands)[vapply(cands, is_smoothed_spec, logical(1))]
-      short <- unique(c(names(cands)[1], head(intersect(ranked, iid), cv_top_n), intersect(ranked, smo)))
+      smo <- names(cands)[vapply(cands, is_smoothed_set_spec, logical(1))]
+      no_st <- names(cands)[vapply(cands, function(x) all(unlist(x$spatiotemporal) == "off"), logical(1))]
+      short <- unique(c(names(cands)[1], head(intersect(ranked, iid), cv_top_n), intersect(ranked, c(smo, no_st))))
     }
     # Geometry and family: every candidate, so that the simplest one is always cross-validated.
     if (stage == "geometry") short <- names(cands)
     if (stage == "family") short <- unique(c(names(cands)[1], ranked))
+    # Candidates listed in selection/cv-exclude.txt (one name per line) are fitted but not
+    # cross-validated, to save time in a run; the incoming model is always cross-validated.
+    excl <- file.path(s$sel_dir, "cv-exclude.txt")
+    if (file.exists(excl)) short <- setdiff(short, setdiff(readLines(excl), names(cands)[1]))
     writeLines(short, file.path(s$sel_dir, paste0("stage-", stage, "-shortlist.txt")))
     return(invisible(short))
   }
@@ -364,9 +375,9 @@ assemble_stage <- function(species, stage, phase) {
 #             among the smoothed candidates (decide_smoothed()).
 #   geometry  isotropic if eligible, otherwise the best.
 #   fixed     the eligible candidate with fewest terms (a smooth counts more than a quadratic).
-#   family    Tweedie (one component) if eligible; otherwise the incoming family if eligible,
-#             otherwise the best. The delta families have the same number of parameters (the
-#             Poisson link adds none), so among them the incoming family is the default.
+#   family    Tweedie (one component) if eligible; otherwise the best. The delta families have
+#             the same number of parameters (the Poisson link adds none), so parsimony cannot
+#             choose among them and the best ELPD does.
 within_one_se <- function(cvp, models) {
   top <- models[which.max(cvp$elpd[match(models, cvp$model)])]
   models[cvp$elpd[match(models, cvp$model)] >= cvp$elpd[cvp$model == top] - se_between(cvp, top, models)]
@@ -403,7 +414,7 @@ decide_stage <- function(stage, cands, cvp, best, tab, iid_year_only = TRUE) {
       close <- within_one_se(cvp, cvp$model)
       size <- ifelse(vapply(close, function(m) cands[[m]]$family, character(1)) == "tweedie", 1, 2)
       close <- close[size == min(size)]
-      if (ref %in% close) ref else close[which.max(cvp$elpd[match(close, cvp$model)])]
+      close[which.max(cvp$elpd[match(close, cvp$model)])]
     }
   )
 }

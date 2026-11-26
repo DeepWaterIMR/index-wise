@@ -96,6 +96,7 @@ report_family <- function(x) {
 #' @param mesh Optional mesh; by default a new mesh with the FINAL_MODEL cutoff.
 #' @return A fitted sdmTMB model with the fit time (minutes) in `attr(, "fit_minutes")`.
 fit_report_product <- function(s, ctx, mesh = NULL) {
+  check_temporal_terms(s$formula, s$spatiotemporal)
   m <- mesh %||% sdmTMB::make_mesh(s$data, xy_cols = c("X", "Y"), cutoff = ctx$final$MESH_CUTOFF_KM)
   yrs <- seq(min(s$data$year), max(s$data$year))
   gaps <- setdiff(yrs, unique(s$data$year))
@@ -247,11 +248,30 @@ assessment_region <- function(xy, cfg, crs) {
 
 # --- Products -------------------------------------------------------------------------------
 
+#' Product specification without the year factor
+#'
+#' Without the year factor only the spatiotemporal fields carry the change between years, so the
+#' model takes the field structure selected for models without a year factor (the smoothed
+#' index). The IID structure of the total model can leave a component with no temporal term at
+#' all (IID in the positive component only gave a flat fishable index for ling, 2026-11-26).
+#'
+#' @param s Product specification (element of `ctx$products`).
+#' @param ctx Report context.
+#' @return The specification with the formula and the fields of the smoothed index.
+report_no_year_spec <- function(s, ctx) {
+  sm <- ctx$products[["Total biomass (smoothed)"]]
+  s$formula <- ctx$form_smooth
+  s$spatial <- sm$spatial
+  s$spatiotemporal <- sm$spatiotemporal
+  s
+}
+
 #' Fit one product and cache the model
 #'
 #' The fishable data are sparse in some years. With `FISHABLE_YEAR_EFFECT: false` in
 #' config.yaml the fishable model is fitted without the year factor; otherwise, if the model
-#' with the year factor fails the sanity checks, it is refitted without it. Either way the fit
+#' with the year factor fails the sanity checks, it is refitted without it. Without the year
+#' factor it takes the field structure of the smoothed index. Either way the fit
 #' is flagged with `attr(, "year_factor_failed")`.
 #'
 #' @param ctx Report context.
@@ -264,7 +284,7 @@ run_report_fit <- function(ctx, label) {
   if (inherits(fit, "try-error")) fit <- NULL
   if (label == "Fishable biomass (IID)" && !report_passes(fit)) {
     message("Refitting ", label, " without the year factor")
-    s$formula <- ctx$form_smooth
+    s <- report_no_year_spec(s, ctx)
     fit2 <- try(fit_report_product(s, ctx))
     if (!inherits(fit2, "try-error")) {
       attr(fit2, "year_factor_failed") <- TRUE
@@ -428,7 +448,7 @@ drop_empty_levels <- function(data, cols = "fmonth") {
 run_report_retro <- function(ctx, label, grid, nyears = 6, n_workers = 6) {
   s <- ctx$products[[label]]
   fit <- readRDS(report_fit_file(ctx, s$file))
-  if (isTRUE(attr(fit, "year_factor_failed"))) s$formula <- ctx$form_smooth
+  if (isTRUE(attr(fit, "year_factor_failed"))) s <- report_no_year_spec(s, ctx)
   years <- rev(sort(unique(fit$data$year)))[seq_len(nyears)]
   future::plan(future::multicore, workers = n_workers)
   on.exit(future::plan(future::sequential), add = TRUE)
@@ -601,7 +621,7 @@ merge_survey_comparisons <- function(comps, surveys) {
 report_leave_out <- function(ctx, label, grid, id_col, ids = NULL, n_workers = 7) {
   s <- ctx$products[[label]]
   fit <- readRDS(report_fit_file(ctx, s$file))
-  if (isTRUE(attr(fit, "year_factor_failed"))) s$formula <- ctx$form_smooth
+  if (isTRUE(attr(fit, "year_factor_failed"))) s <- report_no_year_spec(s, ctx)
   dat <- fit$data
   full <- readRDS(report_cache(ctx, paste0("post-", s$file)))$index
   ids <- unique(as.character(ids %||% dat[[id_col]]))
@@ -746,7 +766,7 @@ run_report_sensitivity <- function(ctx, grid, name) {
   s <- ctx$products[[product]]
   if (is.null(s)) stop("No product '", product, "' in the report.")
   fit <- readRDS(report_fit_file(ctx, s$file))
-  if (isTRUE(attr(fit, "year_factor_failed"))) s$formula <- ctx$form_smooth
+  if (isTRUE(attr(fit, "year_factor_failed"))) s <- report_no_year_spec(s, ctx)
   full <- readRDS(report_cache(ctx, paste0("post-", s$file)))$index
   d <- fit$data
   removed <- 0L

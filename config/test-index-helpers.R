@@ -133,4 +133,23 @@ stopifnot(startsWith(reason, "fewer than 10 hauls in each of May"),
           identical(month_term_reason(mo, rep(TRUE, length(mo)), "ling"),
                     "a month term could not be estimated in the first fits"))
 
+# Every delta component needs a year factor or a spatiotemporal field.
+f_year <- value ~ 0 + fyear + s(depth)
+f_none <- value ~ 0 + s(depth)
+stopifnot(isTRUE(check_temporal_terms(f_year, list("off", "iid"))),
+          isTRUE(check_temporal_terms(f_none, "ar1")),
+          isFALSE(check_temporal_terms(f_none, list("off", "iid"), stop_on_fail = FALSE)),
+          isFALSE(check_temporal_terms(list(f_year, f_none), "off", stop_on_fail = FALSE)),
+          inherits(try(check_temporal_terms(f_none, "off"), silent = TRUE), "try-error"))
+
+# Cruise series with fewer than MIN_SERIES_YEARS years are grouped into Other.
+local({
+  `%||%` <- function(a, b) if (is.null(a)) b else a
+  env <- new.env()
+  sys.source("project-template/R/compile_functions.R", envir = env)
+  st <- data.frame(cruiseseries = c(rep("A", 3), rep("B", 2), "Other"), startyear = c(2001:2003, 2001, 2002, 2001))
+  out <- suppressMessages(env$lump_short_series(st, 3))
+  stopifnot(identical(out$cruiseseries, c("A", "A", "A", "Other", "Other", "Other")))
+})
+
 message("Synthetic index-helper checks passed.")

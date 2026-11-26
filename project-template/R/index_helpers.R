@@ -399,3 +399,27 @@ refit_on <- function(fit, data, cutoff, ...) {
             if (needs_steps && length(gaps)) list(extra_time = gaps), list(...))
   do.call(stats::update, args)
 }
+
+#' Stop when a model component has no temporal term
+#'
+#' The index changes between years only through the year factor and the spatiotemporal fields.
+#' A delta component with neither (e.g. no year factor and the spatiotemporal field switched off
+#' in the encounter component) is constant over the years, and its index loses the trend (a
+#' flat fishable index in the ling project, 2026-11-26). Such models are not allowed.
+#'
+#' @param formula Model formula, or a list of two (one per delta component).
+#' @param spatiotemporal Spatiotemporal field: one value for all components or a list of two.
+#' @param stop_on_fail Stop with an error (`TRUE`) or return `FALSE`.
+#' @return `TRUE` (invisibly) when every component has a temporal term.
+check_temporal_terms <- function(formula, spatiotemporal, stop_on_fail = TRUE) {
+  forms <- if (is.list(formula)) formula else list(formula, formula)
+  st <- unlist(spatiotemporal)
+  if (length(st) == 1L) st <- rep(st, 2)
+  has_year <- vapply(forms, function(f) "fyear" %in% all.vars(f), logical(1))
+  ok <- has_year | tolower(st) != "off"
+  if (all(ok)) return(invisible(TRUE))
+  if (!stop_on_fail) return(FALSE)
+  stop("Component ", paste(c("1 (encounter)", "2 (positive)")[!ok], collapse = " and "),
+       " has neither a year factor nor a spatiotemporal field, so the index would have no trend.",
+       call. = FALSE)
+}

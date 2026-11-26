@@ -65,8 +65,8 @@ first:
 5. **Family re-check** — the Step 3a winner against its runners-up with the selected structure.
    Prefer a Poisson-link delta family with a swept-area offset when it fits at least as well
    and converges; Tweedie with an offset is the other coherent-effort baseline. Parsimony:
-   Tweedie (one component) if within one SE of the best, else the incoming family if within one
-   SE, else the best; cross-validate every family. When replacing
+   Tweedie (one component) if within one SE of the best, else the best (the delta families are
+   equally complex, so no tie-break on the incoming family); cross-validate every family. When replacing
    an existing index, include its family. Candidates on different response scales need the
    Jacobian correction.
 6. **Grid resolution** — after the fit: the fastest grid whose index (level included) is

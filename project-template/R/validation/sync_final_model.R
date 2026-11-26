@@ -29,7 +29,11 @@ if (file.exists(gf)) {
 }
 
 lock <- here::here("config.yaml.lock")
-while (!dir.create(lock, showWarnings = FALSE)) Sys.sleep(2)
+# A lock older than 10 minutes was left by a killed run: the edit itself takes seconds.
+while (!dir.create(lock, showWarnings = FALSE)) {
+  age <- difftime(Sys.time(), file.mtime(lock), units = "mins")
+  if (!is.na(age) && age > 10) unlink(lock, recursive = TRUE) else Sys.sleep(2)
+}
 on.exit(unlink(lock, recursive = TRUE), add = TRUE)
 path <- here::here("config.yaml")
 res <- sync_config_lines(readLines(path, encoding = "UTF-8"), index_species, d, grid_km)

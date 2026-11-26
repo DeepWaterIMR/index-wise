@@ -65,6 +65,23 @@ label_surveys <- function(x) {
     )
 }
 
+#' Group short cruise series into Other
+#'
+#' A series sampled in fewer than `min_years` years cannot inform a trend and gives unstable
+#' leave-one-series-out diagnostics (a two-year series ranked as the most influential in the
+#' ling project, 2026-11-26), so its hauls are labelled "Other".
+#'
+#' @param x Stations with `cruiseseries` and `startyear`.
+#' @param min_years Minimum number of years for a series of its own (`MIN_SERIES_YEARS`).
+#' @return `x` with short series relabelled "Other".
+lump_short_series <- function(x, min_years = 3) {
+  n_years <- tapply(x$startyear, x$cruiseseries, function(y) length(unique(y)))
+  short <- setdiff(names(n_years)[n_years < min_years], "Other")
+  if (length(short)) message("Grouped into Other (fewer than ", min_years, " years): ", paste(short, collapse = ", "))
+  x$cruiseseries[x$cruiseseries %in% short] <- "Other"
+  x
+}
+
 #' Lazy standard haul filter for quantitative research bottom-trawl hauls
 #'
 #' The stock area is defined either by ICES subareas (`STOCK_SUBAREAS` in `config.yaml`,
@@ -239,6 +256,7 @@ compile_species_stations <- function(con, cfg, last_year) {
   if (nrow(excluded) > 0)
     stations <- dplyr::filter(
       stations, !paste(platformname, cruise) %in% paste(excluded$platformname, excluded$cruise))
+  stations <- lump_short_series(stations, cfg$MIN_SERIES_YEARS %||% 3)
 
   list(
     stations = stations,

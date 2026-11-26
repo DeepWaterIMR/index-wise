@@ -318,11 +318,22 @@ stage_eligible <- function(res, models = res$cv$model) {
 
 # Selection sets of a stage: each set has its own best candidate and its own one-SE band. The
 # random-field stage selects the assessment structure among the IID + year candidates and the
-# smoothed-index structure among the smoothed candidates; other structures are reported only.
+# smoothed-index structure among the smoothed candidates without a year factor. The Smoothed set
+# also holds AR1 + year (AR1 or random-walk fields with a year factor), compared with the
+# smoothed candidates but not selectable, because the smoothed index has no year factor; other
+# structures are compared with the best IID + year candidate and reported only.
 stage_set <- function(res, m) {
   if (!identical(res$stage, "fields")) return("All")
   sp <- res$specs[[m]]
-  if (is_iid_year_spec(sp)) "IID + year" else if (is_smoothed_spec(sp)) "Smoothed" else "Other"
+  if (is_iid_year_spec(sp)) "IID + year" else if (is_smoothed_set_spec(sp)) "Smoothed" else "Other"
+}
+
+# Candidates of the selection set `set` from which the rule selects: for Smoothed, those without
+# a year factor; for Other, none.
+stage_selectable <- function(res, models, set) {
+  models <- models[vapply(models, function(m) m %in% names(res$specs) && stage_set(res, m) == set, logical(1))]
+  if (set == "Smoothed") models <- models[vapply(models, function(m) is_smoothed_spec(res$specs[[m]]), logical(1))]
+  if (set == "Other") character() else models
 }
 
 stage_best <- function(res, models) {
@@ -338,8 +349,7 @@ stage_best <- function(res, models) {
 stage_smoothed <- function(res) {
   if (!identical(res$stage, "fields")) return(NA_character_)
   if (!is.null(res$smoothed)) return(res$smoothed)
-  smo <- res$cv$model[vapply(res$cv$model, function(m) stage_set(res, m) == "Smoothed", logical(1))]
-  close <- stage_eligible(res, smo)
+  close <- stage_eligible(res, stage_selectable(res, res$cv$model, "Smoothed"))
   if (!length(close)) return(NA_character_)
   close[which.min(vapply(close, function(m) smooth_size_spec(res$specs[[m]]), numeric(1)))]
 }
@@ -356,13 +366,19 @@ stage_table <- function(res) {
   set_of <- function(m) if (m %in% names(res$specs)) stage_set(res, m) else NA_character_
   cvt <- tibble::tibble(model = res$cv$model) |>
     dplyr::mutate(set = vapply(.data$model, set_of, character(1)))
-  cvt$ref <- vapply(cvt$set, function(g) stage_best(res, cvt$model[cvt$set == g]), character(1))
+  # Each set is compared with the best of its selectable candidates; Other with the best IID + year one.
+  cvt$ref <- vapply(cvt$set, function(g) {
+    if (is.na(g)) return(NA_character_)
+    stage_best(res, stage_selectable(res, cvt$model, if (g == "Other") "IID + year" else g))
+  }, character(1))
   cvt <- cvt |>
     dplyr::mutate(p = purrr::map2(.data$model, .data$ref, function(m, r) stage_pair(res, m, r)),
                   d = vapply(.data$p, `[[`, numeric(1), "d"),
                   se = vapply(.data$p, `[[`, numeric(1), "se"))
-  elig <- unlist(lapply(setdiff(unique(cvt$set), "Other"), function(g) stage_eligible(res, cvt$model[cvt$set == g])))
-  cvt$eligible <- ifelse(cvt$set == "Other", NA, cvt$model %in% elig)
+  sets <- setdiff(unique(stats::na.omit(cvt$set)), "Other")
+  selectable <- unlist(lapply(sets, function(g) stage_selectable(res, cvt$model, g)))
+  elig <- unlist(lapply(sets, function(g) stage_eligible(res, stage_selectable(res, cvt$model, g))))
+  cvt$eligible <- ifelse(cvt$model %in% selectable, cvt$model %in% elig, NA)
   role <- function(m) {
     r <- c(if (m == inc) "incoming", if (m == sel) "selected", if (!is.na(smo) && m == smo) "selected, smoothed index")
     if (length(r)) paste0(" (", paste(r, collapse = "; "), ")") else ""
@@ -372,7 +388,9 @@ stage_table <- function(res) {
     dplyr::mutate(mard = mard, failed = is.na(.data$AIC),
                   set = vapply(.data$model, set_of, character(1))) |>
     dplyr::left_join(dplyr::select(cvt, "model", "d", "se", "eligible"), by = "model") |>
-    dplyr::arrange(.data$AIC) |>
+    # By set (random-field stage), then best ELPD first; candidates without CV by AIC.
+    dplyr::arrange(match(.data$set, c("IID + year", "Smoothed", "Other", "All")),
+                   is.na(.data$d), dplyr::desc(.data$d), .data$AIC) |>
     dplyr::transmute(
       Candidate = paste0(.data$model, vapply(.data$model, role, character(1)),
                          ifelse(.data$failed, " (no fit saved)", "")),
@@ -397,8 +415,11 @@ is_iid_year_spec <- function(x) {
 
 # Smoothed-index structure: AR1 or random-walk spatiotemporal fields without a year factor.
 is_smoothed_spec <- function(x) {
-  !isTRUE(x$year) && all(unlist(x$spatiotemporal) %in% c("ar1", "rw"))
+  !isTRUE(x$year) && is_smoothed_set_spec(x)
 }
+
+# AR1 or random-walk spatiotemporal fields, with or without a year factor: the Smoothed set.
+is_smoothed_set_spec <- function(x) all(unlist(x$spatiotemporal) %in% c("ar1", "rw"))
 
 # Parameters of a smoothed structure, for the parsimony rule: one per random field (a variance)
 # and half a field for each AR1 correlation, so a random walk is simpler than an AR1 field and
@@ -437,12 +458,9 @@ stage_summary <- function(res) {
       tw_cv <- length(tw) && tw %in% cvm
       if (length(tw) && sel == tw) {
         "the Tweedie family, the simplest (one model component instead of two), is within one paired SE of the best."
-      } else if (sel == inc) {
-        paste0("the incoming family is within one paired SE of the best, ",
-               if (tw_cv) "and the Tweedie family, the only simpler one, is not." else "and the Tweedie family, the only simpler one, was not cross-validated in this run.")
       } else {
-        paste0("it has the highest ELPD, the incoming family is more than one paired SE below it (ΔELPD ",
-               vs_inc(sel), ")", if (tw_cv) " and so is the Tweedie family." else ", and the Tweedie family was not cross-validated in this run.")
+        paste0("it has the highest ELPD; the delta families have the same number of parameters, so parsimony cannot choose among them, ",
+               if (tw_cv) "and the Tweedie family, the only simpler one, is more than one paired SE below the best." else "and the Tweedie family, the only simpler one, was not cross-validated in this run.")
       }
     },
     "")
@@ -455,7 +473,7 @@ stage_summary <- function(res) {
   smo_txt <- if (!identical(res$stage, "fields")) "" else if (is.na(smo)) {
     " No smoothed candidate was cross-validated in this run, so the smoothed-index structure is selected when the stage is rerun."
   } else {
-    smo_best <- stage_best(res, cvm[vapply(cvm, function(m) stage_set(res, m) == "Smoothed", logical(1))])
+    smo_best <- stage_best(res, stage_selectable(res, cvm, "Smoothed"))
     paste0(" For the smoothed index, the selected structure is **", smo, "**, the smoothed candidate with the fewest parameters within one paired SE of the best smoothed candidate",
            if (smo != smo_best) paste0(", ", smo_best, " (ΔELPD ", fmt_pair(stage_pair(res, smo, smo_best)), ")") else "",
            ". The later stages select the fixed effects, the geometry and the family on the IID model; the smoothed index uses them with this field structure.")

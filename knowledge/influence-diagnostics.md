@@ -44,8 +44,18 @@ data as `extra_time`. Two levels:
   cruises were one-off or auxiliary cruises covering areas that few other cruises sample
   (continental slope, coast), often with few positive hauls.
 
-**Reading the influence** (`1 - exp(mean(log(ratio)))` over the unit's years, ratio = index
-without / with the unit): 0 = no change; positive = the unit raises the index (0.2: the index is
+**Survey series: use the absolute measure over all years.** For a series, influence is the
+geometric mean absolute change of the index over **all** index years,
+`exp(mean(abs(log(ratio)))) - 1`, and leverage is that influence divided by the series' share
+of **all** hauls. The signed measure below, averaged over the series' own years, cancels
+changes in opposite directions and favours short series: for ling (2026-11-26) it gave the
+coastal survey 0.03 although leaving it out moved the index by about 36 % a year, and ranked a
+two-year series first. Group series with fewer than `MIN_SERIES_YEARS` (default 3) years into
+Other at compile (`lump_short_series()`); they cannot inform a trend. In sdmTMBexperiments
+(0.1.14 or later) use `sdmTMB_leave_out(..., influence = "absolute")` for series.
+
+**Reading the signed influence** (cruises and other single-year units;
+`1 - exp(mean(log(ratio)))` over the unit's years, ratio = index without / with the unit): 0 = no change; positive = the unit raises the index (0.2: the index is
 20 % lower without it; 1: the whole index came from it); negative = the unit lowers it (−0.25:
 25 % higher without it), typically many empty or poor hauls in an area the other data predict
 to be dense. The density-share screen ranks units by a large density share, so it only finds

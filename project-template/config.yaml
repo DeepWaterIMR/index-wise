@@ -66,6 +66,7 @@ EXCLUDE_CRUISES: []
 #  - platformname: "<vessel name>"
 #    cruise: "<cruise number>"
 #    reason: "<one line, with a pointer to the influence section>"
+MIN_SERIES_YEARS: 3                   # a cruise series with fewer years is grouped into Other at compile
 
 # --- Response & products ----------------------------------------------------------------
 RESPONSE: "biomass"                   # "biomass" (rho_biomass) or "abundance" (rho_abundance)
