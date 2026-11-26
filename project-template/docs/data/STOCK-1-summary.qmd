@@ -80,8 +80,8 @@ index_bc <- purrr::compact(lapply(products, function(f) read_rep(paste0("index-b
 have_results <- length(post) == 3
 bias_corrected <- length(index_bc) == 3
 final <- cfg$FINAL_MODEL
-spict <- unlist(cfg$SPICT_CANDIDATE_INDICES)
-rec <- cfg$SPICT_RECOMMENDED_INDEX
+cand <- unlist(cfg$ASSESSMENT_CANDIDATE_INDICES)
+rec <- cfg$ASSESSMENT_RECOMMENDED_INDEX
 n_fish_pos <- sum(dt$biomass_fishable > 0)
 ```
 
@@ -97,12 +97,12 @@ if (have_results) {
   index_tab <- purrr::imap_dfr(if (bias_corrected) index_bc else purrr::map(post, "index"),
                                ~ dplyr::mutate(as.data.frame(.x), model = .y)) |>
     dplyr::mutate(model = factor(model, levels = names(products)), cv = sqrt(exp(se^2) - 1))
-  tot <- dplyr::filter(index_tab, model == spict[1])
+  tot <- dplyr::filter(index_tab, model == cand[1])
   last5 <- mean(tot$est[tot$year > max(tot$year) - 5]) / mean(tot$est)
   cv_med <- index_tab |> dplyr::summarise(cv = stats::median(cv), .by = "model")
   all_ok <- vapply(post, function(p) isTRUE(p$all_ok), logical(1))
   fishable_no_year <- isTRUE(post[["Fishable biomass (IID)"]]$year_factor_failed)
-  fish <- dplyr::filter(index_tab, model == spict[2])
+  fish <- dplyr::filter(index_tab, model == cand[2])
   fish_above <- fish$year[fish$est > tot$est[match(fish$year, tot$year)]]
   # Residuals and simulations of the total biomass (IID) model
   p_tot <- post[["Total biomass (IID)"]]
@@ -160,12 +160,12 @@ if (have_results) {
 "- **Model:** a spatiotemporal generalised linear mixed model (GLMM) fitted with the R package sdmTMB: ", family_name, " family, ", if ("fmonth" %in% final$TERMS) "month factor, " else "", "depth smooth, year factor, a spatial field and ", st_desc, ", ", final$MESH_CUTOFF_KM, " km mesh. The index is the predicted biomass summed over a ", cfg$GRID_KM, " km grid of the prediction region. The specification was selected by space–time block cross-validation ([Model selection](#model-selection)).\n",
 "- **Diagnostics:** ", if (all(all_ok)) "all three models converged and pass the sanity checks" else paste0("not all models pass the sanity checks (", list_values(names(all_ok)[!all_ok]), ")"), "; Mohn's ρ is ", retro_txt, if (!is.null(survey_r)) paste0("; single-survey indices correlate with the compiled index by r = ", paste0(round(survey_r$r, 2), " (", survey_r$model, ")", collapse = ", ")) else "", if (!is.null(infl) && nrow(infl_flag)) paste0("; ", nrow(infl_flag), if (nrow(infl_flag) == 1) " cruise moves" else " cruises move", " the index more than their share of the hauls warrants, but ", if (no_spikes) "they create no anomalous spikes, so none is removed" else paste0("the index stands out from its neighbouring years in ", spike_years, " in the direction of the flagged cruises, which should be checked for gear or sampling problems")) else "", " ([Model diagnostics](#model-diagnostics)).\n",
 "- **Trend:** the total biomass index peaked in ", tot$year[which.max(tot$est)], " and was lowest in ", tot$year[which.min(tot$est)], "; its mean over the last five years is ", round(last5, 2), " times the series mean. Median CV: ", paste0(pct(cv_med$cv), " (", lc_first(as.character(cv_med$model)), ")", collapse = ", "), ".\n",
-if (!is.null(rec)) paste0("- **Recommended index for SPiCT:** the ", rec_label, " index from the sdmTMB spatiotemporal GLMM with a year factor and IID fields, in tonnes in the prediction region, ", min(tot$year), "–", max(tot$year), if (bias_corrected) ", bias-corrected" else "", " (@fig-summary-indices, @tbl-summary-spict). The fishable biomass index is presented alongside it but is not recommended: only ", pct(n_fish_pos / nrow(dt), 0.1), " of the hauls caught fishable ", sp, ", ", if (fishable_no_year) "too few to estimate the year factor, " else "", if (length(fish_above)) paste0("and the fishable index exceeds the total index in ", format_ranges(fish_above), ".") else "too few for a robust index.", "\n") else paste0("- **Proposed indices for SPiCT:** the total biomass index and the fishable biomass index (", sp, " ≥ ", cfg$OVER_CM, " cm) from the sdmTMB spatiotemporal GLMM with a year factor and IID fields, in tonnes in the prediction region, ", min(tot$year), "–", max(tot$year), if (bias_corrected) ", bias-corrected" else "", " (@fig-summary-indices, @tbl-summary-spict). Which of the two SPiCT uses is decided in the SPiCT analyses", if (length(fish_above)) paste0("; note that the fishable index exceeds the total index in ", format_ranges(fish_above)) else "", ".\n")
+if (!is.null(rec)) paste0("- **Recommended index for ", assessment_model, ":** the ", rec_label, " index from the sdmTMB spatiotemporal GLMM with a year factor and IID fields, in tonnes in the prediction region, ", min(tot$year), "–", max(tot$year), if (bias_corrected) ", bias-corrected" else "", " (@fig-summary-indices, @tbl-summary-assessment). The fishable biomass index is presented alongside it but is not recommended: only ", pct(n_fish_pos / nrow(dt), 0.1), " of the hauls caught fishable ", sp, ", ", if (fishable_no_year) "too few to estimate the year factor, " else "", if (length(fish_above)) paste0("and the fishable index exceeds the total index in ", format_ranges(fish_above), ".") else "too few for a robust index.", "\n") else paste0("- **Proposed indices for ", assessment_model, ":** the total biomass index and the fishable biomass index (", sp, " ≥ ", cfg$OVER_CM, " cm) from the sdmTMB spatiotemporal GLMM with a year factor and IID fields, in tonnes in the prediction region, ", min(tot$year), "–", max(tot$year), if (bias_corrected) ", bias-corrected" else "", " (@fig-summary-indices, @tbl-summary-assessment). Which of the two is used is decided in the assessment", if (length(fish_above)) paste0("; note that the fishable index exceeds the total index in ", format_ranges(fish_above)) else "", ".\n")
 ) else "*The key points are written when the report document has been computed.*"`
 
 # Introduction
 
-This document summarises the IMR bottom-trawl survey indices for `r sp` (*`r cfg$SPECIES_LATIN`*) in `r area_label` (stock `r cfg$STOCK_CODE`; @tbl-documents). `r cfg$PURPOSE` Three indices are calculated with spatiotemporal GLMMs in sdmTMB [@anderson2025; @Vihtakari2026]: two unsmoothed indices for SPiCT, total biomass and fishable biomass, with independent (IID) spatiotemporal fields and a year factor, so that each year's value comes from that year's hauls`r if (have_results && fishable_no_year) " (the fishable model without the year factor, which could not be estimated)" else ""`; and a smoothed total biomass index with autocorrelated (AR1) fields as a reference for the trend. This summary gives the main points; each section links to the document with the details.
+This document summarises the IMR bottom-trawl survey indices for `r sp` (*`r cfg$SPECIES_LATIN`*) in `r area_label` (stock `r cfg$STOCK_CODE`; @tbl-documents). `r cfg$PURPOSE` Three indices are calculated with spatiotemporal GLMMs in sdmTMB [@anderson2025; @Vihtakari2026]: two unsmoothed indices for `r assessment_model`, total biomass and fishable biomass, with independent (IID) spatiotemporal fields and a year factor, so that each year's value comes from that year's hauls`r if (have_results && fishable_no_year) " (the fishable model without the year factor, which could not be estimated)" else ""`; and a smoothed total biomass index with autocorrelated (AR1) fields as a reference for the trend. This summary gives the main points; each section links to the document with the details.
 
 ```{r}
 #| label: tbl-documents
@@ -174,7 +174,7 @@ tibble::tibble(
   Step = 0:6,
   Document = c(links$background, "This summary", links$selection, links$data, links$fit, links$validate, links$report),
   Content = c("Stock identity, fisheries, management, earlier advice and the fishable length",
-              "Main points and the recommended SPiCT index",
+              "Main points and the recommended index",
               "Surveys, hauls, gear and haul-quality rules, prediction region",
               "Compiled haul data, swept-area densities, length data and checks",
               "First sdmTMB models: mesh, grid, diagnostics, first index",
@@ -206,7 +206,7 @@ The model specification was selected in `r links$validate` after the first model
 
 - **Mesh:** `r final$MESH_CUTOFF_KM` km cutoff, the coarsest cutoff that passes the sanity checks and whose index stays within 5 % of the index of the best-predicting cutoff.
 - **Random fields:** a spatial field in both delta components and `r st_desc`: the IID structure with the fewest fields among those that predicted within one standard error of the best. The correlation is `r if (isTRUE(final$ANISOTROPY)) "anisotropic: the isotropic correlation predicted worse by more than one standard error" else "isotropic, the simplest geometry, which predicted within one standard error of the best"`.
-- **Fixed effects:** `r if ("fmonth" %in% final$TERMS) "a month factor, " else ""``r if ("fsurvey" %in% final$TERMS) "a cruise-series factor, " else ""``r if ("fgear" %in% final$TERMS) "a trawl-model factor, " else ""`a depth smooth and the year factor that the SPiCT index needs.`r if (!"geartype" %in% unlist(final$TERMS)) " Gear type was dropped: the model without it predicted within one standard error of the best." else ""``r if (!"fsurvey" %in% unlist(final$TERMS)) " A cruise-series factor did not predict better by more than one standard error, so it was not added." else ""``r if (identical(cfg$MONTH_TERM, "none")) paste0(" A month term was not used, because few hauls in April–July caught ", sp, ".") else ""`
+- **Fixed effects:** `r if ("fmonth" %in% final$TERMS) "a month factor, " else ""``r if ("fsurvey" %in% final$TERMS) "a cruise-series factor, " else ""``r if ("fgear" %in% final$TERMS) "a trawl-model factor, " else ""`a depth smooth and the year factor that the index for `r assessment_model` needs.`r if (!"geartype" %in% unlist(final$TERMS)) " Gear type was dropped: the model without it predicted within one standard error of the best." else ""``r if (!"fsurvey" %in% unlist(final$TERMS)) " A cruise-series factor did not predict better by more than one standard error, so it was not added." else ""``r if (identical(cfg$MONTH_TERM, "none")) paste0(" A month term was not used, because few hauls in April–July caught ", sp, ".") else ""`
 - **Family:** `r family_name``r if (identical(final$FAMILY, "delta_lognormal")) ": no other family predicted better by more than one standard error" else ": under the selection rule, it predicted the held-out hauls better than the incoming delta-lognormal family and the Tweedie family by more than one standard error"`.
 - **Prediction grid:** `r cfg$GRID_KM` km cells, whose index stays within 1 % of the index on a 5 km grid.
 
@@ -220,22 +220,22 @@ The fitted models and their checks are in `r links$report`. `r if (have_results)
 
 # Indices
 
-`r if (have_results) paste0("The three indices are shown in @fig-summary-indices", if (!is.null(rec)) paste0(", and the values of the recommended ", rec_label, " index and the fishable index in @tbl-summary-spict.") else ", and the values of the two SPiCT candidates in @tbl-summary-spict.", " The final indices, their exported hand-off files and all diagnostics are in ", links$report, ".") else ""`
+`r if (have_results) paste0("The three indices are shown in @fig-summary-indices", if (!is.null(rec)) paste0(", and the values of the recommended ", rec_label, " index and the fishable index in @tbl-summary-assessment.") else ", and the values of the two candidate indices in @tbl-summary-assessment.", " The final indices, their exported hand-off files and all diagnostics are in ", links$report, ".") else ""`
 
 ```{r}
 #| label: fig-summary-indices
 #| eval: !expr have_results
 #| fig-height: 7.5
-#| fig-cap: !expr 'paste0("Survey indices of ", sp, " in ", area_label, if (bias_corrected) " (bias-corrected)" else "", ". A) Biomass in the prediction region (kt) with 95 % confidence intervals. B) Each index divided by its mean. C) Coefficient of variation. ", if (!is.null(rec)) paste0("The ", lc_first(sub(" \\\\(IID\\\\)", "", rec)), " index is recommended for SPiCT; the fishable index is shown alongside it and the smoothed index as a reference for the trend.") else "The total and fishable biomass (IID) indices are the SPiCT candidates; the smoothed index is a reference.")'
+#| fig-cap: !expr 'paste0("Survey indices of ", sp, " in ", area_label, if (bias_corrected) " (bias-corrected)" else "", ". A) Biomass in the prediction region (kt) with 95 % confidence intervals. B) Each index divided by its mean. C) Coefficient of variation. ", if (!is.null(rec)) paste0("The ", lc_first(sub(" \\\\(IID\\\\)", "", rec)), " index is recommended for ", assessment_model, "; the fishable index is shown alongside it and the smoothed index as a reference for the trend.") else paste0("The total and fishable biomass (IID) indices are the candidates for ", assessment_model, "; the smoothed index is a reference."))'
 plot_report_indices(index_tab)
 ```
 
 ```{r}
-#| label: tbl-summary-spict
+#| label: tbl-summary-assessment
 #| eval: !expr have_results
-#| tbl-cap: !expr 'paste0(if (!is.null(rec)) paste0("Recommended SPiCT index of ", sp, " (", lc_first(sub(" \\\\(IID\\\\)", "", rec)), ") and the fishable biomass index (≥ ", cfg$OVER_CM, " cm) presented alongside it") else paste0("Proposed SPiCT indices of ", sp, ": total biomass and fishable biomass (≥ ", cfg$OVER_CM, " cm)"), " in the prediction region (t)", if (bias_corrected) ", bias-corrected" else "", ", with their coefficients of variation.")'
+#| tbl-cap: !expr 'paste0(if (!is.null(rec)) paste0("Index of ", sp, " recommended for ", assessment_model, " (", lc_first(sub(" \\\\(IID\\\\)", "", rec)), ") and the fishable biomass index (≥ ", cfg$OVER_CM, " cm) presented alongside it") else paste0("Indices of ", sp, " proposed for ", assessment_model, ": total biomass and fishable biomass (≥ ", cfg$OVER_CM, " cm)"), " in the prediction region (t)", if (bias_corrected) ", bias-corrected" else "", ", with their coefficients of variation.")'
 index_tab |>
-  dplyr::filter(model %in% spict) |>
+  dplyr::filter(model %in% cand) |>
   dplyr::transmute(Year = year, model = sub(" \\(IID\\)", "", model),
                    value = paste0(n_fmt(round(est / 1000)), " (", sprintf("%.2f", cv), ")")) |>
   tidyr::pivot_wider(names_from = model, values_from = value) |>

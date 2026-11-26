@@ -131,7 +131,7 @@ SELECTION:
   GRID_TOL: 0.01                      # grid: index within 1 % of the finest grid
   WINDOW: 5                           # years in the end-of-series mean
   GRID_LADDER_KM: [5, 10, 20, 30, 50, 100, 200]
-  IID_YEAR_ONLY: true                 # field stage decides among IID + year structures (index for SPiCT or another state-space model)
+  IID_YEAR_ONLY: true                 # field stage decides among IID + year structures (index for an assessment model that treats annual values as independent observations)
   FIXED_EXTRA: ["month_smooth", "fsurvey", "fgear", "quadratic_depth"]  # extra fixed-effect candidates
 MAX_DEPTH: 1400                       # deepest grid cell to keep (m)
 MIN_DEPTH: null                       # shallowest grid cell to keep (m); null = no minimum
@@ -145,11 +145,11 @@ EFFORT: "density"                     # density | offset
 FAMILY: "delta_lognormal"             # delta_lognormal | delta_gamma | delta_lognormal_poisson_link | delta_gamma_poisson_link | tweedie
 SPATIAL: "on"                         # one value, or one per delta component, e.g. ["on", "off"]
 SPATIOTEMPORAL: "ar1"                 # ar1 | iid | rw | off
-YEAR_EFFECT: false                    # year factor (fyear) in the Step 2 model; true for a SPiCT-type base (IID + year)
+YEAR_EFFECT: false                    # year factor (fyear) in the Step 2 model; true for an IID + year base (index for a state-space assessment)
 MONTH_TERM: "smooth"                  # smooth | factor | none; a smooth collapses with few positive months, a factor needs positives in every month (knowledge/sdmtmb.md, first-fit symptoms)
 FISHABLE_YEAR_EFFECT: true            # false: fit the fishable (over OVER_CM) index without the year factor when it is too sparse
 INCLUDE_TEMPERATURE: false            # temperature smooth is OFF by default
-ASSESSMENT_MODEL: "SPiCT"             # what consumes the selected index
+ASSESSMENT_MODEL: "SPiCT"             # the assessment model that consumes the IID + year indices, named in the documents (e.g. "SPiCT", "SAM", "gadget3"; "none" for an index without one)
 SELECTED_INDEX: "Total biomass"       # exact name in the report's index_products list
 ASSESSMENT_INDEX_UNITS: "relative index units"
 ASSESSMENT_INDEX_TYPE: "survey biomass"
@@ -157,7 +157,7 @@ ASSESSMENT_INDEX_TIMING: 0.5          # fraction of the INDEX year; confirm agai
 
 # --- Final report (docs/sdmtmb/<species>/report.qmd, R/report/) -----------------------------
 # FINAL_MODEL: the specification selected in validate.qmd; the report fits the total and the
-# over-OVER_CM biomass with it (IID spatiotemporal fields + year factor, the SPiCT structure).
+# over-OVER_CM biomass with it (IID spatiotemporal fields + year factor, the structure of an index for the assessment).
 # Without it, the report falls back to the config defaults and warns. Example:
 #   FINAL_MODEL:
 #     MESH_CUTOFF_KM: 30
@@ -169,8 +169,8 @@ ASSESSMENT_INDEX_TIMING: 0.5          # fraction of the INDEX year; confirm agai
 FINAL_MODEL: null
 SMOOTHED_SPATIAL: "off"               # spatial field of the smoothed total-biomass index (no year factor)
 SMOOTHED_SPATIOTEMPORAL: "ar1"        # its spatiotemporal fields (selected among the smoothed candidates in validate.qmd)
-SPICT_CANDIDATE_INDICES: ["Total biomass (IID)", "Fishable biomass (IID)"]  # exported as assessment hand-offs
-SPICT_RECOMMENDED_INDEX: null         # the index project's recommendation (per stock); the assessment project decides (SELECTED_INDEX there)
+ASSESSMENT_CANDIDATE_INDICES: ["Total biomass (IID)", "Fishable biomass (IID)"]  # exported as assessment hand-offs (legacy name SPICT_CANDIDATE_INDICES is still read)
+ASSESSMENT_RECOMMENDED_INDEX: null    # the index project's recommendation (per stock); the assessment project decides (SELECTED_INDEX there); legacy name SPICT_RECOMMENDED_INDEX
 REPORT_SURVEYS: null                  # cruise series for the single-survey comparison; null = the three with most hauls
 REPORT_SUBAREAS: null                 # ICES subareas for the regional split, e.g. ["1", "2"]; null = all
 REGIONS_FILE: null                    # optional assessment regions (polygons with a `region` column) for the regional split

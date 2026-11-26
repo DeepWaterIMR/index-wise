@@ -167,6 +167,21 @@ area_short <- if (length(cfg$STOCK_SUBAREAS)) {
   paste0("ICES ", paste(unlist(cfg$STOCK_SUBAREAS), collapse = "\u2013"))
 } else cfg$AREA_LABEL %||% cfg$REGION %||% ""
 
+# The assessment model that consumes the IID + year indices, as the documents name it
+# ("the assessment model" when ASSESSMENT_MODEL is empty or "none"). The candidate and
+# recommended indices also read their legacy SPICT_* names.
+assessment_model <- cfg[["ASSESSMENT_MODEL", exact = TRUE]]
+if (!length(assessment_model) || is.na(assessment_model[1]) || !nzchar(trimws(assessment_model[1])) ||
+    tolower(trimws(assessment_model[1])) %in% c("none", "null", "no")) {
+  assessment_model <- "the assessment model"
+}
+assessment_model <- as.character(assessment_model[1])
+assessment_model_cap <- paste0(toupper(substr(assessment_model, 1, 1)), substring(assessment_model, 2))
+cfg$ASSESSMENT_CANDIDATE_INDICES <- cfg[["ASSESSMENT_CANDIDATE_INDICES", exact = TRUE]] %||%
+  cfg[["SPICT_CANDIDATE_INDICES", exact = TRUE]] %||% list("Total biomass (IID)", "Fishable biomass (IID)")
+cfg$ASSESSMENT_RECOMMENDED_INDEX <- cfg[["ASSESSMENT_RECOMMENDED_INDEX", exact = TRUE]] %||%
+  cfg[["SPICT_RECOMMENDED_INDEX", exact = TRUE]]
+
 # Derived convenience values.
 dt_crs         <- cfg$CRS
 grid_side_size <- cfg$GRID_KM                       # km

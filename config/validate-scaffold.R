@@ -128,6 +128,10 @@ stopifnot(!is.null(key),
           !length(list.files(target, "STOCK", recursive = TRUE, include.dirs = TRUE)),
           any(grepl(paste0('index_species <- "', key, '"'),
                     readLines(file.path(target, docs_root, "data", paste0(key, "-1-summary.qmd"))), fixed = TRUE)))
+# The documents name the assessment model from ASSESSMENT_MODEL, never a model directly.
+named <- Filter(function(f) any(grepl("SPiCT", readLines(f, encoding = "UTF-8", warn = FALSE), fixed = TRUE)),
+                list.files(file.path(target, docs_root), "[.]qmd$", recursive = TRUE, full.names = TRUE))
+if (length(named)) stop("Documents name SPiCT instead of `r assessment_model`: ", paste(basename(named), collapse = ", "))
 # Two stocks: one set of numbered documents each, stamped with each stock's identity; the
 # parity test passes on the scaffold and catches an edit of one stock only.
 cfg2 <- cfg

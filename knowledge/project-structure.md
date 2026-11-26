@@ -129,7 +129,9 @@ Model selection: `MESH_LADDER_KM` and the `SELECTION` block (`CV_TOP_N`, `MESH_T
 `R/validation/sync_final_model.R`), `FISHABLE_YEAR_EFFECT`, `SENSITIVITY_OVER_CM`,
 `SENSITIVITIES` (refits of type `drop`, `keep`, `offset`, `fishable_threshold`),
 `REGIONS_FILE`/`REGIONS` (regional split; ICES divisions without them),
-`SPICT_RECOMMENDED_INDEX`, `SITE_DIR` (optional website clone).
+`ASSESSMENT_CANDIDATE_INDICES`/`ASSESSMENT_RECOMMENDED_INDEX`
+(the IID + year hand-offs and the recommendation; legacy `SPICT_*` names are read),
+`ASSESSMENT_MODEL` (named in the document text), `SITE_DIR` (optional website clone).
 
 For split domains also set `REGION`, `REGION_SLUG`, `REGION_FILE`, and `REGION_LAYER`. For
 high-latitude overview maps, optionally set `MAP_CRS` (default EPSG:3995, Arctic LAEA) and

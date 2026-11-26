@@ -40,4 +40,5 @@ design balance, late components, bridging, robustness, CPUE) were kept.
 
 Not ported (project-specific): the ling/tusk values, the redfish regions file, the EcoS and
 cruise investigations, the data-review response, the Sigma2 journal and ledger. The document
-texts still assume SPiCT as the assessment model where they explain the IID + year structure.
+texts name the assessment model from `ASSESSMENT_MODEL` (`assessment_model` in `R/0_setup.R`);
+the ling/tusk texts named SPiCT directly.
