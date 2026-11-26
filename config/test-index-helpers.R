@@ -123,4 +123,14 @@ stopifnot(identical(l$OVER_CM, 67), identical(t$OVER_CM, 30),
           inherits(try(select_stock(multi), silent = TRUE), "try-error"),       # key needed
           inherits(try(select_stock(multi, "cod"), silent = TRUE), "try-error"))
 
+# The reason for a dropped month term names the sampled months with few positive hauls.
+mo <- rep(c(1:3, 5:8), each = 20)
+pos <- mo %in% 1:3 | (mo == 8 & rep(1:20, 7) <= 15)
+reason <- month_term_reason(mo, pos, "ling")   # "... each of May–July caught ling, ..."; the dash depends on the locale
+stopifnot(startsWith(reason, "fewer than 10 hauls in each of May"),
+          grepl("July caught ling, so a month term", reason, fixed = TRUE),
+          !grepl("January|August", reason),
+          identical(month_term_reason(mo, rep(TRUE, length(mo)), "ling"),
+                    "a month term could not be estimated in the first fits"))
+
 message("Synthetic index-helper checks passed.")

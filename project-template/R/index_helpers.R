@@ -72,6 +72,29 @@ index_year <- function(year, month, start_month = 1L, label = "start") {
   as.integer(if (identical(label, "end")) season_start + 1L else season_start)
 }
 
+#' Why a month term was left out, from the data: the sampled months with few positive hauls
+#'
+#' @param month Month (1-12) of each haul.
+#' @param positive Whether each haul caught the species.
+#' @param species Species name for the text.
+#' @param min_pos Sampled months with fewer positive hauls than this are named.
+#' @return A clause such as "fewer than 10 hauls in each of April\u2013July caught ling, so a
+#'   month term could not be estimated in the first fits".
+month_term_reason <- function(month, positive, species, min_pos = 10L) {
+  fit_txt <- "a month term could not be estimated in the first fits"
+  month <- factor(month, levels = 1:12)
+  sampled <- tapply(!is.na(positive), month, sum)
+  n_pos <- tapply(positive, month, sum, na.rm = TRUE)
+  m <- which(!is.na(sampled) & sampled > 0 & n_pos < min_pos)
+  if (!length(m)) return(fit_txt)
+  runs <- split(m, cumsum(c(1, diff(m) != 1)))
+  months <- vapply(runs, function(r) {
+    if (length(r) == 1L) month.name[r] else paste0(month.name[r[1]], "\u2013", month.name[r[length(r)]])
+  }, character(1), USE.NAMES = FALSE)
+  paste0("fewer than ", min_pos, " hauls in each of ", paste(months, collapse = ", "), " caught ",
+         species, ", so ", fit_txt)
+}
+
 # The modelling frame shared by Steps 2-4: lon/lat, calendar and index year, month, the response
 # implied by RESPONSE and EFFORT, the offset column, a survey factor and UTM coordinates (km).
 prepare_model_data <- function(dt, cfg) {

@@ -171,6 +171,7 @@ SMOOTHED_SPATIAL: "off"               # spatial field of the smoothed total-biom
 SMOOTHED_SPATIOTEMPORAL: "ar1"        # its spatiotemporal fields (selected among the smoothed candidates in validate.qmd)
 ASSESSMENT_CANDIDATE_INDICES: ["Total biomass (IID)", "Fishable biomass (IID)"]  # exported as assessment hand-offs (legacy name SPICT_CANDIDATE_INDICES is still read)
 ASSESSMENT_RECOMMENDED_INDEX: null    # the index project's recommendation (per stock); the assessment project decides (SELECTED_INDEX there); legacy name SPICT_RECOMMENDED_INDEX
+ASSESSMENT_RECOMMENDATION_REASON: null  # why that index is recommended, as a clause after "because" (per stock), e.g. "too few hauls caught fishable fish for a robust fishable index"
 REPORT_SURVEYS: null                  # cruise series for the single-survey comparison; null = the three with most hauls
 REPORT_SUBAREAS: null                 # ICES subareas for the regional split, e.g. ["1", "2"]; null = all
 REGIONS_FILE: null                    # optional assessment regions (polygons with a `region` column) for the regional split
