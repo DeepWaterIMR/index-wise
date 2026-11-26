@@ -158,3 +158,13 @@ AFFILIATIONS:
 
 Replace the example values with confirmed human metadata. No private database paths belong
 in report metadata. `BASE_SIZE` defaults to 12; `FIGURES_DIR` defaults to `figures/`; `DOCS_DIR` defaults to `docs`.
+
+## Projects scaffolded before 0.3.0
+
+Version 0.3.0 changed the project layout: numbered per-stock documents
+(`<stock>-0-background` … `<stock>-6-report`) with shared report sections, `SPECIES_SETTINGS`
+for one or several stocks, the `SELECTION` and `SENSITIVITIES` blocks, the stage runner in
+`R/validation/` with `sync_final_model.R`, and the unattended `R/run_models.sh`. A flat
+0.2.x config is still read as one stock, and the legacy `SPICT_*` index keys are still read.
+Do not migrate an existing project silently: copy new helpers or documents into it only on
+the maintainer's request, and record what was taken in its `ai/memory/`.
