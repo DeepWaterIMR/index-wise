@@ -67,4 +67,10 @@ stopifnot(identical(y3$FINAL_MODEL$MESH_CUTOFF_KM, 30L), identical(y3$MESH_CUTOF
 # Decisions the report cannot apply are reported.
 stopifnot(length(sync_config_lines(flat, "cod", modifyList(d, list(barrier = TRUE)))$problems) == 1L)
 
+# FINAL_MODEL$EFFORT only when the family stage compared density and catch + offset candidates.
+stopifnot(is.null(y3$FINAL_MODEL$EFFORT))
+y4 <- yaml::yaml.load(paste(sync_config_lines(flat, "cod", modifyList(d, list(offset = TRUE)))$lines, collapse = "\n"))
+y5 <- yaml::yaml.load(paste(sync_config_lines(r3$lines, "cod", modifyList(d, list(offset = FALSE)))$lines, collapse = "\n"))
+stopifnot(identical(y4$FINAL_MODEL$EFFORT, "offset"), identical(y5$FINAL_MODEL$EFFORT, "density"))
+
 message("Synthetic validation-helper checks passed.")

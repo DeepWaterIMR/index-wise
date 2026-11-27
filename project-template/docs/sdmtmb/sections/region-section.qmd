@@ -1,4 +1,4 @@
-<!-- Included by the stock reports (<stock>-6-report.qmd). Regional contributions to the total biomass (IID) index. -->
+<!-- Included by the stock reports (<stock>-6-report.qmd). Regional contributions to the total biomass (IID) and smoothed indices. -->
 
 ## Regional contributions to the index {#sec-regional}
 
@@ -11,18 +11,32 @@ reg_cols <- stats::setNames(c("#E69F00", "#56B4E9", "#009E73", "#CC79A7", "#0072
 haul_reg <- dt |>
   dplyr::mutate(region = factor(assessment_region(dt, cfg, dt_crs), levels = reg_used)) |>
   dplyr::count(year, region, name = "hauls")
-reg <- if (!is.null(post[[total]])) {
-  post[[total]]$pred |>
+# Regional split of the plug-in index (cached grid predictions, without bias correction) of the
+# total biomass (IID) and the smoothed model. The IID model's year factor scales every cell alike,
+# so its regional changes come from its spatiotemporal fields only; the smoothed model has no year
+# factor, so all its change between years comes from fields in both components.
+reg_of <- function(m) {
+  if (is.null(post[[m]]$pred)) return(NULL)
+  post[[m]]$pred |>
     dplyr::mutate(est = exp(est)) |>
     dplyr::left_join(cell_region, by = c("X", "Y")) |>
-    sdmTMBexperiments::index_by_region(region_col = "region", area = grid_cell_area_nmi2)
+    sdmTMBexperiments::index_by_region(region_col = "region", area = grid_cell_area_nmi2) |>
+    unclass() |> tibble::as_tibble() |> dplyr::mutate(model = m)
 }
+reg_all <- dplyr::bind_rows(reg_of(total), reg_of(smoothed))
+reg <- if (nrow(reg_all) && total %in% reg_all$model) reg_all
 if (!is.null(reg)) {
-  reg_tab <- tibble::as_tibble(unclass(reg)) |> dplyr::mutate(region = factor(region, levels = reg_used))
+  reg_all <- dplyr::mutate(reg_all, region = factor(region, levels = reg_used),
+                           model = factor(model, levels = intersect(c(total, smoothed), unique(model))))
+  reg_tab <- dplyr::filter(reg_all, model == total)
   reg_mean <- reg_tab |> dplyr::summarise(share = mean(share), .by = "region") |> dplyr::arrange(dplyr::desc(share))
-  reg_cor <- reg_tab |>
-    dplyr::left_join(dplyr::summarise(reg_tab, tot = sum(est), .by = "year"), by = "year") |>
-    dplyr::summarise(r = stats::cor(log(est), log(tot)), .by = "region")
+  reg_cor_all <- reg_all |>
+    dplyr::left_join(dplyr::summarise(reg_all, tot = sum(est), .by = c("year", "model")), by = c("year", "model")) |>
+    dplyr::summarise(r = stats::cor(log(est), log(tot)), .by = c("model", "region"))
+  reg_cor <- dplyr::filter(reg_cor_all, model == total)
+  reg_cor_smo <- dplyr::filter(reg_cor_all, model == smoothed)
+  share_range <- reg_all |> dplyr::summarise(lo = min(share), hi = max(share), .by = c("model", "region"))
+  top_range <- function(m) { x <- dplyr::filter(share_range, model == m, region == reg_mean$region[1]); paste0(pct(x$lo), "–", pct(x$hi)) }
   first_last <- reg_tab |>
     dplyr::summarise(early = mean(share[year < min(year) + 5]), late = mean(share[year > max(year) - 5]), .by = "region")
   reg_top <- as.character(reg_mean$region[1])
@@ -32,7 +46,7 @@ if (!is.null(reg)) {
 
 The total biomass index is the sum of the predicted biomass over the grid cells, so it can be split by area without refitting. The cells were assigned to `r if (is.null(cfg$REGIONS_FILE)) "the ICES divisions" else "the assessment regions of REGIONS_FILE"`, of which `r length(reg_used)` overlap the prediction region of `r sp_lc` (@fig-report-region-map), and the predicted biomass (without the bias correction) was summed by area and year (`r fn_doc("index_by_region")`). The split shows which areas carry the index and whether its trend comes from one area or from all of them, which matters because the survey coverage of the areas differs between series and years.
 
-`r if (!is.null(reg)) paste0("The ", reg_top, " holds on average ", pct(reg_mean$share[1]), " of the index, followed by ", list_values(paste0(reg_mean$region[-1], " (", pct(reg_mean$share[-1]), ")")), " (@fig-report-region). The share of the ", reg_top, " was ", pct(first_last$early[first_last$region == reg_top]), " in the first five years and ", pct(first_last$late[first_last$region == reg_top]), " in the last five. The log index of each area correlates with the log total index by r = ", paste0(sprintf("%.2f", reg_cor$r), " (", reg_cor$region, ")", collapse = ", "), if (nrow(reg_low_cor)) paste0("; the ", list_values(as.character(reg_low_cor$region)), if (nrow(reg_low_cor) == 1) " follows" else " follow", " the total index least, so ", if (nrow(reg_low_cor) == 1) "its" else "their", " trend differs from that of the stock as a whole") else "", ".", if (all(reg_cor$r > 0.95)) paste0(" The areas follow the total index closely because the predicted distribution changes little between years: the year-to-year change of the IID model comes mostly from the year factor, which scales all cells alike, and its spatiotemporal field (", st_txt(final$SPATIOTEMPORAL), ") has a small variance (@tbl-report-random).") else "") else "The regional split has not been computed yet."`
+`r if (!is.null(reg)) paste0("The ", reg_top, " holds on average ", pct(reg_mean$share[1]), " of the index, followed by ", list_values(paste0(reg_mean$region[-1], " (", pct(reg_mean$share[-1]), ")")), " (@fig-report-region). The share of the ", reg_top, " was ", pct(first_last$early[first_last$region == reg_top]), " in the first five years and ", pct(first_last$late[first_last$region == reg_top]), " in the last five. The log index of each area correlates with the log total index by r = ", paste0(sprintf("%.2f", reg_cor$r), " (", reg_cor$region, ")", collapse = ", "), if (nrow(reg_low_cor)) paste0("; the ", list_values(as.character(reg_low_cor$region)), if (nrow(reg_low_cor) == 1) " follows" else " follow", " the total index least, so ", if (nrow(reg_low_cor) == 1) "its" else "their", " trend differs from that of the stock as a whole") else "", ".", if (all(reg_cor$r > 0.95)) paste0(" The areas follow the total index closely because the IID model leaves little room for the distribution to change: its year factor scales all cells alike, and only its spatiotemporal field (", st_txt(final$SPATIOTEMPORAL), ") can move biomass between areas", if (any(unlist(final$SPATIOTEMPORAL) == "off")) ", while the component without a spatiotemporal field keeps the same spatial pattern in every year" else "", ".") else "", if (nrow(reg_cor_smo)) paste0(" The smoothed model has no year factor, so all its change between years comes from its spatiotemporal fields; it is the better guide to changes in distribution. In it, the share of the ", reg_top, " ranges from ", top_range(smoothed), " over the years (", top_range(total), " in the IID model), and the log index of each area correlates with its log total index by r = ", paste0(sprintf("%.2f", reg_cor_smo$r), " (", reg_cor_smo$region, ")", collapse = ", "), ".") else "") else "The regional split has not been computed yet."`
 
 ```{r}
 #| label: fig-report-region-map
@@ -57,15 +71,17 @@ ggOceanMaps::basemap(data = reg_map_sf, legends = FALSE, rotate = TRUE, land.col
 #| label: fig-report-region
 #| eval: !expr '!is.null(reg)'
 #| fig-height: 7
-#| fig-cap: !expr 'paste0("Regional composition of the total biomass (IID) index of ", sp_lc, " by area. A) Share of the index in each area by year. B) The index of each area divided by its own mean. C) Number of hauls in each area by year.")'
-a <- ggplot2::ggplot(reg_tab, ggplot2::aes(year, share, fill = region)) +
+#| fig-cap: !expr 'paste0("Regional composition of the total biomass (IID) and smoothed indices of ", sp_lc, " by area (plug-in indices, without bias correction). A) Share of the index in each area by year. B) The index of each area divided by its own mean. C) Number of hauls in each area by year.")'
+a <- ggplot2::ggplot(reg_all, ggplot2::aes(year, share, fill = region)) +
   ggplot2::geom_area(colour = "white", linewidth = 0.2) +
+  ggplot2::facet_wrap(~model, nrow = 1) +
   ggplot2::scale_y_continuous(labels = scales::percent) +
   ggplot2::scale_fill_manual(values = reg_cols) +
   ggplot2::labs(x = NULL, y = "Share of index", fill = "Area") +
   ggplot2::theme_bw(base_size = 9) + ggplot2::theme(legend.position = "none")
-b <- ggplot2::ggplot(reg_tab, ggplot2::aes(year, rel_mean, colour = region)) +
+b <- ggplot2::ggplot(reg_all, ggplot2::aes(year, rel_mean, colour = region)) +
   ggplot2::geom_hline(yintercept = 1, linetype = 2, colour = "grey50") +
+  ggplot2::facet_wrap(~model, nrow = 1) +
   ggplot2::geom_line() + ggplot2::geom_point(size = 0.7) +
   ggplot2::scale_colour_manual(values = reg_cols) +
   ggplot2::labs(x = NULL, y = "Index / mean", colour = "Area") +

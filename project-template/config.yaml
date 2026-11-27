@@ -80,7 +80,9 @@ LENGTH_GROUPS: ["(0,10]", "(10,15]", "(15,20]", "(20,25]", "(25,30]", "(30,40]",
 # geartype as a model fixed effect when more than one major gear type is represented.
 # GEAR_WIDTHS (optional) gives other widths by gear_model_group() level ("Alfredo",
 # "Konsum 60", "Campelen Rs", "Campelen Rg", "Other trawl"; "Other cod" = other cod-type
-# trawls), e.g. cod trawls scaled by their wing spread relative to Campelen's:
+# trawls), e.g. cod trawls scaled by their wing spread relative to Campelen's (Alfredo III
+# wing spread = 10.1 + 0.142 x door spread, Nogueira & Treble 2020, NAFO SCR 20/015; the
+# survey-selection text describes this derivation, edit it if yours differs):
 #   GEAR_WIDTHS: {Alfredo: 47, "Konsum 60": 53, "Other cod": 51}
 # GEAR_WIDTHS_DOOR (optional) is the report's gear-width-door sensitivity: the same keys scaled
 # by the door-spread ratio (full herding by doors and sweeps), e.g. {Alfredo: 78, ...}.

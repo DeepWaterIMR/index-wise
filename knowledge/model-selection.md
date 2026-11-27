@@ -371,6 +371,20 @@ the encounter probability; with a logit link the two versions are the same model
 changes. The `offset` sensitivity then refits the density model of the selection, and the
 report, validate and sensitivity texts say which response was used (lotidae, 2026-11-27).
 
+**The family stage compares both responses** (EFFORT: density). The Poisson-link families are
+also fitted as catch + log swept-area offset (`stage_candidates()`, `run_candidate()`). Their
+log-likelihoods move to the density scale with the Jacobian: `cv_loglik + log A` for every haul
+with catch, `AIC − 2 Σ log A` (`read_stage(offset_names =)`); empty hauls need no correction.
+The identity is exact for a logit-link delta family (config/test-index-helpers.R). The selected
+response is written to `FINAL_MODEL$EFFORT` by `sync_final_model.R` and followed by
+`report_effort()`; without it (older selections), the Poisson-link rule above applies.
+
+**CV scores carry Monte Carlo noise.** `sdmTMB_cv()` (sdmTMB ≥ 1.2) scores held-out hauls with
+`predictive = "mle-mvn"` (`nsim = 100`) by default, so the same candidate cross-validated twice
+gives per-haul log-likelihoods up to ~0.5 apart and sums a few units apart (pcod test,
+2026-11-27). `sdmTMB_selection()` does not set a seed or `predictive`. Treat ELPD differences of
+a few units as ties, and read `cv_loglik_mle_eb` (deterministic) when two candidates are close.
+
 **Tweedie with an offset is coherent too.** It has one linear predictor, so the offset scales
 the mean $\mu_i = \exp(\log A_i + \eta_i)$, and the probability of a zero,
 $P(Y_i = 0) = \exp\{-\mu_i^{2-p} / [\phi(2-p)]\}$, falls as swept area grows. It is therefore a

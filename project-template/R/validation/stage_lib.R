@@ -203,7 +203,17 @@ stage_candidates <- function(stage, s, d) {
                 "Delta-gamma, Poisson link" = "delta_gamma_poisson", "Tweedie" = "tweedie")
       # The incoming family first: it is the reference of the decision rule.
       fams <- fams[order(fams != d$family)]
-      lapply(fams, function(f) upd(family = f))
+      if (identical(effort_mode(s$cfg), "offset")) return(lapply(fams, function(f) upd(family = f)))
+      # With the density response (EFFORT: density), the Poisson-link families are also fitted
+      # to the catch with the log swept area as an offset, which then enters the encounter
+      # probability too (a logit-link delta family is the same model either way). Their
+      # log-likelihoods are put on the density scale with the Jacobian (read_stage()), so ELPD
+      # and AIC compare with the density candidates. `offset = FALSE` marks a density candidate
+      # of a stage that compared both (sync_final_model.R then writes FINAL_MODEL$EFFORT).
+      out <- lapply(fams, function(f) upd(family = f, offset = FALSE))
+      pl <- fams[grepl("_poisson$", fams)]
+      c(out, stats::setNames(lapply(pl, function(f) upd(family = f, offset = TRUE)),
+                             paste0(names(pl), ", catch + offset")))
     },
     stop("Unknown stage ", stage)
   )
@@ -244,11 +254,16 @@ run_candidate <- function(species, stage, name, phase, n_workers = 10) {
   } else {
     cand <- stage_candidates(stage, s, d)[[name]]
     if (is.null(cand)) stop("No candidate '", name, "' in stage ", stage)
+    dat <- s$dt
+    if (isTRUE(cand$offset)) {   # catch response with a log swept-area offset
+      dat$value <- dat$biomass
+      dat$log_swept_area <- log(dat$swept_area)
+    }
     args <- list(candidates = stats::setNames(list(list(
                    formula = spec_formula(cand), family = make_family(cand$family),
                    spatial = cand$spatial, spatiotemporal = cand$spatiotemporal,
                    mesh = build_mesh(s, cand))), name),
-                 data = s$dt, time = "year", cache_prefix = paste0("v-", stage))
+                 data = dat, time = "year", cache_prefix = paste0("v-", stage))
     if (isTRUE(cand$anisotropy)) args$anisotropy <- TRUE
     if (any(unlist(cand$spatiotemporal) %in% c("ar1", "rw")) && length(s$extra_time)) {
       args$extra_time <- s$extra_time
@@ -257,7 +272,8 @@ run_candidate <- function(species, stage, name, phase, n_workers = 10) {
   args <- c(args, list(cache_dir = s$sel_dir, complete_cases = FALSE, n_workers = n_workers,
                        cv = if (phase == "cv") s$cfg$CV_FOLDS %||% 10 else FALSE,
                        fold_ids = if (phase == "cv") s$folds else NULL))
-  args$offset <- model_offset
+  # A column name, which sdmTMB_cv() also applies to the held-out hauls; NULL drops the argument.
+  args$offset <- if (stage != "mesh" && isTRUE(cand$offset)) "log_swept_area" else model_offset
   sel <- do.call(sdmTMB_selection, args)
   print(sel$table)
   # The index of each fitted candidate, cached beside the fit.
@@ -284,7 +300,12 @@ cache_file <- function(s, prefix, name, suffix = "") {
 }
 
 # Read every cached candidate of a stage into one selection-like object.
-read_stage <- function(s, stage, names, with_cv = FALSE) {
+# `offset_names`: catch + offset candidates of a density selection. Their log-likelihoods move to
+# the density scale, log f_density(y / A) = log f_catch(y) + log A for every haul with catch
+# (empty hauls need no correction): cv_loglik + log A per haul, AIC - 2 sum(log A). The identity
+# is exact for a logit-link delta-gamma (index-wise test, 2026-11-27); the default "mle-mvn"
+# scores of sdmTMB_cv() are Monte Carlo, so CV log-likelihoods of any two runs differ slightly.
+read_stage <- function(s, stage, names, with_cv = FALSE, offset_names = character()) {
   prefix <- if (stage == "mesh") "mesh-spacetime" else paste0("v-", stage)
   rd <- function(nm, suffix) {
     f <- cache_file(s, prefix, nm, suffix)
@@ -295,6 +316,16 @@ read_stage <- function(s, stage, names, with_cv = FALSE) {
   idx <- lapply(names, function(nm) rd(nm, "-index"))
   names(fits) <- names(idx) <- names
   if (with_cv) names(cvs) <- names
+  jac <- function(x) sum(log(x$swept_area[x$value > 0]))
+  for (nm in intersect(offset_names, names)) {
+    if (with_cv && !is.null(cvs[[nm]])) {
+      dd <- cvs[[nm]]$data
+      pos <- dd$value > 0
+      cvs[[nm]]$data$cv_loglik[pos] <- dd$cv_loglik[pos] + log(dd$swept_area[pos])
+      if ("cv_loglik_mle_eb" %in% names(dd))
+        cvs[[nm]]$data$cv_loglik_mle_eb[pos] <- dd$cv_loglik_mle_eb[pos] + log(dd$swept_area[pos])
+    }
+  }
   tab <- purrr::imap_dfr(fits, function(f, nm) {
     if (is.null(f)) return(tibble::tibble(model = nm, converged = FALSE, pdHess = FALSE,
                                           sanity = FALSE, AIC = NA_real_, minutes = NA_real_))
@@ -302,7 +333,8 @@ read_stage <- function(s, stage, names, with_cv = FALSE) {
     tibble::tibble(model = nm, converged = f$model$convergence == 0,
                    pdHess = isTRUE(f$pos_def_hessian),
                    sanity = !inherits(san, "try-error") && isTRUE(san$all_ok),
-                   AIC = stats::AIC(f), minutes = NA_real_)
+                   AIC = stats::AIC(f) - if (nm %in% offset_names) 2 * jac(f$data) else 0,
+                   minutes = NA_real_)
   })
   tab$deltaAIC <- tab$AIC - min(tab$AIC, na.rm = TRUE)
   list(table = tab, fits = fits, cv = cvs, index = idx)
@@ -316,8 +348,9 @@ assemble_stage <- function(species, stage, phase) {
   s <- stage_setup(species)
   d <- read_decisions(s)
   cands <- stage_candidates(stage, s, d)
+  off_names <- names(cands)[vapply(cands, function(x) isTRUE(x$offset), logical(1))]
   if (phase == "fit") {
-    st <- read_stage(s, stage, names(cands))
+    st <- read_stage(s, stage, names(cands), offset_names = off_names)
     ok <- st$table$converged & st$table$pdHess
     ranked <- st$table$model[ok][order(st$table$AIC[ok])]
     cv_top_n <- s$set$cv_top_n
@@ -344,8 +377,8 @@ assemble_stage <- function(species, stage, phase) {
     return(invisible(short))
   }
   short <- readLines(file.path(s$sel_dir, paste0("stage-", stage, "-shortlist.txt")))
-  st <- read_stage(s, stage, names(cands))
-  st_cv <- read_stage(s, stage, short, with_cv = TRUE)
+  st <- read_stage(s, stage, names(cands), offset_names = off_names)
+  st_cv <- read_stage(s, stage, short, with_cv = TRUE, offset_names = off_names)
   cvp <- cv_paired(list(cv = st_cv$cv), group = cv_groups(s$dt, attr(s$folds, "block_km")))
   best <- cvp$model[which.max(cvp$elpd)]
   pick <- decide_stage(stage, cands, cvp, best, st$table, iid_year_only = s$set$iid_year_only)

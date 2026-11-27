@@ -104,9 +104,11 @@ load_model_data <- function(cfg, out_dir, crs) {
 
 #' How swept area enters the report models
 #'
-#' `REPORT_EFFORT` in config.yaml: "auto" (default) uses the catch with a log swept-area offset
-#' when the selected family has a Poisson link, and `EFFORT` (the response of the model
-#' selection, by default the swept-area density) otherwise; "density" or "offset" force one.
+#' `REPORT_EFFORT` in config.yaml: "auto" (default) follows the model selection when its family
+#' stage compared density and catch + offset candidates (`FINAL_MODEL$EFFORT`, written by
+#' sync_final_model.R). For a selection without them, it uses the catch with a log swept-area
+#' offset when the selected family has a Poisson link, and `EFFORT` (the response of the model
+#' selection, by default the swept-area density) otherwise. "density" or "offset" force one.
 #' For the logit-link delta families density and offset are the same model (the likelihoods
 #' differ by a constant), so "auto" changes the model only for the Poisson-link families, where
 #' the offset also enters the encounter probability (lotidae decision 2026-11-27).
@@ -118,6 +120,11 @@ report_effort <- function(cfg, family = cfg$FINAL_MODEL$FAMILY %||% cfg$FAMILY) 
   mode <- cfg$REPORT_EFFORT %||% "auto"
   if (!mode %in% c("auto", "density", "offset")) stop("REPORT_EFFORT must be auto, density or offset.")
   if (mode != "auto") return(mode)
+  sel <- cfg$FINAL_MODEL$EFFORT
+  if (!is.null(sel)) {
+    if (!sel %in% c("density", "offset")) stop("FINAL_MODEL$EFFORT must be density or offset.")
+    return(sel)
+  }
   if (grepl("poisson_link$", family %||% "")) "offset" else effort_mode(cfg)
 }
 
@@ -558,7 +565,8 @@ describe_spec <- function(d) {
          "; spatial: ", f(d$spatial), "; spatiotemporal: ", f(d$spatiotemporal),
          "; family: ", d$family, "; mesh: ", d$mesh_km, " km",
          if (isTRUE(d$anisotropy)) "; anisotropic" else "",
-         if (isTRUE(d$barrier)) "; barrier mesh" else "")
+         if (isTRUE(d$barrier)) "; barrier mesh" else "",
+         if (isTRUE(d$offset)) "; catch with a log swept-area offset" else "")
 }
 
 #' Format parameter estimates and CIs for tables

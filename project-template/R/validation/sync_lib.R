@@ -55,6 +55,9 @@ sync_config_lines <- function(lines, key, d, grid_km = NULL) {
     SPATIOTEMPORAL = yaml_vec(d$spatiotemporal),
     ANISOTROPY = tolower(as.character(isTRUE(d$anisotropy)))
   )
+  # How swept area enters, when the family stage compared density and catch + offset candidates
+  # (d$offset TRUE or FALSE; NULL for a selection without them). Read by report_effort().
+  if (!is.null(d$offset)) new$EFFORT <- paste0('"', if (isTRUE(d$offset)) "offset" else "density", '"')
   changes <- character()
   indent_of <- function(x) nchar(sub("^( *).*$", "\\1", x))
   content <- function(x) grepl("^\\s*[^#[:space:]]", x)

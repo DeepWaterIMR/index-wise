@@ -77,6 +77,23 @@ if (requireNamespace("sdmTMB", quietly = TRUE)) {
   sub <- subsample_stations(transform(d, haul_id = seq_len(nrow(d))), 0.7)
   refit <- refit_on(fit_offset, sub, cutoff = 25)
   stopifnot(identical(nrow(refit$data), nrow(sub)))
+  # Jacobian of the family stage (read_stage()): a logit-link delta-gamma fitted to the density
+  # and to the catch with a log swept-area offset has log L_density = log L_catch + sum(log A)
+  # over the hauls with catch; the deterministic held-out scores of sdmTMB_cv() ("mle-eb") obey
+  # the same identity per haul.
+  dj <- d
+  dj$log_swept_area <- log(dj$swept_area)
+  mesh_j <- sdmTMB::make_mesh(dj, c("X", "Y"), cutoff = 30)
+  f_d <- sdmTMB::sdmTMB(density ~ 0 + as.factor(year), dj, mesh = mesh_j, family = sdmTMB::delta_gamma(), spatial = "on", spatiotemporal = "off")
+  f_o <- sdmTMB::sdmTMB(biomass ~ 0 + as.factor(year), dj, mesh = mesh_j, family = sdmTMB::delta_gamma(), spatial = "on", spatiotemporal = "off", offset = "log_swept_area")
+  stopifnot(abs(as.numeric(stats::logLik(f_d)) - as.numeric(stats::logLik(f_o)) - sum(log(dj$swept_area[dj$density > 0]))) < 1e-4)
+  if ("predictive" %in% names(formals(sdmTMB::sdmTMB_cv))) {   # sdmTMB with Monte Carlo CV scores
+  folds_j <- rep_len(1:3, nrow(dj))
+  cv_d <- suppressMessages(sdmTMB::sdmTMB_cv(density ~ 0 + as.factor(year), data = dj, mesh = mesh_j, family = sdmTMB::delta_gamma(), spatial = "on", spatiotemporal = "off", fold_ids = folds_j, predictive = "mle-eb"))
+  cv_o <- suppressMessages(sdmTMB::sdmTMB_cv(biomass ~ 0 + as.factor(year), data = dj, mesh = mesh_j, family = sdmTMB::delta_gamma(), spatial = "on", spatiotemporal = "off", fold_ids = folds_j, offset = "log_swept_area", predictive = "mle-eb"))
+  pos_j <- cv_o$data$biomass > 0
+  stopifnot(max(abs(cv_d$data$cv_loglik - (cv_o$data$cv_loglik + ifelse(pos_j, log(cv_o$data$swept_area), 0)))) < 1e-3)
+  }
   message("Model-based index-helper checks passed.")
 } else {
   message("sdmTMB not installed: model-based index-helper checks skipped.")
@@ -171,7 +188,10 @@ local({
             identical(env$report_effort(list(), "delta_gamma"), "density"),
             identical(env$report_effort(list(EFFORT = "offset"), "tweedie"), "offset"),
             identical(env$report_effort(list(REPORT_EFFORT = "density"), "delta_gamma_poisson_link"), "density"),
-            inherits(try(env$report_effort(list(REPORT_EFFORT = "x"), "tweedie"), silent = TRUE), "try-error"))
+            inherits(try(env$report_effort(list(REPORT_EFFORT = "x"), "tweedie"), silent = TRUE), "try-error"),
+            # The selection's effort (FINAL_MODEL$EFFORT) wins over the Poisson-link rule.
+            identical(env$report_effort(list(FINAL_MODEL = list(EFFORT = "density")), "delta_gamma_poisson_link"), "density"),
+            identical(env$report_effort(list(FINAL_MODEL = list(EFFORT = "offset")), "delta_gamma"), "offset"))
   # A collapsed smooth (only se_magnitude_ok fails, an sd__s() below 0.01) counts as a pass.
   san <- list(hessian_ok = TRUE, se_magnitude_ok = FALSE, all_ok = FALSE)
   rp <- data.frame(term = c("range", "sd__s(depth)"), estimate = c(50, 5e-4))
