@@ -25,10 +25,17 @@
 #' @param out_dir Species output folder.
 #' @param crs Projected CRS of the model coordinates.
 #' @return A list with the configuration (`cfg`), the model data (`dt`, `dt_fishable`), the three `products` (formula,
-#'   data, fields and file stem of each), the `family`, the `final` specification, the
-#'   `extra_time` years and the cache folder `rep_dir`.
+#'   data, offset, fields and file stem of each), the `family`, the `final` specification, the
+#'   `extra_time` years, the cache folder `rep_dir`, and `effort` ("density" or "offset") and
+#'   `offset` (offset column or NULL) of the report models.
 report_context <- function(cfg, out_dir, crs) {
-  dt <- load_model_data(cfg, out_dir, crs)
+  # The report's response and offset (report_effort()); the selection compared its candidates
+  # with EFFORT (by default the swept-area density).
+  effort <- report_effort(cfg, cfg$FINAL_MODEL$FAMILY %||% cfg$FAMILY)
+  cfg_eff <- cfg
+  cfg_eff$EFFORT <- effort
+  dt <- load_model_data(cfg_eff, out_dir, crs)
+  offset <- offset_column(cfg_eff)
   final <- cfg$FINAL_MODEL %||% list(
     MESH_CUTOFF_KM = cfg$MESH_CUTOFF_KM, FAMILY = cfg$FAMILY, SPATIAL = cfg$SPATIAL %||% "on",
     SPATIOTEMPORAL = "iid", ANISOTROPY = FALSE,
@@ -51,14 +58,14 @@ report_context <- function(cfg, out_dir, crs) {
   form_smooth <- stats::as.formula(paste("value ~ 0 +", term_txt))
   as_component <- function(x) if (length(x) == 1L) x[[1]] else as.list(unlist(x))
   products <- list(
-    "Total biomass (IID)" = list(file = "total-iid", data = dt, formula = form_year,
+    "Total biomass (IID)" = list(file = "total-iid", data = dt, formula = form_year, offset = offset,
                                  spatial = as_component(final$SPATIAL),
                                  spatiotemporal = as_component(final$SPATIOTEMPORAL)),
     "Fishable biomass (IID)" = if (any(!is.na(dt$value_fishable))) {
-      list(file = "fishable-iid", data = dt_fishable, formula = form_year,
+      list(file = "fishable-iid", data = dt_fishable, formula = form_year, offset = offset,
            spatial = as_component(final$SPATIAL), spatiotemporal = as_component(final$SPATIOTEMPORAL))
     },
-    "Total biomass (smoothed)" = list(file = "total-ar1", data = dt, formula = form_smooth,
+    "Total biomass (smoothed)" = list(file = "total-ar1", data = dt, formula = form_smooth, offset = offset,
                                       spatial = as_component(cfg$SMOOTHED_SPATIAL %||% "off"),
                                       spatiotemporal = as_component(cfg$SMOOTHED_SPATIOTEMPORAL %||% "ar1"))
   )
@@ -68,7 +75,8 @@ report_context <- function(cfg, out_dir, crs) {
   list(cfg = cfg, dt = dt, dt_fishable = dt_fishable, pos_year = pos_year, years = years,
        years_no_fishable = years_no_fishable, products = products, final = final,
        family = report_family(final$FAMILY), form_year = form_year, form_smooth = form_smooth,
-       extra_time = setdiff(seq(min(dt$year), max(dt$year)), years), rep_dir = rep_dir)
+       extra_time = setdiff(seq(min(dt$year), max(dt$year)), years), rep_dir = rep_dir,
+       effort = effort, offset = offset)
 }
 
 #' sdmTMB family object from the FINAL_MODEL family name
@@ -91,7 +99,8 @@ report_family <- function(x) {
 #' helpers of sdmTMBexperiments (leave-one-out, survey comparison) in a fresh session.
 #'
 #' @param s Product from `report_context()$products`; `s$data` may be replaced (retrospective,
-#'   sensitivity refits), and `s$family` and `s$offset` override the report family and offset.
+#'   sensitivity refits), and `s$family` and `s$offset` override the report family and offset
+#'   (`s$offset = FALSE`: no offset).
 #' @param ctx Report context.
 #' @param mesh Optional mesh; by default a new mesh with the FINAL_MODEL cutoff.
 #' @return A fitted sdmTMB model with the fit time (minutes) in `attr(, "fit_minutes")`.
@@ -104,7 +113,7 @@ fit_report_product <- function(s, ctx, mesh = NULL) {
   t0 <- Sys.time()
   fit <- rlang::inject(sdmTMB::sdmTMB(
     !!s$formula, data = s$data, mesh = m,
-    family = !!(s$family %||% ctx$family), offset = !!(s$offset %||% model_offset),
+    family = !!(s$family %||% ctx$family), offset = !!(if (isFALSE(s$offset)) NULL else s$offset %||% ctx$offset),
     spatial = !!s$spatial, spatiotemporal = !!s$spatiotemporal,
     anisotropy = !!isTRUE(ctx$final$ANISOTROPY), time = "year",
     extra_time = !!(if (dyn) gaps else NULL),
@@ -125,7 +134,7 @@ fit_report_product <- function(s, ctx, mesh = NULL) {
 #' @param cfg Stock configuration.
 #' @return The stamp (invisibly); stops when the cached stamp differs.
 report_check_stamp <- function(ctx, cfg) {
-  stamp <- list(final = ctx$final, grid_km = cfg$GRID_KM, max_depth = cfg$MAX_DEPTH,
+  stamp <- list(final = ctx$final, effort = ctx$effort, grid_km = cfg$GRID_KM, max_depth = cfg$MAX_DEPTH,
                 reference = list(cfg$REFERENCE_MONTH, cfg$REFERENCE_SURVEY,
                                  cfg[["REFERENCE_GEAR", exact = TRUE]], cfg$REFERENCE_GEAR_MODEL),
                 smoothed = list(cfg$SMOOTHED_SPATIAL, cfg$SMOOTHED_SPATIOTEMPORAL),
@@ -152,8 +161,15 @@ digest_strings <- function(x) {
   unname(tools::md5sum(f))
 }
 
+# A fit passes when every sanity check passes, or when the only failure is a collapsed smooth
+# (sanity_collapsed_smooth(), R/report_helpers.R).
 report_passes <- function(fit) {
-  !is.null(fit) && isTRUE(suppressMessages(sdmTMB::sanity(fit, silent = TRUE))$all_ok)
+  if (is.null(fit)) return(FALSE)
+  san <- suppressMessages(sdmTMB::sanity(fit, silent = TRUE))
+  isTRUE(san$all_ok) ||
+    sanity_collapsed_smooth(san, purrr::map_dfr(seq_len(1 + isTRUE(fit$family$delta)), function(k) {
+      suppressMessages(sdmTMB::tidy(fit, "ran_pars", model = k))
+    }))
 }
 
 report_fit_file <- function(ctx, file) file.path(ctx$rep_dir, paste0("fit-", file, ".rds"))
@@ -336,8 +352,12 @@ run_report_post <- function(ctx, label, grid, nsim = 100) {
   pred <- pred[keep]
   if (delta) pred$est <- delta_log_density(pred, fit)
   ref <- list(year = max(fit$data$year), month = unique(g$month)[1],
-              geartype = reference_gear(ctx$dt, cfg))
+              geartype = reference_gear(ctx$dt, cfg), fgear = cfg$REFERENCE_GEAR_MODEL)
+  # Only the model's own variables: the trawl-model factor `fgear` takes REFERENCE_GEAR_MODEL
+  # (else its most common level); other names would only raise warnings.
+  ref <- purrr::compact(ref[intersect(names(ref), names(fit$data))])
   effects <- try(sdmTMBexperiments::conditional_effects(fit, ref = ref), silent = TRUE)
+  if (inherits(effects, "try-error")) message("conditional_effects() failed: ", conditionMessage(attr(effects, "condition")))
   region <- if (label == "Total biomass (IID)") {
     index_by_region(fit, newdata = g, region_col = "division", area = grid_cell_area_nmi2)
   }
@@ -520,7 +540,7 @@ run_report_surveys <- function(ctx, grid, surveys = cfg$REPORT_SURVEYS, n_worker
       comp <- try(sdmTMBexperiments::compare_surveys(
         data = fit$data, compiled_index = index, compiled_model = fit,
         surveys = stats::setNames(list(spec), sv), newdata = g, object_crs = sf::st_crs(dt_crs),
-        mesh_cutoff = ctx$final$MESH_CUTOFF_KM, offset_col = model_offset,
+        mesh_cutoff = ctx$final$MESH_CUTOFF_KM, offset_col = ctx$offset,
         area = grid_cell_area_nmi2, bias_correct = FALSE,
         n_workers = 1, reference_label = "Compiled", verbose = FALSE), silent = TRUE)
       fitted <- !inherits(comp, "try-error") && !all(is.na(comp$sanity[[sv]]))
@@ -714,14 +734,20 @@ run_report_loso <- function(ctx, grid, n_workers = 7) {
 #' * `drop`: refit `product` without the hauls that match every column of `filter`
 #'   (e.g. `{cruiseseries: ["CoastalS"], samplequality: ["2"]}`);
 #' * `keep`: refit `product` with only those hauls (e.g. the major survey series);
-#' * `offset`: the response as catch with a log swept-area offset and the Poisson-link version
-#'   of the selected delta family, so that tow length also enters the encounter probability;
+#' * `offset`: the other way of entering swept area. With a density report (`ctx$effort`):
+#'   the response as catch with a log swept-area offset and the Poisson-link version of the
+#'   selected delta family, so that tow length also enters the encounter probability. With an
+#'   offset report (REPORT_EFFORT): the swept-area density without an offset, the response on
+#'   which the model selection compared its candidates;
+#' * `gear_width_door`: the swept area with the widths of `GEAR_WIDTHS_DOOR` (door-spread ratio,
+#'   full herding by doors and sweeps) instead of `GEAR_WIDTHS`;
 #' * `fishable_threshold`: the fishable product with another length threshold (`over_cm`,
 #'   default `SENSITIVITY_OVER_CM`), the fishable share recomputed from the length data.
 #'
 #' `product` defaults to "Total biomass (IID)" (the fishable product for `fishable_threshold`).
-#' Without `SENSITIVITIES`, the `offset` refit and, when `SENSITIVITY_OVER_CM` is set, the
-#' `fishable_threshold` refit run. Only the trend of a refit is interpreted
+#' Without `SENSITIVITIES`, the `offset` refit, the `gear_width_door` refit when
+#' `GEAR_WIDTHS_DOOR` is set and the `fishable_threshold` refit when `SENSITIVITY_OVER_CM` is set
+#' run. Only the trend of a refit is interpreted
 #' (knowledge/index-level-and-trend.md).
 #'
 #' @param cfg Stock configuration.
@@ -729,7 +755,12 @@ run_report_loso <- function(ctx, grid, n_workers = 7) {
 report_sensitivities <- function(cfg) {
   x <- cfg$SENSITIVITIES
   if (is.null(x)) {
-    x <- list(list(name = "offset", label = "Catch with swept-area offset", type = "offset"))
+    offset_report <- identical(report_effort(cfg, cfg$FINAL_MODEL$FAMILY %||% cfg$FAMILY), "offset")
+    x <- list(list(name = "offset", type = "offset",
+                   label = if (offset_report) "Density response (as in the model selection)" else "Catch with swept-area offset"))
+    if (length(cfg$GEAR_WIDTHS_DOOR))
+      x <- c(x, list(list(name = "gear-width-door", type = "gear_width_door",
+                          label = "Cod-trawl width from the door spread")))
     if (!is.null(cfg$SENSITIVITY_OVER_CM))
       x <- c(x, list(list(name = "fishable-threshold", type = "fishable_threshold",
                           label = paste0("Fishable threshold ", cfg$SENSITIVITY_OVER_CM, " cm"))))
@@ -761,7 +792,7 @@ match_filter <- function(d, filter) {
 run_report_sensitivity <- function(ctx, grid, name) {
   def <- report_sensitivities(ctx$cfg)[[name]]
   if (is.null(def)) stop("No sensitivity '", name, "' in SENSITIVITIES.")
-  type <- match.arg(def$type, c("drop", "keep", "offset", "fishable_threshold"))
+  type <- match.arg(def$type, c("drop", "keep", "offset", "gear_width_door", "fishable_threshold"))
   product <- def$product %||% if (type == "fishable_threshold") "Fishable biomass (IID)" else "Total biomass (IID)"
   s <- ctx$products[[product]]
   if (is.null(s)) stop("No product '", product, "' in the report.")
@@ -779,7 +810,11 @@ run_report_sensitivity <- function(ctx, grid, name) {
       removed_positive <- sum(out & d$value > 0)
       d <- d[!out, , drop = FALSE]
     },
-    offset = {
+    offset = if (identical(ctx$effort, "offset")) {
+      # The report models catch with an offset: refit the density model of the selection.
+      d$value <- if (grepl("fishable", s$file)) d$rho_biomass_fishable else d$rho_biomass
+      s$offset <- FALSE
+    } else {
       d$value <- if (grepl("fishable", s$file)) d$biomass_fishable else d$biomass
       d$log_swept_area <- log(d$swept_area)
       s$offset <- "log_swept_area"
@@ -787,6 +822,15 @@ run_report_sensitivity <- function(ctx, grid, name) {
         delta_lognormal = , delta_lognormal_poisson_link = sdmTMB::delta_lognormal(type = "poisson-link"),
         delta_gamma = , delta_gamma_poisson_link = sdmTMB::delta_gamma(type = "poisson-link"),
         stop("No Poisson-link version of ", ctx$final$FAMILY))
+    },
+    gear_width_door = {
+      if (!length(ctx$cfg$GEAR_WIDTHS_DOOR)) stop("Set GEAR_WIDTHS_DOOR in config.yaml.")
+      w_door <- gear_width_m(d$gearname, d$geartype, ctx$cfg, ctx$cfg$GEAR_WIDTHS_DOOR)
+      if (identical(ctx$effort, "offset")) {
+        d$log_swept_area <- log(swept_area_nmi2(d$distance, w_door))
+      } else {
+        d$value <- d$value * d$gear_width / w_door
+      }
     },
     fishable_threshold = {
       over_cm <- as.numeric(def$over_cm %||% ctx$cfg$SENSITIVITY_OVER_CM)
@@ -796,7 +840,7 @@ run_report_sensitivity <- function(ctx, grid, name) {
       all <- dplyr::select(ctx$dt, -dplyr::any_of(c("fishable_fraction", "fishable_imputed", "n_measured",
                                                     "biomass_fishable", "rho_biomass_fishable")))
       all <- add_fishable_biomass(all, lengths, lw, over_cm)
-      all$value <- all$rho_biomass_fishable
+      all$value <- if (identical(ctx$effort, "offset")) all$biomass_fishable else all$rho_biomass_fishable
       pos_years <- unique(all$year[all$value > 0])
       d <- droplevels(all[all$year %in% pos_years, , drop = FALSE])
     })
@@ -849,7 +893,9 @@ sensitivity_change <- function(sens) {
 run_report_influence <- function(ctx, grid, n_cruises = 10, n_low_cruises = 5, n_hauls = 10, n_workers = 10) {
   fit <- readRDS(report_fit_file(ctx, "total-iid"))
   d <- fit$data
-  d$unit_effort <- 1   # the response is already a swept-area density
+  # Density shares: catch per swept area with an offset report; the response is already a
+  # density otherwise.
+  d$unit_effort <- if (identical(ctx$effort, "offset")) d$swept_area else 1
   cruise_screen <- sdmTMBexperiments::density_share(d, value_col = "value", effort_col = "unit_effort",
                                                     group_col = "cruise_id") |>
     dplyr::mutate(ratio = .data$share / .data$haul_share)

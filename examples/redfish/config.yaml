@@ -32,7 +32,8 @@ OVER_CM: 30
 LENGTH_GROUPS: ["(0,10]", "(10,15]", "(15,20]", "(20,25]", "(25,30]", "(30,40]", "(40,Inf]"]
 
 # --- Gear width ---
-GEAR_WIDTH: "per_gear"   # 25 m shrimp/Campelen, ~94 m cod/Alfredo
+GEAR_WIDTH: 25           # shrimp/Campelen; the cod trawls take their own width
+GEAR_WIDTHS: {Alfredo: 94, "Konsum 60": 94, "Other cod": 94}   # ~94 m cod/Alfredo
 
 # --- Effort, index year and catchability (template defaults) ---
 EFFORT: "density"

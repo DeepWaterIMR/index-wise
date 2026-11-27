@@ -55,7 +55,9 @@ Steps 6–10 should run without anyone logged in: `R/run_models.sh <stock>` (tem
 writes one log line per step, marks each finished step with a done-flag file, and stops at the
 first failure; rerunning it resumes after the last done-flag. Each step checks its own result
 (an exit status in the render log, a `DONE` line in a computation log) rather than trusting the
-process exit code alone. Start it in a detached `screen` session that passes `LD_LIBRARY_PATH`
+process exit code alone. `R/report/run_report.sh` ends with `FAILED <stock>, missing: ...` (exit 1)
+instead of `ALL DONE` when a step left no cache, and removes the logs of uncached steps before a
+run, so that an old "Execution halted" does not end the new run's wait loops. Start it in a detached `screen` session that passes `LD_LIBRARY_PATH`
 (`rendering.md`).
 
 ## Cache inventory and guards

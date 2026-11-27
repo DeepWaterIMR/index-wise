@@ -22,7 +22,7 @@ if (!is.null(infl)) {
                      positive = sum(value > 0), .by = "cruise_id")
   haul_info <- dt |>
     dplyr::transmute(id = as.character(haul_id), year, series = cruiseseries, depth = round(depth),
-                     count, biomass, distance, density = round(value), lon = round(lon, 2), lat = round(lat, 2))
+                     count, biomass, distance, density = round(rho_biomass), lon = round(lon, 2), lat = round(lat, 2))
   # Does the year of a flagged cruise stand out in the index? Ratio of the year's index to the
   # geometric mean of the neighbouring years (the total biomass index without bias correction).
   idx_tot <- post[[total]]$index

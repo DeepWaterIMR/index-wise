@@ -118,7 +118,7 @@ $$
 \rho = \frac{B}{d \times w / 1852},
 $$
 
-where $B$ is the catch weight (kg), $d$ the towed distance (nmi) and $w = `r cfg$GEAR_WIDTH`$ m the common effective trawl width, giving density in kg/nmi². The models use this density as the response (`EFFORT: density` in `config.yaml`); with a logit-link delta family this is equivalent to modelling the catch with the log swept area as an offset, whereas with a Poisson-link delta family it is not, because an offset there also enters the encounter probability.
+where $B$ is the catch weight (kg), $d$ the towed distance (nmi) and $w$ the effective trawl width, `r if (length(cfg$GEAR_WIDTHS)) paste0(cfg$GEAR_WIDTH, " m by default and ", paste0(names(cfg$GEAR_WIDTHS), " ", unlist(cfg$GEAR_WIDTHS), " m", collapse = ", "), " (GEAR_WIDTHS; see the survey selection)") else paste0(cfg$GEAR_WIDTH, " m for every trawl")`, giving density in kg/nmi². The models use this density as the response (`EFFORT: density` in `config.yaml`); with a logit-link delta family this is equivalent to modelling the catch with the log swept area as an offset, whereas with a Poisson-link delta family it is not, because an offset there also enters the encounter probability.
 
 ### Individual-level data
 

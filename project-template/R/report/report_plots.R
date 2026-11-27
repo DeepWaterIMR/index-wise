@@ -143,7 +143,14 @@ plot_report_indices <- function(index_tab) {
 #' @return A data frame for knitr::kable().
 report_par_table <- function(post, what = c("fixed", "ran_pars"), component_names = c("Encounter", "Positive")) {
   what <- match.arg(what)
-  fmt <- function(x) ifelse(is.na(x), "", formatC(x, digits = 3, format = "fg", flag = "#"))
+  # Three significant digits; outside 0.001-99 999 in scientific notation, so that the CI of a
+  # collapsed parameter (e.g. 1e-268 to 3e+269) stays readable. No trailing decimal point.
+  fmt <- function(x) {
+    out <- ifelse(abs(x) >= 1e-3 & abs(x) < 1e5,
+                  sub("\\.$", "", formatC(x, digits = 3, format = "fg", flag = "#")),
+                  formatC(x, digits = 2, format = "e"))
+    ifelse(is.na(x), "", out)
+  }
   purrr::imap_dfr(post, function(p, label) {
     x <- p[[what]]
     if (is.null(x) || !nrow(x)) return(NULL)

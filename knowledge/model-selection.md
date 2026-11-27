@@ -47,7 +47,11 @@ The rules below exist to stop that, and each is enforced or reported by the help
 5. **`sanity()` is reported, not a gate.** `sdmTMB::sanity()` fails routinely on perfectly
    usable fits (`se_magnitude_ok`, `sigmas_ok`), so it does not gate `comparable` — gating on it
    would drop the best-fitting candidate from every comparison. Read it as a reason to consider
-   simplifying, and say so in the text when the selected model fails it.
+   simplifying, and say so in the text when the selected model fails it. A **collapsed smooth**
+   is a pass (`sanity_collapsed_smooth()`): when the only failed check is `se_magnitude_ok` and
+   an `sd__s()` is below 0.01, the smooth is a straight line and harmless for the index; the
+   report's sanity table and text say so. Parameter tables print values outside 0.001–99 999
+   in scientific notation, so that the CI of such a parameter stays readable.
 
 6. **Look the winner up in the column, never at row 1.** The table's sort key changes with
    whether CV ran. Use `best_candidate(sel)`; in prose, quote the gap with a value read from
@@ -358,6 +362,14 @@ cross-validated ELPD, then corrected AIC) **and converges with the structure eve
 needs.** The reason is structural, not only statistical: it is the only delta parameterisation in
 which the effort model is coherent for the zeros. Its extra structure makes convergence the
 binding constraint, so it is not preferred if it fails `sanity()` where a standard delta passes.
+
+**The report fits the offset version of a selected Poisson-link family** (`REPORT_EFFORT: auto`,
+`report_effort()`). The selection compares all candidates on the response of `EFFORT` (by
+default the swept-area density), where the families are comparable. When a Poisson-link family
+wins, the report models the catch with the log swept-area offset, so that swept area also enters
+the encounter probability; with a logit link the two versions are the same model, so nothing
+changes. The `offset` sensitivity then refits the density model of the selection, and the
+report, validate and sensitivity texts say which response was used (lotidae, 2026-11-27).
 
 **Tweedie with an offset is coherent too.** It has one linear predictor, so the offset scales
 the mean $\mu_i = \exp(\log A_i + \eta_i)$, and the probability of a zero,

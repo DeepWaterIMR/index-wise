@@ -110,7 +110,8 @@ the method. All documents and their rendered outputs stay under `docs/`.
 (Norwegian commonname value(s)), `SURVEYS` (cruise-series labels to include), `USE_SPD` (true/false),
 `RESPONSE` (`biomass`/`abundance`), `LENGTH_GROUPS`, `OVER_CM` threshold, `ASSESSMENT_MODEL`,
 `FIRST_YEAR`, `CRS` (EPSG), `GRID_KM`, `MESH_CUTOFF_KM`, `BARRIER` (true/false), `GEAR_WIDTH`
-(`per_gear`/set value), `INCLUDE_RUSSIAN` (default true), `SELECTED_INDEX`.
+(m, default for all gears), `GEAR_WIDTHS`/`GEAR_WIDTHS_DOOR` (optional per-trawl-model widths and
+their door-spread sensitivity), `INCLUDE_RUSSIAN` (default true), `SELECTED_INDEX`.
 
 Effort, time step and catchability: `EFFORT` (`density`/`offset`), `INDEX_YEAR_START_MONTH`
 and `INDEX_YEAR_LABEL` (`start`/`end`), `SURVEY_EFFECT`, `REFERENCE_SURVEY`,

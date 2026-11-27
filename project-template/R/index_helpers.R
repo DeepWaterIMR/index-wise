@@ -139,6 +139,22 @@ gear_model_group <- function(gearname) {
   factor(g)
 }
 
+# Effective trawl width of each haul (m). GEAR_WIDTH is the default for every gear; the optional
+# GEAR_WIDTHS lookup gives a width per gear_model_group() level, with "Other cod" for the other
+# cod-type trawls (geartype "Cod"). `widths` = GEAR_WIDTHS_DOOR for the gear-width-door
+# sensitivity of the report. Without a lookup all gears share GEAR_WIDTH (keep geartype as a
+# fixed effect then). Example (lotidae ling/tusk, Campelen 25 m, cod trawls scaled by the
+# wing-spread ratio): GEAR_WIDTHS: {Alfredo: 47, Konsum 60: 53, Other cod: 51}.
+gear_width_m <- function(gearname, geartype, cfg, widths = cfg$GEAR_WIDTHS) {
+  if (!is.numeric(cfg$GEAR_WIDTH) || length(cfg$GEAR_WIDTH) != 1)
+    stop("GEAR_WIDTH in config.yaml must be one number (m); per-gear widths go in GEAR_WIDTHS.")
+  if (!length(widths)) return(rep(as.numeric(cfg$GEAR_WIDTH), length(gearname)))
+  grp <- as.character(gear_model_group(gearname))
+  grp[grp == "Other trawl" & geartype %in% "Cod"] <- "Other cod"
+  w <- unlist(widths)[grp]
+  as.numeric(ifelse(is.na(w), as.numeric(cfg$GEAR_WIDTH), w))
+}
+
 # --- Prediction region ------------------------------------------------------------------
 # The stock prediction region that <stock>-3-data.qmd builds (PREDICTION_REGION_FILE, default
 # data/source/<stock>-prediction-region.gpkg), in `crs`; NULL when the file does not exist.

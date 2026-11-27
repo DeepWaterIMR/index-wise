@@ -75,9 +75,18 @@ SENSITIVITY_OVER_CM: null             # alternative fishable threshold for the r
 LENGTH_GROUPS: ["(0,10]", "(10,15]", "(15,20]", "(20,25]", "(25,30]", "(30,40]", "(40,Inf]"]
 
 # --- Gear width -------------------------------------------------------------------------
-# A single number uses one effective width for all gears. Keep geartype as a model fixed effect
-# when more than one major gear type is represented.
+# Effective trawl width (m) for swept area. GEAR_WIDTH is used for every gear without its own
+# entry (25 m: IMR's standard effective path width of the Campelen 1800 shrimp trawl). Keep
+# geartype as a model fixed effect when more than one major gear type is represented.
+# GEAR_WIDTHS (optional) gives other widths by gear_model_group() level ("Alfredo",
+# "Konsum 60", "Campelen Rs", "Campelen Rg", "Other trawl"; "Other cod" = other cod-type
+# trawls), e.g. cod trawls scaled by their wing spread relative to Campelen's:
+#   GEAR_WIDTHS: {Alfredo: 47, "Konsum 60": 53, "Other cod": 51}
+# GEAR_WIDTHS_DOOR (optional) is the report's gear-width-door sensitivity: the same keys scaled
+# by the door-spread ratio (full herding by doors and sweeps), e.g. {Alfredo: 78, ...}.
 GEAR_WIDTH: 25
+GEAR_WIDTHS: null
+GEAR_WIDTHS_DOOR: null
 
 # --- Index year (EFFORT is set under Model) ---------------------------------------------
 # Month the index year begins (1 = calendar year). With 7, a July-June season is one index
@@ -143,6 +152,7 @@ MIN_DEPTH: null                       # shallowest grid cell to keep (m); null =
 # differ by a constant Jacobian, so never compare their AICs); under Tweedie they differ. The
 # offset reaches the occurrence component only in a Poisson-link delta family.
 EFFORT: "density"                     # density | offset
+REPORT_EFFORT: "auto"                 # report models: auto = catch with log swept-area offset when the selected family has a Poisson link, EFFORT otherwise; "density" | "offset" force one (the selection always uses EFFORT)
 FAMILY: "delta_lognormal"             # delta_lognormal | delta_gamma | delta_lognormal_poisson_link | delta_gamma_poisson_link | tweedie
 SPATIAL: "on"                         # one value, or one per delta component, e.g. ["on", "off"]
 SPATIOTEMPORAL: "ar1"                 # ar1 | iid | rw | off
@@ -173,6 +183,8 @@ SMOOTHED_SPATIOTEMPORAL: "ar1"        # its spatiotemporal fields (selected amon
 ASSESSMENT_CANDIDATE_INDICES: ["Total biomass (IID)", "Fishable biomass (IID)"]  # exported as assessment hand-offs (legacy name SPICT_CANDIDATE_INDICES is still read)
 ASSESSMENT_RECOMMENDED_INDEX: null    # the index project's recommendation (per stock); the assessment project decides (SELECTED_INDEX there); legacy name SPICT_RECOMMENDED_INDEX
 ASSESSMENT_RECOMMENDATION_REASON: null  # why that index is recommended, as a clause after "because" (per stock), e.g. "too few hauls caught fishable fish for a robust fishable index"
+ASSESSMENT_RECOMMENDATION_NOTE: null  # the author's sentence(s) appended to the recommendation in <stock>-1-summary (per stock); legacy name SPICT_RECOMMENDATION_NOTE
+SUMMARY_LIMITATIONS: null             # extra Limitations bullets of <stock>-1-summary, in the author's words (per stock), e.g. ["**The data basis limits analyses.** ..."]
 REPORT_SURVEYS: null                  # cruise series for the single-survey comparison; null = the three with most hauls
 REPORT_SUBAREAS: null                 # ICES subareas for the regional split, e.g. ["1", "2"]; null = all
 REGIONS_FILE: null                    # optional assessment regions (polygons with a `region` column) for the regional split

@@ -54,9 +54,10 @@ order_cruise_series <- function(x, year) {
 #'
 #' `ICES_AREAS_FILE: null` (default) returns `BioticExplorerServer::icesAreas`, the polygons
 #' that coded the `icesarea` column, so that the area-code filter and any polygon operation
-#' agree. A file is read only when one is configured. Do not substitute another release:
-#' the ICES GIS 2021-11-01 release draws the 4.a/2.a boundary diagonally from 3.5° W, 63° N
-#' to the Norwegian coast instead of along 62° N (Regulation (EC) No 218/2009, Annex III).
+#' agree. A file is read only when one is configured. These polygons draw the 4.a/2.a boundary
+#' along 62° N, as Annex III of Regulation (EC) No 218/2009 defines it (so does ggOceanMaps
+#' >= 3.0.19 `ices_areas`). Older simplified exports with a diagonal 4.a/2.a edge circulate;
+#' they are not an ICES release and must not be used or cited.
 #'
 #' @param cfg Project configuration with `ICES_AREAS_FILE`.
 #' @return sf polygons (EPSG:4326) with `Major_FA`, `SubArea`, `Area_Full`.

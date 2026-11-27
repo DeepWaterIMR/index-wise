@@ -16,8 +16,9 @@ Fill this in during `index-new-project` with the actual answers. Keep it in sync
   value(s): _<confirm via BAIT taxaindex>_.
 - **Surveys included** (with true absences): _<list; why these>_.
 - **Distribution / SPD**: _<northern-offshore or southern-coastal; USE_SPD and why>_.
-- **Gear width**: _<normally 25 m for all trawls; retain `geartype` as a fixed effect. Use
-  `per_gear` only when a project has a documented reason to estimate separate widths>_.
+- **Gear width**: _<normally `GEAR_WIDTH: 25` for all trawls; retain `geartype` as a fixed
+  effect. Set `GEAR_WIDTHS` (per trawl model) only with a documented reason, e.g. wing-spread
+  ratios, and `GEAR_WIDTHS_DOOR` for the door-spread sensitivity>_.
 - **Response & products**: _<biomass/abundance; over-X-cm threshold; length-group breaks>_.
 - **Assessment model**: _<e.g. SPiCT; drives spatiotemporal/year-effect choice for the
   selected index>_.

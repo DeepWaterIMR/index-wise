@@ -24,7 +24,7 @@ does not repeat survey selection (stock area, filter, surveys, gear tables, timi
    length-based product, e.g. fishable biomass ≥ `OVER_CM`) are fit to be modelled.
 2. **Data** — *Data collation* with a Mermaid flowchart (stnall → haul roster with true zeros →
    total biomass; indall → raised lengths → weight at length → length share); *Station-level
-   data* (catch summed over catch samples, density formula with `GEAR_WIDTH`; until the model
+   data* (catch summed over catch samples, density formula with `GEAR_WIDTH` and the optional per-trawl `GEAR_WIDTHS`; until the model
    response is decided, swept-area biomass density is used); *Individual-level data* (cm
    conversion, `LENGTH_LIMITS`, raising factor n/m); *Length-based data* (share formula,
    predicted weight at length, imputation hierarchy for positive hauls without lengths, which
@@ -159,7 +159,7 @@ The prediction region must lie inside the polygon of the stock area that the hau
 - **Extending the region past the stock boundary.** A hull buffered by `REGION_BUFFER_KM` reaches into neighbouring stock areas. Their hauls were removed by the haul filter, so the region gains grid cells with no observations, and the index adds biomass from them. Do not union the stock polygon with buffered hauls "to keep coastal hauls inside"; cut the buffered hull to the stock polygon only (`build_stock_region()`). Example: ling in ICES 1–2 with a 100 km buffer extended about 50 000 km² south of 62°N, where ling is most abundant, while all hauls south of the boundary had been filtered out.
 - **Filtering hauls by area code but predicting by polygon.** Hauls coded to the stock area (`icesarea`) can be positioned outside the polygon, just across a boundary or in fjords the polygon does not cover. Remove them with the region rule so that data and prediction domain match, and report how many (and how many positive) were removed.
 
-- **Using different ICES polygons from the database.** The haul filter uses the `icesarea` code that BioticExplorerServer assigned from its own polygons (`BioticExplorerServer::icesAreas`, planar point-in-polygon in longitude–latitude). Build the stock polygon from the same polygons (`read_ices_areas()`, `ICES_AREAS_FILE: null`), not from another release: the ICES GIS 2021-11-01 release draws the 4.a/2.a boundary diagonally from 3.5° W, 63° N to the Norwegian coast instead of along 62° N, which put about 30 positive tusk hauls coded to 2.a outside the stock polygon.
+- **Using different ICES polygons from the database.** The haul filter uses the `icesarea` code that BioticExplorerServer assigned from its own polygons (`BioticExplorerServer::icesAreas`, planar point-in-polygon in longitude–latitude). Build the stock polygon from the same polygons (`read_ices_areas()`, `ICES_AREAS_FILE: null`), not from another file. The database polygons draw the 4.a/2.a boundary along 62° N (Regulation (EC) No 218/2009, Annex III), as does ggOceanMaps ≥ 3.0.19 `ices_areas`; an old simplified ggOceanMaps export with a diagonal 4.a/2.a edge put about 30 positive tusk hauls coded to 2.a outside the stock polygon. Never describe the ICES boundary there as diagonal.
 - **Cutting the stock polygon at the map limit.** `read_stock_area()` caps the polygon at the northern `MAP_LIMITS` for maps; use `cap = FALSE` for the region and any data operation, or hauls north of the map limit are dropped.
 
 Check after building the region: the area of the region outside the stock polygon is zero, and every model haul lies inside the region.

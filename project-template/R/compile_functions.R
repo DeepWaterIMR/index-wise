@@ -284,7 +284,7 @@ compile_species_stations <- function(con, cfg, last_year) {
 add_response_and_covariates <- function(stations, cfg) {
   out <- stations |>
     dplyr::mutate(
-      gear_width = as.numeric(cfg$GEAR_WIDTH),
+      gear_width = gear_width_m(gearname, geartype, cfg),   # GEAR_WIDTH / GEAR_WIDTHS (index_helpers.R)
       swept_area = swept_area_nmi2(distance, gear_width), # the one conversion (index_helpers.R)
       rho_biomass = biomass / swept_area,
       rho_abundance = count / swept_area,

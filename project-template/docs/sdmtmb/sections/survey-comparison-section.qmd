@@ -94,10 +94,10 @@ plot(survey_comp, type = "scatter", index_divisor = 1e6, unit = "kt", base_size 
 ```{r}
 #| label: fig-report-survey-same-area
 #| eval: !expr '!is.null(survey_comp)'
-#| fig-height: 5
+#| fig-height: !expr if (exists("n_sc")) 1.2 + 2 * n_sc else 7
 #| fig-cap: "Single-survey indices (orange) and the compiled total biomass (IID) model (black) predicted over the same cells, the part of each survey's grid inside the compiled grid (kt). Bands: 95 % confidence intervals, cut in each panel at 1.2 times the largest of the upper limits of the compiled index and the point estimates of both indices (rounded up), so that wide single-survey bands do not hide the comparison."
 plot(survey_comp_capped, type = "same_area", index_divisor = 1e6, unit = "kt", base_size = 9) +
-  ggplot2::scale_x_continuous(breaks = scales::breaks_pretty(n = 3))
+  ggplot2::facet_wrap(~survey, scales = "free_y", ncol = 1)  # stacked, so the years line up
 ```
 
 ```{r}

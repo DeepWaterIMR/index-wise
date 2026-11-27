@@ -422,7 +422,7 @@ if (!is.null(grid_res)) {
 
 ## Selected specification
 
-`r if (all(stage_done)) paste0("The specification selected for the ", tolower(sp), " total biomass index is: ", describe_spec(stage_res$family$specs[[stage_res$family$carried]]), ". It is applied to the fishable index, and to the smoothed index with the field structure selected for it in stage 2", if (!is.na(stage_smoothed(stage_res$fields))) paste0(" (", stage_smoothed(stage_res$fields), ")") else "", ", in the final report.") else "The selection is not complete yet."`
+`r if (all(stage_done)) paste0("The specification selected for the ", tolower(sp), " total biomass index is: ", describe_spec(stage_res$family$specs[[stage_res$family$carried]]), ". It is applied to the fishable index, and to the smoothed index with the field structure selected for it in stage 2", if (!is.na(stage_smoothed(stage_res$fields))) paste0(" (", stage_smoothed(stage_res$fields), ")") else "", ", in the final report.", if (identical(report_effort(cfg, stage_res$family$specs[[stage_res$family$carried]]$family), "offset") && !identical(effort_mode(cfg), "offset")) " All candidates were compared on the swept-area density. Because the selected family has a Poisson link, the report fits its offset version (REPORT_EFFORT), the catch with the log swept area as an offset, in which the swept area also enters the probability of catching the species (with a logit link the two versions are the same model); the report compares the two indices in its sensitivity analyses." else "") else "The selection is not complete yet."`
 
 # Software and reproducibility
 

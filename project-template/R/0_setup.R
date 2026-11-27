@@ -259,15 +259,15 @@ month_term <- function(cfg) {
 }
 
 # The fixed-effect terms this project's config implies, sized to `data` when it is given.
-# geartype stays in when there is >1 major gear type OR a single set gear width is used (so the
-# model absorbs the gear-width difference). Temperature is off by default (INCLUDE_TEMPERATURE).
+# geartype stays in when there is >1 major gear type OR one width is used for all gears (no
+# GEAR_WIDTHS lookup), so that the model absorbs the gear-width difference. Temperature is off by default (INCLUDE_TEMPERATURE).
 # SURVEY_EFFECT adds a cruise-series catchability factor (`fsurvey`); CATCHABILITY_TERMS adds a
 # smooth per catchability covariate (e.g. hour, sun_altitude), predicted at a reference value.
 model_terms <- function(cfg, has_multiple_gears = TRUE, data = NULL) {
   several_surveys <- is.null(data) || !"fsurvey" %in% names(data) ||
     dplyr::n_distinct(data$fsurvey) > 1
   c(
-    if (has_multiple_gears || !identical(cfg$GEAR_WIDTH, "per_gear")) "geartype",
+    if (has_multiple_gears || !length(cfg$GEAR_WIDTHS)) "geartype",
     if (isTRUE(cfg$SURVEY_EFFECT) && several_surveys) "fsurvey",
     # MONTH_TERM: "smooth", "factor" or "none". A month smooth with very uneven seasonal
     # coverage can collapse to a straight line (SD at 0, NaN SEs); a month factor needs

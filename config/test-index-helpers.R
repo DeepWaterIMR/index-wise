@@ -152,4 +152,33 @@ local({
   stopifnot(identical(out$cruiseseries, c("A", "A", "A", "Other", "Other", "Other")))
 })
 
+# Effective trawl widths: GEAR_WIDTH for every gear without its own entry in GEAR_WIDTHS.
+gn <- c("Reketrål, Campelen 1800, Rs", "Alfredo III", "Konsumtrål 60", "Skjærgårdstrål", "Skjærgårdstrål")
+gt <- c("Shrimp", "Cod", "Cod", "Cod", "Other")
+stopifnot(identical(gear_width_m(gn, gt, list(GEAR_WIDTH = 25)), rep(25, 5)),
+          identical(gear_width_m(gn, gt, list(GEAR_WIDTH = 25, GEAR_WIDTHS = list(Alfredo = 47, `Konsum 60` = 53, `Other cod` = 51))),
+                    c(25, 47, 53, 51, 25)),
+          identical(gear_width_m(gn, gt, list(GEAR_WIDTH = 25), widths = list(Alfredo = 78))[2], 78),
+          inherits(try(gear_width_m(gn, gt, list(GEAR_WIDTH = "per_gear")), silent = TRUE), "try-error"))
+
+# Report effort: offset for a Poisson-link family under "auto", the selection's EFFORT otherwise.
+local({
+  `%||%` <- function(a, b) if (is.null(a)) b else a
+  env <- new.env()
+  env$effort_mode <- effort_mode
+  sys.source("project-template/R/report_helpers.R", envir = env)
+  stopifnot(identical(env$report_effort(list(), "delta_gamma_poisson_link"), "offset"),
+            identical(env$report_effort(list(), "delta_gamma"), "density"),
+            identical(env$report_effort(list(EFFORT = "offset"), "tweedie"), "offset"),
+            identical(env$report_effort(list(REPORT_EFFORT = "density"), "delta_gamma_poisson_link"), "density"),
+            inherits(try(env$report_effort(list(REPORT_EFFORT = "x"), "tweedie"), silent = TRUE), "try-error"))
+  # A collapsed smooth (only se_magnitude_ok fails, an sd__s() below 0.01) counts as a pass.
+  san <- list(hessian_ok = TRUE, se_magnitude_ok = FALSE, all_ok = FALSE)
+  rp <- data.frame(term = c("range", "sd__s(depth)"), estimate = c(50, 5e-4))
+  stopifnot(isTRUE(env$sanity_collapsed_smooth(san, rp)),
+            isFALSE(env$sanity_collapsed_smooth(san, transform(rp, estimate = c(50, 0.5)))),
+            isFALSE(env$sanity_collapsed_smooth(modifyList(san, list(hessian_ok = FALSE)), rp)),
+            isFALSE(env$sanity_collapsed_smooth(NULL, rp)))
+})
+
 message("Synthetic index-helper checks passed.")

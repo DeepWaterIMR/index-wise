@@ -102,6 +102,43 @@ load_model_data <- function(cfg, out_dir, crs) {
   dt
 }
 
+#' How swept area enters the report models
+#'
+#' `REPORT_EFFORT` in config.yaml: "auto" (default) uses the catch with a log swept-area offset
+#' when the selected family has a Poisson link, and `EFFORT` (the response of the model
+#' selection, by default the swept-area density) otherwise; "density" or "offset" force one.
+#' For the logit-link delta families density and offset are the same model (the likelihoods
+#' differ by a constant), so "auto" changes the model only for the Poisson-link families, where
+#' the offset also enters the encounter probability (lotidae decision 2026-11-27).
+#'
+#' @param cfg Stock configuration.
+#' @param family FINAL_MODEL family name.
+#' @return "density" or "offset".
+report_effort <- function(cfg, family = cfg$FINAL_MODEL$FAMILY %||% cfg$FAMILY) {
+  mode <- cfg$REPORT_EFFORT %||% "auto"
+  if (!mode %in% c("auto", "density", "offset")) stop("REPORT_EFFORT must be auto, density or offset.")
+  if (mode != "auto") return(mode)
+  if (grepl("poisson_link$", family %||% "")) "offset" else effort_mode(cfg)
+}
+
+#' Is a failed sanity check only a collapsed smooth?
+#'
+#' When a penalised smooth has no detectable wiggliness, its SD goes to zero and the standard
+#' error of its log becomes huge, so `sdmTMB::sanity()` fails `se_magnitude_ok`. The smooth is
+#' then a straight line, which is harmless for the index (lotidae tusk smoothed model, positive
+#' depth smooth, SD 0.0005, 2026-11-27). TRUE when that is the only failed check.
+#'
+#' @param sanity The list returned by `sdmTMB::sanity()`.
+#' @param ran_pars Random-parameter table with `term` and `estimate` (`sdmTMB::tidy(, "ran_pars")`).
+#' @param sd_min Smooth SD below which the smooth counts as collapsed.
+#' @return TRUE or FALSE.
+sanity_collapsed_smooth <- function(sanity, ran_pars, sd_min = 0.01) {
+  if (is.null(sanity)) return(FALSE)
+  failed <- setdiff(names(sanity)[unlist(sanity) %in% FALSE], "all_ok")
+  identical(failed, "se_magnitude_ok") && !is.null(ran_pars) && nrow(ran_pars) > 0 &&
+    any(grepl("^sd__s\\(", ran_pars$term) & ran_pars$estimate < sd_min)
+}
+
 # Matérn range of the spatial random field per model component, in km: the distance at which
 # the correlation falls to about 0.13, sqrt(8 * nu) / kappa with nu = 1 (sdmTMB's "range").
 matern_range <- function(fit) {
