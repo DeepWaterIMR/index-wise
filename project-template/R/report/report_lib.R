@@ -540,7 +540,10 @@ run_report_surveys <- function(ctx, grid, surveys = cfg$REPORT_SURVEYS, n_worker
       comp <- try(sdmTMBexperiments::compare_surveys(
         data = fit$data, compiled_index = index, compiled_model = fit,
         surveys = stats::setNames(list(spec), sv), newdata = g, object_crs = sf::st_crs(dt_crs),
-        mesh_cutoff = ctx$final$MESH_CUTOFF_KM, offset_col = ctx$offset,
+        mesh_cutoff = ctx$final$MESH_CUTOFF_KM,
+        # compare_surveys() takes the log itself, so it gets the swept area, not its log
+        # (log_swept_area made every survey model fail silently with NA indices).
+        offset_col = if (!is.null(ctx$offset)) "swept_area",
         area = grid_cell_area_nmi2, bias_correct = FALSE,
         n_workers = 1, reference_label = "Compiled", verbose = FALSE), silent = TRUE)
       fitted <- !inherits(comp, "try-error") && !all(is.na(comp$sanity[[sv]]))

@@ -177,7 +177,7 @@ ASSESSMENT_INDEX_TIMING: 0.5          # fraction of the INDEX year; confirm agai
 #     TERMS: ["s(depth)"]
 #     FAMILY: "delta_lognormal"
 #     SPATIAL: "on"
-#     SPATIOTEMPORAL: ["iid", "off"]   # per delta component where they differ
+#     SPATIOTEMPORAL: "iid"            # IID in both delta components (the assessment structure)
 #     ANISOTROPY: false
 FINAL_MODEL: null
 SMOOTHED_SPATIAL: "off"               # spatial field of the smoothed total-biomass index (no year factor)

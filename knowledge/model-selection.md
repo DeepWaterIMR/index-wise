@@ -247,8 +247,14 @@ an exception for "best ELPD" there quietly re-admits the larger model.
   A ΔELPD from the incoming model with its SE cannot be used to check the rule, because the SE
   of the difference from the best is a different number; a Δ/SE column adds nothing once the
   difference is from the best.
-- **Shortlist for the field stage.** Cross-validate the base model, the best few IID + year
-  candidates by AIC, and every smoothed candidate when a smoothed index is also delivered;
+- **The SPiCT structure has IID spatiotemporal fields in both delta components**
+  (`is_assessment_spec()`). The year factor scales every cell alike, so a component without a
+  spatiotemporal field keeps the same spatial pattern in every year: the index cannot show a
+  change in distribution, and regional indices are forced to follow the total (lotidae ling and
+  tusk: r = 1.00 in every area with a one-component field). The one-component IID variants are
+  cross-validated and reported (set Other) but not selectable (lotidae decision 2026-11-27).
+- **Shortlist for the field stage.** Cross-validate the base model, every converged
+  IID-in-both-components candidate, the best few IID + year candidates by AIC, and every smoothed candidate when a smoothed index is also delivered;
   AR1/RW structures cannot become the SPiCT structure, so for that selection they are reported
   only. AR1 + year sits with the smoothed candidates for comparison but cannot be the smoothed
   index (no year factor). Also cross-validate the model without spatiotemporal fields, compared

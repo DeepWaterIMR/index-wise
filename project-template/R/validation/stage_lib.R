@@ -362,9 +362,14 @@ assemble_stage <- function(species, stage, phase) {
       # comparison). The model without spatiotemporal fields is cross-validated too, to show
       # what the fields add.
       iid <- names(cands)[vapply(cands, is_iid_year, logical(1))]
+      assess <- names(cands)[vapply(cands, is_assessment_spec, logical(1))]
       smo <- names(cands)[vapply(cands, is_smoothed_set_spec, logical(1))]
       no_st <- names(cands)[vapply(cands, function(x) all(unlist(x$spatiotemporal) == "off"), logical(1))]
-      short <- unique(c(names(cands)[1], head(intersect(ranked, iid), cv_top_n), intersect(ranked, c(smo, no_st))))
+      # Every converged assessment-structure candidate (IID in both components) is
+      # cross-validated, so that the parsimony rule can reach the simplest of them; the
+      # one-component IID variants by AIC, for comparison.
+      short <- unique(c(names(cands)[1], intersect(ranked, assess), head(intersect(ranked, iid), cv_top_n),
+                        intersect(ranked, c(smo, no_st))))
     }
     # Geometry and family: every candidate, so that the simplest one is always cross-validated.
     if (stage == "geometry") short <- names(cands)
@@ -402,9 +407,10 @@ assemble_stage <- function(species, stage, phase) {
 # Decision rules, stated in the validate document. Every stage uses the one-standard-error
 # rule (Breiman et al. 1984; Hastie et al. 2009): the candidates whose ELPD is within one
 # paired SE of the best form the eligible set, and the simplest eligible candidate is selected.
-#   fields    restricted to the IID + year candidates (the structure of an index for a
-#             state-space assessment such as SPiCT; SELECTION: IID_YEAR_ONLY) unless switched
-#             off; the eligible one with fewest random fields. The smoothed-index structure is selected separately
+#   fields    restricted to the IID + year candidates with IID spatiotemporal fields in both
+#             components (the structure of an index for a state-space assessment such as SPiCT,
+#             is_assessment_spec(); SELECTION: IID_YEAR_ONLY) unless switched off; the eligible
+#             one with fewest random fields. The smoothed-index structure is selected separately
 #             among the smoothed candidates (decide_smoothed()).
 #   geometry  isotropic if eligible, otherwise the best.
 #   fixed     the eligible candidate with fewest terms (a smooth counts more than a quadratic).
@@ -427,7 +433,7 @@ decide_stage <- function(stage, cands, cvp, best, tab, iid_year_only = TRUE) {
   top <- cvp$model[which.max(cvp$elpd)]
   switch(stage,
     fields = {
-      ok <- if (iid_year_only) cvp$model[vapply(cands[cvp$model], is_iid_year, logical(1))] else cvp$model
+      ok <- if (iid_year_only) cvp$model[vapply(cands[cvp$model], is_assessment_spec, logical(1))] else cvp$model
       if (!length(ok)) return(ref)
       close <- within_one_se(cvp, ok)
       close[which.min(vapply(close, function(m) n_fields(cands[[m]]), numeric(1)))]

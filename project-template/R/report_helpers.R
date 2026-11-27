@@ -361,15 +361,17 @@ stage_eligible <- function(res, models = res$cv$model) {
 }
 
 # Selection sets of a stage: each set has its own best candidate and its own one-SE band. The
-# random-field stage selects the assessment structure among the IID + year candidates and the
+# random-field stage selects the assessment structure among the IID + year candidates (a year
+# factor and IID spatiotemporal fields in both delta components, is_assessment_spec()) and the
 # smoothed-index structure among the smoothed candidates without a year factor. The Smoothed set
 # also holds AR1 + year (AR1 or random-walk fields with a year factor), compared with the
 # smoothed candidates but not selectable, because the smoothed index has no year factor; other
-# structures are compared with the best IID + year candidate and reported only.
+# structures, including IID fields in one component only, are compared with the best IID + year
+# candidate and reported only.
 stage_set <- function(res, m) {
   if (!identical(res$stage, "fields")) return("All")
   sp <- res$specs[[m]]
-  if (is_iid_year_spec(sp)) "IID + year" else if (is_smoothed_set_spec(sp)) "Smoothed" else "Other"
+  if (is_assessment_spec(sp)) "IID + year" else if (is_smoothed_set_spec(sp)) "Smoothed" else "Other"
 }
 
 # Candidates of the selection set `set` from which the rule selects: for Smoothed, those without
@@ -457,6 +459,15 @@ is_iid_year_spec <- function(x) {
   isTRUE(x$year) && all(st %in% c("iid", "off")) && any(st == "iid")
 }
 
+# The assessment (e.g. SPiCT) structure: a year factor and IID spatiotemporal fields in every
+# component (both of a delta model). With a year factor scaling all cells alike, a component
+# without a spatiotemporal field keeps the same spatial pattern in every year, so regional
+# indices are forced to follow the total (lotidae: r = 1.00 in every area). The one-component
+# variants are cross-validated for comparison only (lotidae decision 2026-11-27).
+is_assessment_spec <- function(x) {
+  isTRUE(x$year) && all(unlist(x$spatiotemporal) == "iid")
+}
+
 # Smoothed-index structure: AR1 or random-walk spatiotemporal fields without a year factor.
 is_smoothed_spec <- function(x) {
   !isTRUE(x$year) && is_smoothed_set_spec(x)
@@ -485,9 +496,9 @@ stage_summary <- function(res) {
   rule <- switch(res$stage,
     fields = {
       if (sel == best) {
-        "it has the highest ELPD and is an IID + year structure."
+        "it has the highest ELPD and has the assessment structure (a year factor and IID spatiotemporal fields in both components)."
       } else {
-        paste0(if (stage_set(res, best) != "IID + year") paste0("the best candidate, ", best, ", has no IID spatiotemporal field with a year factor, which the index for a state-space assessment model needs; ") else "",
+        paste0(if (stage_set(res, best) != "IID + year") paste0("the best candidate, ", best, ", does not have the assessment structure (a year factor and IID spatiotemporal fields in both components) that the index for a state-space assessment model needs; ") else "",
                "among the IID + year candidates within one paired SE of the best of them, the selected one has the fewest random fields.")
       }
     },

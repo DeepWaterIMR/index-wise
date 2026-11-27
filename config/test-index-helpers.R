@@ -195,6 +195,12 @@ local({
   # A collapsed smooth (only se_magnitude_ok fails, an sd__s() below 0.01) counts as a pass.
   san <- list(hessian_ok = TRUE, se_magnitude_ok = FALSE, all_ok = FALSE)
   rp <- data.frame(term = c("range", "sd__s(depth)"), estimate = c(50, 5e-4))
+  # The assessment structure needs IID spatiotemporal fields in every component.
+  stopifnot(isTRUE(env$is_assessment_spec(list(year = TRUE, spatiotemporal = "iid"))),
+            isTRUE(env$is_assessment_spec(list(year = TRUE, spatiotemporal = list("iid", "iid")))),
+            isFALSE(env$is_assessment_spec(list(year = TRUE, spatiotemporal = list("iid", "off")))),
+            isFALSE(env$is_assessment_spec(list(year = FALSE, spatiotemporal = "iid"))),
+            identical(env$stage_set(list(stage = "fields", specs = list(a = list(year = TRUE, spatiotemporal = list("off", "iid")))), "a"), "Other"))
   stopifnot(isTRUE(env$sanity_collapsed_smooth(san, rp)),
             isFALSE(env$sanity_collapsed_smooth(san, transform(rp, estimate = c(50, 0.5)))),
             isFALSE(env$sanity_collapsed_smooth(modifyList(san, list(hessian_ok = FALSE)), rp)),
